@@ -155,6 +155,7 @@ fn default_binary_ops() -> Array[(String, FnB)] {
 ///|
 /// JS `+`: string concatenation when either operand is a string,
 /// otherwise numeric addition.
+
 ///|
 /// JS `+`: concatenation when either operand is string-like. JS first
 /// coerces operands via ToPrimitive, and arrays/objects become
@@ -318,6 +319,28 @@ fn key_of(pairs : Array[(String, @ast.Value)], k : String) -> @ast.Value {
 }
 
 ///|
+/// Default max evaluation depth, mirroring expr's nesting protection.
+/// 0 disables the limit.
+pub fn default_max_depth() -> Int {
+  10000
+}
+
+///|
+/// Default max evaluation steps (an eval-node visit), mirroring
+/// expr's memory budget magnitude. 0 disables the limit.
+pub fn default_max_steps() -> Int {
+  1000000
+}
+
+///|
+/// Shared step counter: relative filters evaluate their predicate per
+/// element on a fresh Evaluator that shares this cell, so the whole
+/// expression draws from one budget (expr's VM-wide memory budget).
+pub(all) struct BudgetCell {
+  mut steps : Int
+}
+
+///|
 /// The Evaluator walks an AST and computes its value within a context.
 /// A `rel_context` backs relative identifiers inside filters; the main
 /// context resolves plain identifiers.
@@ -325,11 +348,38 @@ pub struct Evaluator {
   grammar : Grammar
   context : @ast.Value
   rel_context : @ast.Value
+  mut depth : Int
+  max_depth : Int
+  budget : BudgetCell
+  max_steps : Int
 }
 
 ///|
 pub fn new_evaluator(grammar : Grammar, context : @ast.Value) -> Evaluator {
-  { grammar, context, rel_context: context }
+  new_evaluator_limited(
+    grammar,
+    context,
+    default_max_depth(),
+    default_max_steps(),
+  )
+}
+
+///|
+pub fn new_evaluator_limited(
+  grammar : Grammar,
+  context : @ast.Value,
+  max_depth : Int,
+  max_steps : Int,
+) -> Evaluator {
+  {
+    grammar,
+    context,
+    rel_context: context,
+    depth: 0,
+    max_depth,
+    budget: { steps: 0 },
+    max_steps,
+  }
 }
 
 ///|
@@ -338,13 +388,56 @@ pub fn new_relative_evaluator(
   context : @ast.Value,
   rel_context : @ast.Value,
 ) -> Evaluator {
-  { grammar, context, rel_context }
+  {
+    grammar,
+    context,
+    rel_context,
+    depth: 0,
+    max_depth: default_max_depth(),
+    budget: { steps: 0 },
+    max_steps: default_max_steps(),
+  }
 }
 
 ///|
-/// Evaluates an AST node, returning its value.
-/// Mirrors Jexl's `handlers[ast.type]` dispatch.
+/// Evaluates an AST node, returning its value. Mirrors Jexl's
+/// `handlers[ast.type]` dispatch, wrapped in step/depth accounting:
+/// every eval visit draws from the shared step budget, and recursion
+/// depth is capped (mirroring expr's node + memory budgets).
 pub fn Evaluator::eval(
+  self : Evaluator,
+  ast : @ast.AstNode,
+) -> @ast.Value raise EvalError {
+  if self.max_steps > 0 {
+    self.budget.steps = self.budget.steps + 1
+    if self.budget.steps > self.max_steps {
+      raise EvalError::EvalErr("memory budget exceeded")
+    }
+  }
+  if self.max_depth > 0 {
+    self.depth = self.depth + 1
+    if self.depth > self.max_depth {
+      self.depth = self.depth - 1
+      raise EvalError::EvalErr(
+        "expression is too deep (more than " +
+        self.max_depth.to_string() +
+        " levels)",
+      )
+    }
+    let result = self.dispatch(ast) catch {
+      err => {
+        self.depth = self.depth - 1
+        raise err
+      }
+    }
+    self.depth = self.depth - 1
+    return result
+  }
+  self.dispatch(ast)
+}
+
+///|
+fn Evaluator::dispatch(
   self : Evaluator,
   ast : @ast.AstNode,
 ) -> @ast.Value raise EvalError {
@@ -532,7 +625,17 @@ fn Evaluator::eval_filter(
     }
     let results : Array[@ast.Value] = []
     for elem in list {
-      let e = new_relative_evaluator(self.grammar, self.context, elem)
+      // Element evaluators share the parent's step budget so a large
+      // filtered array cannot amplify work past the limit.
+      let e = {
+        grammar: self.grammar,
+        context: self.context,
+        rel_context: elem,
+        depth: 0,
+        max_depth: self.max_depth,
+        budget: self.budget,
+        max_steps: self.max_steps,
+      }
       if truthy(e.eval(ast.filter_expr.unwrap())) {
         results.push(elem)
       }

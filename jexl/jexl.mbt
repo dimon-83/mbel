@@ -29,6 +29,11 @@ pub struct Jexl {
   // lexer's longest-first matching stays correct after add/remove op.
   elements : Array[@grammar.ElementDef]
   grammar : @evaluator.Grammar
+  // Resource budgets, mirroring expr's MaxNodes / memory protections.
+  // 0 disables a limit.
+  mut max_nodes : Int
+  mut max_depth : Int
+  mut max_steps : Int
 }
 
 ///|
@@ -37,7 +42,26 @@ pub fn new_jexl() -> Jexl {
   {
     elements: @grammar.default_elements(),
     grammar: @evaluator.default_grammar(),
+    max_nodes: @parser.default_max_nodes(),
+    max_depth: @evaluator.default_max_depth(),
+    max_steps: @evaluator.default_max_steps(),
   }
+}
+
+///|
+/// Sets the resource budgets: expression node (token) limit applied
+/// at parse time, and max evaluation depth / steps applied at eval
+/// time. 0 disables a limit. Mirrors expr's MaxNodes and memory
+/// budget options.
+pub fn Jexl::set_limits(
+  self : Jexl,
+  max_nodes : Int,
+  max_depth : Int,
+  max_steps : Int,
+) -> Unit {
+  self.max_nodes = max_nodes
+  self.max_depth = max_depth
+  self.max_steps = max_steps
 }
 
 ///|

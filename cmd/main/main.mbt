@@ -12,9 +12,7 @@
 fn main {
   let args = @env.args()
   if args.length() < 2 {
-    println(
-      "usage: moon run cmd/main -- \"<expr>\" ['<json-context>']",
-    )
+    println("usage: moon run cmd/main -- \"<expr>\" ['<json-context>']")
     return
   }
   let corpus = args[1]
@@ -39,9 +37,7 @@ fn main {
       Some(json) => parse_context(json)
       None => context
     }
-    let out = try {
-      canon(@jexl.Jexl::eval(inst, expr, ctx))
-    } catch {
+    let out = canon(@jexl.Jexl::eval(inst, expr, ctx)) catch {
       @jexl.JexlErr(_) => "{\"$error\":true}"
     }
     println(out)
@@ -67,9 +63,7 @@ fn split_line_context(line : String) -> (String, String?) {
 /// Parses a JSON object string into a context Value. Aborts with a
 /// hint when the JSON is invalid.
 fn parse_context(s : String) -> @ast.Value {
-  let json_val = try {
-    @json.parse(s)
-  } catch {
+  let json_val = @json.parse(s) catch {
     _ => abort("context is not valid JSON: " + s)
   }
   json_to_value(json_val)
@@ -88,10 +82,12 @@ fn json_to_value(j : Json) -> @ast.Value {
     String(s) => @ast.StrVal(s)
     Array(xs) => @ast.ArrayVal(xs.map(json_to_value))
     Object(m) => {
-      let pairs = m.to_array().map(fn(kv) {
-        let (k, v) = kv
-        (k, json_to_value(v))
-      })
+      let pairs = m
+        .to_array()
+        .map(fn(kv) {
+          let (k, v) = kv
+          (k, json_to_value(v))
+        })
       @ast.ObjectVal(pairs)
     }
   }
@@ -102,30 +98,24 @@ fn json_to_value(j : Json) -> @ast.Value {
 /// tools/jexl_driver.js) so corpus and interactive expressions behave
 /// identically on both sides.
 fn register_demo_transforms(inst : @jexl.Jexl) -> Unit {
-  @jexl.Jexl::add_transform(
-    inst,
-    "dbl",
-    fn(args : Array[@ast.Value]) -> @ast.Value {
-      @ast.NumVal(@evaluator.to_number(args[0]) * 2.0)
-    },
-  )
-  @jexl.Jexl::add_transform(
-    inst,
-    "first",
-    fn(args : Array[@ast.Value]) -> @ast.Value {
-      match args[0] {
-        @ast.ArrayVal(xs) => if xs.length() > 0 { xs[0] } else { @ast.UndefVal }
-        _ => @ast.UndefVal
-      }
-    },
-  )
-  @jexl.Jexl::add_transform(
-    inst,
-    "concatWith",
-    fn(args : Array[@ast.Value]) -> @ast.Value {
-      @evaluator.plus(args[0], args[1])
-    },
-  )
+  @jexl.Jexl::add_transform(inst, "dbl", fn(
+    args : Array[@ast.Value],
+  ) -> @ast.Value {
+    @ast.NumVal(@evaluator.to_number(args[0]) * 2.0)
+  })
+  @jexl.Jexl::add_transform(inst, "first", fn(
+    args : Array[@ast.Value],
+  ) -> @ast.Value {
+    match args[0] {
+      @ast.ArrayVal(xs) => if xs.length() > 0 { xs[0] } else { @ast.UndefVal }
+      _ => @ast.UndefVal
+    }
+  })
+  @jexl.Jexl::add_transform(inst, "concatWith", fn(
+    args : Array[@ast.Value],
+  ) -> @ast.Value {
+    @evaluator.plus(args[0], args[1])
+  })
 }
 
 ///|

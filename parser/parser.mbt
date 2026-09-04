@@ -13,6 +13,22 @@ pub(all) suberror ParseError {
 }
 
 ///|
+/// Default expression node limit, mirroring expr's MaxNodes (1e4).
+/// 0 disables the limit.
+pub fn default_max_nodes() -> Int {
+  10000
+}
+
+///|
+/// Default max sub-expression nesting depth. MoonBit's wasm-gc target
+/// has a fixed stack, so the recursive sub-parser chain must be
+/// capped independently of the node budget (expr relies on Go's
+/// growing stack for this).
+pub fn default_max_nesting() -> Int {
+  1000
+}
+
+///|
 /// The Parser is a state machine that converts tokens from the Lexer
 /// into an Abstract Syntax Tree (AST), capable of being evaluated.
 ///
@@ -28,6 +44,10 @@ priv struct Parser {
   mut relative : Bool
   stop_map : Array[(@grammar.TokenType, String)]
   prec : (String) -> Int
+  node_limit : Int
+  mut node_count : Int
+  max_nesting : Int
+  mut nesting : Int
   mut sub_parser : Parser?
   mut parent_stop : Bool
   mut next_ident_encapsulate : Bool
@@ -40,7 +60,7 @@ priv struct Parser {
 /// expression (no tokens). Equivalent to Jexl's
 /// `new Parser(grammar).addTokens(tokens).complete()`.
 pub fn parse(tokens : Array[@lexer.Token]) -> @ast.AstNode? raise ParseError {
-  parse_with(tokens, @grammar.default_elements())
+  parse_with_limits(tokens, @grammar.default_elements(), default_max_nodes())
 }
 
 ///|
@@ -51,7 +71,31 @@ pub fn parse_with(
   tokens : Array[@lexer.Token],
   elements : Array[@grammar.ElementDef],
 ) -> @ast.AstNode? raise ParseError {
-  let p : Parser = new_parser([], "", elements)
+  parse_with_limits(tokens, elements, default_max_nodes())
+}
+
+///|
+/// Parses tokens with a node (token) budget: expressions exceeding
+/// `max_nodes` raise, mirroring expr's MaxNodes option. 0 disables
+/// the limit.
+pub fn parse_with_limits(
+  tokens : Array[@lexer.Token],
+  elements : Array[@grammar.ElementDef],
+  max_nodes : Int,
+) -> @ast.AstNode? raise ParseError {
+  parse_with_budgets(tokens, elements, max_nodes, default_max_nesting())
+}
+
+///|
+/// Parses tokens with a node budget and a sub-expression nesting
+/// depth budget (see `default_max_nesting`).
+pub fn parse_with_budgets(
+  tokens : Array[@lexer.Token],
+  elements : Array[@grammar.ElementDef],
+  max_nodes : Int,
+  max_nesting : Int,
+) -> @ast.AstNode? raise ParseError {
+  let p : Parser = new_parser([], "", elements, max_nodes, max_nesting)
   for token in tokens {
     ignore(p.add_token(token))
   }
@@ -64,6 +108,8 @@ fn new_parser(
   stop_map : Array[(@grammar.TokenType, String)],
   prefix : String,
   elements : Array[@grammar.ElementDef],
+  node_limit : Int,
+  max_nesting : Int,
 ) -> Parser {
   {
     state: "expectOperand",
@@ -73,6 +119,10 @@ fn new_parser(
     relative: false,
     stop_map,
     prec: fn(op : String) -> Int { @grammar.precedence_of(elements, op) },
+    node_limit,
+    node_count: 0,
+    max_nesting,
+    nesting: 0,
     sub_parser: None,
     parent_stop: false,
     next_ident_encapsulate: false,
@@ -182,6 +232,26 @@ fn Parser::add_token(
 ) -> String? raise ParseError {
   if self.state == "complete" {
     raise ParseError::ParseErr("Cannot add a new token to a completed Parser")
+  }
+  // Sub-expression nesting budget: each nested sub-parser adds one
+  // level of recursion, so cap the chain before the wasm stack runs
+  // out (expr needs no such guard — Go stacks grow).
+  if self.max_nesting > 0 && self.nesting > self.max_nesting {
+    raise ParseError::ParseErr("expression is too deeply nested")
+  }
+  // Node budget: every input token reaches the root parser's
+  // add_token exactly once (sub-parser tokens are forwarded through
+  // it), so the root count bounds the whole expression. Mirrors
+  // expr's parser-level MaxNodes.
+  if self.node_limit > 0 {
+    self.node_count = self.node_count + 1
+    if self.node_count > self.node_limit {
+      raise ParseError::ParseErr(
+        "expression is too large (more than " +
+        self.node_limit.to_string() +
+        " nodes)",
+      )
+    }
   }
   let start_expr = self.expr_str
   self.expr_str = self.expr_str + token.raw
@@ -591,7 +661,15 @@ fn Parser::start_sub_expression(self : Parser, expr_str : String) -> Unit {
   } else {
     es
   }
-  self.sub_parser = Some(new_parser(stop_map, expr_str, []))
+  let sub = new_parser(
+    stop_map,
+    expr_str,
+    [],
+    self.node_limit,
+    self.max_nesting,
+  )
+  sub.nesting = self.nesting + 1
+  self.sub_parser = Some(sub)
 }
 
 ///|

@@ -153,7 +153,11 @@ pub fn parse_decimal(s : String) -> Double {
     }
     acc = acc / p10
   }
-  if neg { -acc } else { acc }
+  if neg {
+    -acc
+  } else {
+    acc
+  }
 }
 
 ///|
@@ -295,6 +299,7 @@ fn lex_compare(x : String, y : String) -> Int {
 ///|
 /// JS remainder semantics (sign of dividend). MoonBit Double has no %,
 /// so: a - trunc(a/b) * b.
+
 ///|
 /// JS `%` — the IEEE fmod remainder (sign of the dividend, exact
 /// residual). MoonBit has no fmod, so compute a - trunc(a/b)*b with
@@ -308,7 +313,7 @@ pub fn remainder(a : Double, b : Double) -> Double {
     return a
   }
   let q = a / b
-  let trunc_q = if q < 0.0 { -((-q).floor()) } else { q.floor() }
+  let trunc_q = if q < 0.0 { -(-q).floor() } else { q.floor() }
   let (p_hi, p_lo) = two_prod(trunc_q, b)
   let (s1, t1) = two_sum(a, -p_hi)
   let e = t1 - p_lo
@@ -326,7 +331,7 @@ fn two_prod(x : Double, y : Double) -> (Double, Double) {
   let c2 = 134217729.0 * y
   let y_hi = c2 - (c2 - y)
   let y_lo = y - y_hi
-  let err = ((x_hi * y_hi - p) + x_hi * y_lo + x_lo * y_hi) + x_lo * y_lo
+  let err = x_hi * y_hi - p + x_hi * y_lo + x_lo * y_hi + x_lo * y_lo
   (p, err)
 }
 
@@ -335,7 +340,7 @@ fn two_prod(x : Double, y : Double) -> (Double, Double) {
 fn two_sum(x : Double, y : Double) -> (Double, Double) {
   let s = x + y
   let bb = s - x
-  let err = (x - (s - bb)) + (y - bb)
+  let err = x - (s - bb) + (y - bb)
   (s, err)
 }
 

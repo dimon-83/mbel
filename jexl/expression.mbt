@@ -25,7 +25,11 @@ pub fn Expression::compile(self : Expression) -> Unit raise JexlError {
     Ok(t) => t
     Err(msg) => raise JexlError::JexlErr(msg)
   }
-  let ast = @parser.parse_with(toks, self.jexl.elements) catch {
+  let ast = @parser.parse_with_limits(
+    toks,
+    self.jexl.elements,
+    self.jexl.max_nodes,
+  ) catch {
     @parser.ParseErr(msg) => raise JexlError::JexlErr(msg)
   }
   self.compiled = ast
@@ -46,7 +50,12 @@ pub fn Expression::eval(
     Some(n) => n
     None => raise JexlError::JexlErr("Cannot evaluate an empty expression")
   }
-  let evaluator = @evaluator.new_evaluator(self.jexl.grammar, ctx)
+  let evaluator = @evaluator.new_evaluator_limited(
+    self.jexl.grammar,
+    ctx,
+    self.jexl.max_depth,
+    self.jexl.max_steps,
+  )
   let result = evaluator.eval(node) catch {
     @evaluator.EvalErr(msg) => raise JexlError::JexlErr(msg)
   }
