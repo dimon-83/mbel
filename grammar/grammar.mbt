@@ -82,7 +82,7 @@ fn is_ident_cont_c(c : Char) -> Bool {
 pub fn element_def(
   symbol : String,
   elem_type : TokenType,
-  precedence : Int
+  precedence : Int,
 ) -> ElementDef {
   { symbol, elem_type, precedence }
 }
@@ -130,7 +130,7 @@ pub fn default_elements() -> Array[ElementDef] {
 /// Looks up an element definition by symbol.
 pub fn find_element(
   elements : Array[ElementDef],
-  symbol : String
+  symbol : String,
 ) -> ElementDef? {
   for def in elements {
     if def.symbol == symbol {
@@ -143,10 +143,7 @@ pub fn find_element(
 ///|
 /// Looks up an operator's precedence in an element list, falling back
 /// to the static default grammar table.
-pub fn precedence_of(
-  elements : Array[ElementDef],
-  op : String
-) -> Int {
+pub fn precedence_of(elements : Array[ElementDef], op : String) -> Int {
   match find_element(elements, op) {
     Some(def) => def.precedence
     None => precedence(op)
@@ -160,8 +157,22 @@ pub fn precedence_of(
 /// a literal, identifier, or invalid).
 pub fn element_type(s : String) -> TokenType? {
   match s {
-    "+" | "-" | "*" | "/" | "//" | "%" | "^" | "==" | "!=" | ">" | ">=" | "<" | "<=" | "&&" | "||" | "in" =>
-      Some(BinaryOp)
+    "+"
+    | "-"
+    | "*"
+    | "/"
+    | "//"
+    | "%"
+    | "^"
+    | "=="
+    | "!="
+    | ">"
+    | ">="
+    | "<"
+    | "<="
+    | "&&"
+    | "||"
+    | "in" => Some(BinaryOp)
     "!" => Some(UnaryOp)
     "." => Some(Dot)
     "[" => Some(OpenBracket)

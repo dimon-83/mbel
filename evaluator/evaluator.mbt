@@ -64,14 +64,22 @@ pub fn default_grammar() -> Grammar {
         "&&",
         fn(l : Lazy, r : Lazy) -> @ast.Value raise EvalError {
           let lv = l()
-          if truthy(lv) { r() } else { lv }
+          if truthy(lv) {
+            r()
+          } else {
+            lv
+          }
         },
       ),
       (
         "||",
         fn(l : Lazy, r : Lazy) -> @ast.Value raise EvalError {
           let lv = l()
-          if truthy(lv) { lv } else { r() }
+          if truthy(lv) {
+            lv
+          } else {
+            r()
+          }
         },
       ),
     ],
@@ -413,24 +421,15 @@ fn Evaluator::eval_binary(
   let op = ast.operator
   let left = ast.left.unwrap()
   let right = ast.right.unwrap()
-  match op {
-    "&&" => {
-      let l = self.eval(left)
-      if truthy(l) {
-        self.eval(right)
-      } else {
-        l
-      }
+  // Jexl consults evalOnDemand first: && and || (and any manual-eval
+  // custom op) receive lazy operands and decide whether to evaluate.
+  match find_lazy(self.grammar.on_demand_ops, op) {
+    Some(f) => {
+      let wrap_l : Lazy = fn() { self.eval(left) }
+      let wrap_r : Lazy = fn() { self.eval(right) }
+      f(wrap_l, wrap_r)
     }
-    "||" => {
-      let l = self.eval(left)
-      if truthy(l) {
-        l
-      } else {
-        self.eval(right)
-      }
-    }
-    _ => {
+    None => {
       let l = self.eval(left)
       let r = self.eval(right)
       match find_bin(self.grammar.binary_ops, op) {

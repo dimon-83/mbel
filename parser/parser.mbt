@@ -49,7 +49,7 @@ pub fn parse(tokens : Array[@lexer.Token]) -> @ast.AstNode? raise ParseError {
 /// Mirrors Jexl's `new Parser(grammar).addTokens(tokens).complete()`.
 pub fn parse_with(
   tokens : Array[@lexer.Token],
-  elements : Array[@grammar.ElementDef]
+  elements : Array[@grammar.ElementDef],
 ) -> @ast.AstNode? raise ParseError {
   let p : Parser = new_parser([], "", elements)
   for token in tokens {

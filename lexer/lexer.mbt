@@ -48,7 +48,7 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
 /// Equivalent to Jexl's `new Lexer(grammar).tokenize(str)`.
 pub fn tokenize_with(
   input : String,
-  elements : Array[@grammar.ElementDef]
+  elements : Array[@grammar.ElementDef],
 ) -> Result[Array[Token], String] {
   let chars = input.to_array()
   let n = chars.length()
@@ -92,11 +92,7 @@ pub fn tokenize_with(
         continue
       }
       // It's a binaryOp subtract
-      tokens.push(Token::{
-        typ: @grammar.BinaryOp,
-        value: Str("-"),
-        raw: "-",
-      })
+      tokens.push(Token::{ typ: @grammar.BinaryOp, value: Str("-"), raw: "-" })
       pos += 1
       continue
     }
@@ -262,7 +258,7 @@ fn is_space(c : Char) -> Bool {
 fn match_element_at(
   chars : Array[Char],
   pos : Int,
-  elements : Array[@grammar.ElementDef]
+  elements : Array[@grammar.ElementDef],
 ) -> @grammar.ElementDef? {
   let n = chars.length()
   for def in elements {
@@ -533,7 +529,7 @@ fn unquote(str : String) -> String {
 /// identifiers are recognized in that order; anything else throws.
 fn create_token(
   element : String,
-  elements : Array[@grammar.ElementDef]
+  elements : Array[@grammar.ElementDef],
 ) -> Result[Token, String] {
   let chars = element.to_array()
   if chars.length() == 0 {
@@ -544,52 +540,30 @@ fn create_token(
   // String literal
   if first == '"' || first == '\'' {
     let val = unquote(element)
-    return Ok(Token::{
-      typ: @grammar.Literal,
-      value: Str(val),
-      raw: element,
-    })
+    return Ok(Token::{ typ: @grammar.Literal, value: Str(val), raw: element })
   }
 
   // Numeric
   if is_numeric(element) {
     match parse_double(element) {
-      Ok(d) => {
-        return Ok(Token::{
-          typ: @grammar.Literal,
-          value: Num(d),
-          raw: element,
-        })
-      }
+      Ok(d) =>
+        return Ok(Token::{ typ: @grammar.Literal, value: Num(d), raw: element })
       Err(_) => return Err("Invalid expression token: " + element)
     }
   }
 
   // Boolean
   if element == "true" {
-    return Ok(Token::{
-      typ: @grammar.Literal,
-      value: Bool(true),
-      raw: element,
-    })
+    return Ok(Token::{ typ: @grammar.Literal, value: Bool(true), raw: element })
   }
   if element == "false" {
-    return Ok(Token::{
-      typ: @grammar.Literal,
-      value: Bool(false),
-      raw: element,
-    })
+    return Ok(Token::{ typ: @grammar.Literal, value: Bool(false), raw: element })
   }
 
   // Grammar element (operator/control char)
   match @grammar.find_element(elements, element) {
-    Some(def) => {
-      return Ok(Token::{
-        typ: def.elem_type,
-        value: Str(element),
-        raw: element,
-      })
-    }
+    Some(def) =>
+      return Ok(Token::{ typ: def.elem_type, value: Str(element), raw: element })
     None => ()
   }
 
