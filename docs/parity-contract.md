@@ -186,6 +186,26 @@ Coverage notes:
 compare AST/eval outputs for exact match — every ported test case IS
 such a fixture, so this is satisfied by the suites above.
 
+### Stage-3 differential results (2026-09-04)
+
+Hand-written corpus (`tools/corpus.txt`): **180/180 identical**.
+Generated fuzz (`tools/fuzz1.txt`, seed 42): **1154/1154 identical**.
+Generated fuzz (`tools/fuzz.txt`, seed 20260904): **1999/2000 identical**.
+
+Known divergences (all documented):
+| # | Case | JS | mbel | Cause |
+|---|---|---|---|---|
+| 1 | `8 ^ [2.5]` | 181.01933598375618 | 181.01933598375615 | V8 `Math.pow` vs MoonBit pow differ 1 ulp (libm, not logic) |
+| 2 | `{a:1} == {a:1}` | false | true | JS object equality is by reference; mbel compares structurally (see §3.1) |
+| 3 | async transforms | — | — | JS Promises have no MoonBit counterpart; eval is synchronous |
+
+Numeric-parity fixes this phase discovered: correctly-rounded decimal
+literal parsing (integer accumulation, single division); JS relational
+compare applies ToPrimitive before the strings-vs-numeric decision;
+`%` follows exact fmod semantics via Dekker double-double arithmetic;
+string relational comparison is code-unit lexicographic (MoonBit's
+`String.compare` is length-first).
+
 ---
 
 ## 5. ts2moonbit Scope Boundary
