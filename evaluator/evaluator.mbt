@@ -425,8 +425,8 @@ fn Evaluator::eval_binary(
   // custom op) receive lazy operands and decide whether to evaluate.
   match find_lazy(self.grammar.on_demand_ops, op) {
     Some(f) => {
-      let wrap_l : Lazy = fn() { self.eval(left) }
-      let wrap_r : Lazy = fn() { self.eval(right) }
+      let wrap_l : Lazy = fn() -> @ast.Value raise EvalError { self.eval(left) }
+      let wrap_r : Lazy = fn() -> @ast.Value raise EvalError { self.eval(right) }
       f(wrap_l, wrap_r)
     }
     None => {

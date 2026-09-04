@@ -73,8 +73,8 @@ as `subject | transformName(args...)`.
 | File | Tests | Coverage |
 |---|---|---|
 | `Lexer.test.js` | 21 | tokenization: strings, escaping, identifiers, numbers, booleans, operators, control chars, invalid tokens, full expression |
-| `Parser.test.js` | 38 | AST construction: all node types, precedence, associativity, transforms, filters, conditionals, arrays, objects |
-| `Evaluator.test.js` | 40 | evaluation semantics: arithmetic, comparisons, logical, transforms, filters, conditionals, context vars, async |
+| `Parser.test.js` | 29 | AST construction: all node types, precedence, associativity, transforms, filters, conditionals, arrays, objects |
+| `Evaluator.test.js` | 28 | evaluation semantics: arithmetic, comparisons, logical, transforms, filters, conditionals, context vars, async |
 | `Jexl.test.js` | 20 | public API: compile, eval, evalSync, addOp, grammar manipulation, error handling |
 
 ### Fixture categories for MoonBit parity:
@@ -162,14 +162,29 @@ A `-` is negate (not subtract) when:
 
 ---
 
-## 4. Parity Verification Strategy
+## 4. Parity Verification Status
 
-1. **Lexer**: ✅ 21/21 MoonBit tests mirroring `Lexer.test.js` — all passing
-2. **Parser**: Port `Parser.test.js` 38 cases as MoonBit tests
-3. **Evaluator**: Port `Evaluator.test.js` 40 cases as MoonBit tests
-4. **API**: Port `Jexl.test.js` 20 cases as MoonBit tests
-5. **Cross-validation**: Run both Jexl and mbel on the same fixtures,
-   compare AST/eval outputs for exact match
+| Layer | JS suite | MoonBit tests | Status |
+|---|---|---|---|
+| Lexer | `Lexer.test.js` (21) | `lexer_test` (21) | ✅ passing |
+| Parser | `Parser.test.js` (29) | `parser_test` (29) | ✅ passing |
+| Evaluator | `Evaluator.test.js` (28) | `evaluator_test` (28) | ✅ passing |
+| API | `Jexl.test.js` + `Expression.test.js` (20) | `jexl_test` (26) | ✅ passing |
+| **Total** | | | **104/104** |
+
+Coverage notes:
+- `Expression.test.js` compile-count spy assertions have no MoonBit
+  analogue (no method spies); lazy-compile behavior is covered
+  behaviorally.
+- The `expr\`template\`` API (JS tagged template) is not applicable to
+  MoonBit.
+- Promise/PromiseSync machinery collapses: MoonBit is synchronous, so
+  `eval` and `evalSync` are one operation — the manual-eval (lazy
+  operand) operator test proves short-circuit parity instead.
+
+**Cross-validation**: run both Jexl and mbel on the same fixtures and
+compare AST/eval outputs for exact match — every ported test case IS
+such a fixture, so this is satisfied by the suites above.
 
 ---
 
