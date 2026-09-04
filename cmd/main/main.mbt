@@ -1,15 +1,85 @@
-// mbel expression runner — stage 3 differential harness client.
-// Reads one expression per line from argv[1]; prints one canonical
-// line per expression: the evaluated value (canonically serialized)
-// or {"$error":true} when evaluation fails.
+// mbel expression runner — evaluates Jexl expressions end to end.
+//
+// Usage:
+//   moon run cmd/main -- "<expression>"
+//   moon run cmd/main -- "<expression>" '<json-context>'
+//   moon run cmd/main -- "$(cat tools/corpus.txt)"   # one expr per line
+//
+// Prints one canonical line per expression (see tools/README.md), or
+// {"$error":true} when evaluation fails.
 
 ///|
 fn main {
-  let corpus = match @env.args() {
-    arr if arr.length() > 1 => arr[1]
-    _ => ""
+  let args = @env.args()
+  if args.length() < 2 {
+    println(
+      "usage: moon run cmd/main -- \"<expr>\" ['<json-context>']",
+    )
+    return
+  }
+  let corpus = args[1]
+  // Optional JSON context (argv[2]); expressions without a context
+  // arg keep evaluating against an empty object.
+  let context = if args.length() > 2 {
+    parse_context(args[2])
+  } else {
+    @ast.ObjectVal([])
   }
   let inst = @jexl.new_jexl()
+  register_demo_transforms(inst)
+  for line in corpus.split("\n") {
+    if line == "" {
+      continue
+    }
+    let expr = line.to_owned()
+    let out = try {
+      canon(@jexl.Jexl::eval(inst, expr, context))
+    } catch {
+      @jexl.JexlErr(_) => "{\"$error\":true}"
+    }
+    println(out)
+  }
+}
+
+///|
+/// Parses a JSON object string into a context Value. Aborts with a
+/// hint when the JSON is invalid.
+fn parse_context(s : String) -> @ast.Value {
+  let json_val = try {
+    @json.parse(s)
+  } catch {
+    _ => abort("context is not valid JSON: " + s)
+  }
+  json_to_value(json_val)
+}
+
+///|
+/// Converts a parsed Json value into an engine Value. JSON null maps
+/// to NullVal, numbers to NumVal (as parsed doubles), objects to
+/// ObjectVal in insertion order.
+fn json_to_value(j : Json) -> @ast.Value {
+  match j {
+    Null => @ast.NullVal
+    True => @ast.BoolVal(true)
+    False => @ast.BoolVal(false)
+    Number(d, ..) => @ast.NumVal(d)
+    String(s) => @ast.StrVal(s)
+    Array(xs) => @ast.ArrayVal(xs.map(json_to_value))
+    Object(m) => {
+      let pairs = m.to_array().map(fn(kv) {
+        let (k, v) = kv
+        (k, json_to_value(v))
+      })
+      @ast.ObjectVal(pairs)
+    }
+  }
+}
+
+///|
+/// Demo transforms shared with the differential harness (see
+/// tools/jexl_driver.js) so corpus and interactive expressions behave
+/// identically on both sides.
+fn register_demo_transforms(inst : @jexl.Jexl) -> Unit {
   @jexl.Jexl::add_transform(
     inst,
     "dbl",
@@ -34,18 +104,6 @@ fn main {
       @evaluator.plus(args[0], args[1])
     },
   )
-  for line in corpus.split("\n") {
-    if line == "" {
-      continue
-    }
-    let expr = line.to_owned()
-    let out = try {
-      canon(@jexl.Jexl::eval(inst, expr, @ast.ObjectVal([])))
-    } catch {
-      @jexl.JexlErr(_) => "{\"$error\":true}"
-    }
-    println(out)
-  }
 }
 
 ///|

@@ -3,6 +3,7 @@ import {
   "dexter/mbel/evaluator",
   "dexter/mbel/jexl",
   "moonbitlang/core/env",
+  "moonbitlang/core/json",
 }
 
 options(

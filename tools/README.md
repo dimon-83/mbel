@@ -31,3 +31,17 @@ sides print `{"$error":true}` (message text is not compared).
 
 Transforms registered identically on both runners for corpus lines:
 `dbl` (v*2), `first` (arr[0] or undefined), `concatWith` (JS `+`).
+
+## Interactive use with a JSON context
+
+    moon run cmd/main -- '6+x*2>10 ? "big" : "small"' '{"x": 3}'
+    moon run cmd/main -- 'user.name + " scored " + (score*10)' \
+      '{"user": {"name": "alice"}, "score": 8.5}'
+    moon run cmd/main -- 'items[.price <= 2].name' \
+      '{"items": [{"name":"apple","price":1.5}, {"name":"plum","price":2}]}'
+
+argv[1] is the expression (or a newline-separated corpus), argv[2] the
+optional JSON context. JSON null → NullVal, numbers → NumVal, objects
+keep insertion order. Verified identical to real Jexl `evalSync` on the
+same context (e.g. `items[.price <= 2].name` → `"apple"`, because
+drilling into a filtered array takes element 0 per Jexl semantics).
