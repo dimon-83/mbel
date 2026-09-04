@@ -1,0 +1,7 @@
+// import {
+//   "dexter/mbel" @lib,
+// }
+
+options(
+  "is-main": true,
+)
