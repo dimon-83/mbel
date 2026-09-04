@@ -16,8 +16,19 @@ pub(all) suberror EvalError {
 
 ///|
 /// A transform or function: receives pre-evaluated arguments (the
-/// transform subject is argument 0, matching Jexl) and returns a value.
-pub type FnA = (Array[@ast.Value]) -> @ast.Value
+/// transform subject is argument 0, matching Jexl) and returns a
+/// value. May raise — Jexl transforms/functions can throw.
+pub type FnA = (Array[@ast.Value]) -> @ast.Value raise EvalError
+
+///|
+/// A lazy operand: evaluating it yields the operand's value, and may
+/// raise. Powers on-demand (manual-eval) operators.
+pub type Lazy = () -> @ast.Value raise EvalError
+
+///|
+/// An on-demand operator: receives two lazy operands and decides
+/// itself whether to evaluate them.
+pub type FnL = (Lazy, Lazy) -> @ast.Value raise EvalError
 
 ///|
 /// A binary operator implementation.
@@ -36,6 +47,7 @@ pub(all) struct Grammar {
   transforms : Array[(String, FnA)]
   functions : Array[(String, FnA)]
   binary_ops : Array[(String, FnB)]
+  on_demand_ops : Array[(String, FnL)]
   unary_ops : Array[(String, FnU)]
 }
 
@@ -47,6 +59,22 @@ pub fn default_grammar() -> Grammar {
     transforms: [],
     functions: [],
     binary_ops: default_binary_ops(),
+    on_demand_ops: [
+      (
+        "&&",
+        fn(l : Lazy, r : Lazy) -> @ast.Value raise EvalError {
+          let lv = l()
+          if truthy(lv) { r() } else { lv }
+        },
+      ),
+      (
+        "||",
+        fn(l : Lazy, r : Lazy) -> @ast.Value raise EvalError {
+          let lv = l()
+          if truthy(lv) { lv } else { r() }
+        },
+      ),
+    ],
     unary_ops: [("!", fn(v) { @ast.BoolVal(!truthy(v)) })],
   }
 }
@@ -65,6 +93,17 @@ fn find_fn(list : Array[(String, FnA)], name : String) -> FnA? {
 
 ///|
 fn find_bin(list : Array[(String, FnB)], name : String) -> FnB? {
+  for entry in list {
+    let (n, f) = entry
+    if n == name {
+      return Some(f)
+    }
+  }
+  None
+}
+
+///|
+fn find_lazy(list : Array[(String, FnL)], name : String) -> FnL? {
   for entry in list {
     let (n, f) = entry
     if n == name {

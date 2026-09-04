@@ -27,6 +27,7 @@ priv struct Parser {
   mut expr_str : String
   mut relative : Bool
   stop_map : Array[(@grammar.TokenType, String)]
+  prec : (String) -> Int
   mut sub_parser : Parser?
   mut parent_stop : Bool
   mut next_ident_encapsulate : Bool
@@ -39,7 +40,18 @@ priv struct Parser {
 /// expression (no tokens). Equivalent to Jexl's
 /// `new Parser(grammar).addTokens(tokens).complete()`.
 pub fn parse(tokens : Array[@lexer.Token]) -> @ast.AstNode? raise ParseError {
-  let p : Parser = new_parser([], "")
+  parse_with(tokens, @grammar.default_elements())
+}
+
+///|
+/// Parses tokens against a custom grammar element list, so operator
+/// precedence and availability follow the caller's element registry.
+/// Mirrors Jexl's `new Parser(grammar).addTokens(tokens).complete()`.
+pub fn parse_with(
+  tokens : Array[@lexer.Token],
+  elements : Array[@grammar.ElementDef]
+) -> @ast.AstNode? raise ParseError {
+  let p : Parser = new_parser([], "", elements)
   for token in tokens {
     ignore(p.add_token(token))
   }
@@ -51,6 +63,7 @@ pub fn parse(tokens : Array[@lexer.Token]) -> @ast.AstNode? raise ParseError {
 fn new_parser(
   stop_map : Array[(@grammar.TokenType, String)],
   prefix : String,
+  elements : Array[@grammar.ElementDef],
 ) -> Parser {
   {
     state: "expectOperand",
@@ -59,6 +72,7 @@ fn new_parser(
     expr_str: prefix,
     relative: false,
     stop_map,
+    prec: fn(op : String) -> Int { @grammar.precedence_of(elements, op) },
     sub_parser: None,
     parent_stop: false,
     next_ident_encapsulate: false,
@@ -577,7 +591,7 @@ fn Parser::start_sub_expression(self : Parser, expr_str : String) -> Unit {
   } else {
     es
   }
-  self.sub_parser = Some(new_parser(stop_map, expr_str))
+  self.sub_parser = Some(new_parser(stop_map, expr_str, []))
 }
 
 ///|
@@ -603,7 +617,7 @@ fn Parser::sub_handler_call(self : Parser, ast : @ast.AstNode?) -> Unit {
 /// the current cursor. Mirrors `handlers.binaryOp`.
 fn Parser::binary_op_handler(self : Parser, token : @lexer.Token) -> Unit {
   let op = token_str(token)
-  let prec = @grammar.precedence(op)
+  let prec = (self.prec)(op)
   let mut cursor = self.cursor
   let mut parent = match self.cursor {
     Some(c) => c.parent
@@ -611,7 +625,7 @@ fn Parser::binary_op_handler(self : Parser, token : @lexer.Token) -> Unit {
   }
   while parent is Some(_) {
     let p = parent.unwrap()
-    if p.operator != "" && @grammar.precedence(p.operator) >= prec {
+    if p.operator != "" && (self.prec)(p.operator) >= prec {
       cursor = parent
       parent = p.parent
     } else {

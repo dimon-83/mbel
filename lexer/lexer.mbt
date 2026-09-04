@@ -2,16 +2,20 @@
 // mbel — MoonBit Expression Language
 // lexer package: tokenization of Jexl expression strings
 //
-// Ported from Jexl's lib/Lexer.js.  The original uses a single split-regex
-// built from the grammar elements; MoonBit has no regex split, so this is
-// a hand-written character scanner that produces the same token stream.
+// Ported from Jexl's lib/Lexer.js.  The original splits the input with
+// a regex built from the grammar's element symbols (longest first,
+// word-boundary-wrapped when identifier-like); MoonBit has no regex
+// split, so this is a hand-written character scanner that matches
+// elements the same way: at each position the longest element symbol
+// with a prefix match wins, and identifier-like symbols additionally
+// need non-identifier neighbors.
 //
 // Key behaviors preserved from Jexl:
 //   - String literals (single/double quoted) with escape processing
 //   - Numeric literals (int/float, negative via context-dependent `-`)
 //   - Boolean literals (true/false)
 //   - Identifiers (letters, digits, underscore, $, Cyrillic, Latin-1 Supplement)
-//   - Grammar elements / operators / control characters
+//   - Grammar elements from the provided element list
 //   - Whitespace appended to previous token's `raw`
 //   - Context-dependent `-` as negate vs subtract (minusNegatesAfter)
 //   - Returns Err on invalid tokens
@@ -34,11 +38,18 @@ pub struct Token {
 } derive(Debug)
 
 ///|
-/// Tokenizes a Jexl expression string into an array of tokens.
-///
-/// This is the public entry point, equivalent to Jexl's `Lexer.tokenize`.
-/// Returns `Err(msg)` on invalid tokens.
+/// Tokenizes a Jexl expression string with the default grammar.
 pub fn tokenize(input : String) -> Result[Array[Token], String] {
+  tokenize_with(input, @grammar.default_elements())
+}
+
+///|
+/// Tokenizes a Jexl expression string against a custom element list.
+/// Equivalent to Jexl's `new Lexer(grammar).tokenize(str)`.
+pub fn tokenize_with(
+  input : String,
+  elements : Array[@grammar.ElementDef]
+) -> Result[Array[Token], String] {
   let chars = input.to_array()
   let n = chars.length()
   let tokens : Array[Token] = []
@@ -81,7 +92,11 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
         continue
       }
       // It's a binaryOp subtract
-      tokens.push(Token::{ typ: @grammar.BinaryOp, value: Str("-"), raw: "-" })
+      tokens.push(Token::{
+        typ: @grammar.BinaryOp,
+        value: Str("-"),
+        raw: "-",
+      })
       pos += 1
       continue
     }
@@ -96,7 +111,7 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
           } else {
             raw
           }
-          match create_token(final_raw) {
+          match create_token(final_raw, elements) {
             Ok(t) => tokens.push(t)
             Err(msg) => return Err(msg)
           }
@@ -110,14 +125,15 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
     // Boolean keyword (true/false)
     match match_boolean(chars, pos) {
       Some((raw, val)) => {
-        if negate {
+        let final_raw = if negate {
           negate = false
-          match create_token("-" + raw) {
-            Ok(t) => tokens.push(t)
-            Err(msg) => return Err(msg)
-          }
+          "-" + raw
         } else {
-          tokens.push(Token::{ typ: @grammar.Literal, value: Bool(val), raw })
+          raw
+        }
+        match create_token(final_raw, elements) {
+          Ok(t) => tokens.push(t)
+          Err(msg) => return Err(msg)
         }
         pos += raw.length()
         continue
@@ -125,31 +141,13 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
       None => ()
     }
 
-    // `in` keyword (binary operator)
-    if is_in_keyword(chars, pos) {
-      if negate {
-        negate = false
-        match create_token("-in") {
-          Ok(t) => tokens.push(t)
-          Err(msg) => return Err(msg)
-        }
-      } else {
-        tokens.push(Token::{
-          typ: @grammar.BinaryOp,
-          value: Str("in"),
-          raw: "in",
-        })
-      }
-      pos += 2
-      continue
-    }
-
     // Numeric literal
     if is_digit(c) {
       let (raw, end) = scan_number(chars, pos)
-      // Jexl's regex approach treats "9foo" as a single element that matches
-      // neither the numeric nor identifier regex, so it throws. Detect a digit
-      // run immediately followed by identifier chars (no separator) and reject.
+      // Jexl's regex approach treats "9foo" as a single element that
+      // matches neither the numeric nor identifier regex, so it
+      // throws. Detect a digit run immediately followed by identifier
+      // chars (no separator) and reject.
       if end < n && is_ident_start(chars[end]) {
         let (id_raw, _) = scan_identifier(chars, end)
         return Err("Invalid expression token: " + raw + id_raw)
@@ -160,7 +158,7 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
       } else {
         raw
       }
-      match create_token(final_raw) {
+      match create_token(final_raw, elements) {
         Ok(t) => tokens.push(t)
         Err(msg) => return Err(msg)
       }
@@ -169,19 +167,18 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
     }
 
     // Grammar element (operators and control characters)
-    match match_element(chars, pos) {
-      Some(elem) => {
-        if negate {
+    match match_element_at(chars, pos, elements) {
+      Some(def) => {
+        let elem = def.symbol
+        let final_raw = if negate {
           negate = false
-          match create_token("-" + elem) {
-            Ok(t) => tokens.push(t)
-            Err(msg) => return Err(msg)
-          }
+          "-" + elem
         } else {
-          match create_token(elem) {
-            Ok(t) => tokens.push(t)
-            Err(msg) => return Err(msg)
-          }
+          elem
+        }
+        match create_token(final_raw, elements) {
+          Ok(t) => tokens.push(t)
+          Err(msg) => return Err(msg)
         }
         pos += elem.length()
         continue
@@ -198,7 +195,7 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
       } else {
         raw
       }
-      match create_token(final_raw) {
+      match create_token(final_raw, elements) {
         Ok(t) => tokens.push(t)
         Err(msg) => return Err(msg)
       }
@@ -212,7 +209,7 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
 
   // Catch a trailing `-` (negate flag set but no following element)
   if negate {
-    match create_token("-") {
+    match create_token("-", elements) {
       Ok(t) => tokens.push(t)
       Err(msg) => return Err(msg)
     }
@@ -257,58 +254,46 @@ fn is_space(c : Char) -> Bool {
 // --- Element/keyword matching ---
 
 ///|
-/// Tries to match a grammar element at the current position.
-/// Longer operators are matched first (e.g. `//` before `/`, `<=` before `<`).
-fn match_element(chars : Array[Char], pos : Int) -> String? {
+/// Tries to match a grammar element at the current position. The
+/// element list is expected to be sorted by symbol length descending
+/// (like Jexl's split regex), so the first prefix match is also the
+/// longest. Identifier-like symbols additionally require word
+/// boundaries on both sides (Jexl wraps them in `\b...\b`).
+fn match_element_at(
+  chars : Array[Char],
+  pos : Int,
+  elements : Array[@grammar.ElementDef]
+) -> @grammar.ElementDef? {
   let n = chars.length()
-  let remaining = n - pos
-  // Two-char operators: //, !=, &&, <=, ==, >=, ||
-  if remaining >= 2 {
-    match String::from_array([chars[pos], chars[pos + 1]]) {
-      "//" | "!=" | "&&" | "<=" | "==" | ">=" | "||" as two => return Some(two)
-      _ => ()
+  for def in elements {
+    let sym = def.symbol
+    let m = sym.length()
+    if pos + m <= n {
+      if prefix_eq(chars, pos, sym) {
+        if @grammar.is_ident_like(sym) {
+          let prev_ok = pos == 0 || !is_ident_cont(chars[pos - 1])
+          let next_ok = pos + m >= n || !is_ident_cont(chars[pos + m])
+          if prev_ok && next_ok {
+            return Some(def)
+          }
+        } else {
+          return Some(def)
+        }
+      }
     }
   }
-  // One-char elements
-  match chars[pos] {
-    '+'
-    | '-'
-    | '*'
-    | '/'
-    | '%'
-    | '^'
-    | '>'
-    | '<'
-    | '!'
-    | '.'
-    | '['
-    | ']'
-    | '|'
-    | '{'
-    | '}'
-    | ':'
-    | ','
-    | '('
-    | ')'
-    | '?' as c => Some(c.to_string())
-    _ => None
-  }
+  None
 }
 
 ///|
-/// Checks if `in` keyword appears at pos (not followed by identifier chars).
-fn is_in_keyword(chars : Array[Char], pos : Int) -> Bool {
-  let n = chars.length()
-  if pos + 2 > n {
-    return false
-  }
-  if chars[pos] == 'i' && chars[pos + 1] == 'n' {
-    if pos + 2 < n && is_ident_cont(chars[pos + 2]) {
+fn prefix_eq(chars : Array[Char], pos : Int, sym : String) -> Bool {
+  let sym_chars = sym.to_array()
+  for i in 0..<sym_chars.length() {
+    if chars[pos + i] != sym_chars[i] {
       return false
     }
-    return true
   }
-  false
+  true
 }
 
 ///|
@@ -509,7 +494,7 @@ fn is_identifier(s : String) -> Bool {
 
 ///|
 /// Unquotes a string literal, processing escape sequences.
-/// Mirrors Jexl's `_unquote`: strip quotes, \\quote -> quote, \\\\ -> \\
+/// Mirrors Jexl's `_unquote`: strip quotes, \quote -> quote, \\ -> \
 fn unquote(str : String) -> String {
   let chars = str.to_array()
   let n = chars.length()
@@ -543,8 +528,13 @@ fn unquote(str : String) -> String {
 }
 
 ///|
-/// Creates a token from a raw element string. Mirrors Jexl's `_createToken`.
-fn create_token(element : String) -> Result[Token, String] {
+/// Creates a token from a raw element string. Mirrors Jexl's
+/// `_createToken`: strings, numerics, booleans, grammar elements, and
+/// identifiers are recognized in that order; anything else throws.
+fn create_token(
+  element : String,
+  elements : Array[@grammar.ElementDef]
+) -> Result[Token, String] {
   let chars = element.to_array()
   if chars.length() == 0 {
     return Err("Invalid expression token: (empty)")
@@ -554,29 +544,52 @@ fn create_token(element : String) -> Result[Token, String] {
   // String literal
   if first == '"' || first == '\'' {
     let val = unquote(element)
-    return Ok(Token::{ typ: @grammar.Literal, value: Str(val), raw: element })
+    return Ok(Token::{
+      typ: @grammar.Literal,
+      value: Str(val),
+      raw: element,
+    })
   }
 
   // Numeric
   if is_numeric(element) {
     match parse_double(element) {
-      Ok(d) =>
-        return Ok(Token::{ typ: @grammar.Literal, value: Num(d), raw: element })
+      Ok(d) => {
+        return Ok(Token::{
+          typ: @grammar.Literal,
+          value: Num(d),
+          raw: element,
+        })
+      }
       Err(_) => return Err("Invalid expression token: " + element)
     }
   }
 
   // Boolean
   if element == "true" {
-    return Ok(Token::{ typ: @grammar.Literal, value: Bool(true), raw: element })
+    return Ok(Token::{
+      typ: @grammar.Literal,
+      value: Bool(true),
+      raw: element,
+    })
   }
   if element == "false" {
-    return Ok(Token::{ typ: @grammar.Literal, value: Bool(false), raw: element })
+    return Ok(Token::{
+      typ: @grammar.Literal,
+      value: Bool(false),
+      raw: element,
+    })
   }
 
   // Grammar element (operator/control char)
-  match @grammar.element_type(element) {
-    Some(t) => return Ok(Token::{ typ: t, value: Str(element), raw: element })
+  match @grammar.find_element(elements, element) {
+    Some(def) => {
+      return Ok(Token::{
+        typ: def.elem_type,
+        value: Str(element),
+        raw: element,
+      })
+    }
     None => ()
   }
 
