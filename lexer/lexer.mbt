@@ -81,11 +81,7 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
         continue
       }
       // It's a binaryOp subtract
-      tokens.push(Token::{
-        typ: @grammar.BinaryOp,
-        value: Str("-"),
-        raw: "-",
-      })
+      tokens.push(Token::{ typ: @grammar.BinaryOp, value: Str("-"), raw: "-" })
       pos += 1
       continue
     }
@@ -121,11 +117,7 @@ pub fn tokenize(input : String) -> Result[Array[Token], String] {
             Err(msg) => return Err(msg)
           }
         } else {
-          tokens.push(Token::{
-            typ: @grammar.Literal,
-            value: Bool(val),
-            raw,
-          })
+          tokens.push(Token::{ typ: @grammar.Literal, value: Bool(val), raw })
         }
         pos += raw.length()
         continue
@@ -279,9 +271,26 @@ fn match_element(chars : Array[Char], pos : Int) -> String? {
   }
   // One-char elements
   match chars[pos] {
-    '+' | '-' | '*' | '/' | '%' | '^' | '>' | '<' | '!' | '.' | '[' | ']' | '|' | '{' | '}' | ':' | ',' | '(' | ')' | '?' as c => {
-      Some(c.to_string())
-    }
+    '+'
+    | '-'
+    | '*'
+    | '/'
+    | '%'
+    | '^'
+    | '>'
+    | '<'
+    | '!'
+    | '.'
+    | '['
+    | ']'
+    | '|'
+    | '{'
+    | '}'
+    | ':'
+    | ','
+    | '('
+    | ')'
+    | '?' as c => Some(c.to_string())
     _ => None
   }
 }
@@ -545,52 +554,29 @@ fn create_token(element : String) -> Result[Token, String] {
   // String literal
   if first == '"' || first == '\'' {
     let val = unquote(element)
-    return Ok(Token::{
-      typ: @grammar.Literal,
-      value: Str(val),
-      raw: element,
-    })
+    return Ok(Token::{ typ: @grammar.Literal, value: Str(val), raw: element })
   }
 
   // Numeric
   if is_numeric(element) {
     match parse_double(element) {
-      Ok(d) => {
-        return Ok(Token::{
-          typ: @grammar.Literal,
-          value: Num(d),
-          raw: element,
-        })
-      }
+      Ok(d) =>
+        return Ok(Token::{ typ: @grammar.Literal, value: Num(d), raw: element })
       Err(_) => return Err("Invalid expression token: " + element)
     }
   }
 
   // Boolean
   if element == "true" {
-    return Ok(Token::{
-      typ: @grammar.Literal,
-      value: Bool(true),
-      raw: element,
-    })
+    return Ok(Token::{ typ: @grammar.Literal, value: Bool(true), raw: element })
   }
   if element == "false" {
-    return Ok(Token::{
-      typ: @grammar.Literal,
-      value: Bool(false),
-      raw: element,
-    })
+    return Ok(Token::{ typ: @grammar.Literal, value: Bool(false), raw: element })
   }
 
   // Grammar element (operator/control char)
   match @grammar.element_type(element) {
-    Some(t) => {
-      return Ok(Token::{
-        typ: t,
-        value: Str(element),
-        raw: element,
-      })
-    }
+    Some(t) => return Ok(Token::{ typ: t, value: Str(element), raw: element })
     None => ()
   }
 

@@ -1,0 +1,82 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "dexter/mbel/ast"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn array_literal() -> AstNode
+
+pub fn ast_equal(AstNode, AstNode) -> Bool
+
+pub fn binary_expr(String, AstNode) -> AstNode
+
+pub fn conditional() -> AstNode
+
+pub fn filter_expression(AstNode, Bool, AstNode) -> AstNode
+
+pub fn function_call(String, String) -> AstNode
+
+pub fn identifier(String) -> AstNode
+
+pub fn literal(Value) -> AstNode
+
+pub fn object_literal() -> AstNode
+
+pub fn unary_expr(String) -> AstNode
+
+pub fn value_equal(Value, Value) -> Bool
+
+// Errors
+
+// Types and methods
+pub(all) struct AstNode {
+  mut node_type : NodeType
+  mut value : Value
+  mut ident_name : String
+  mut from : AstNode?
+  mut relative : Bool
+  mut operator : String
+  mut left : AstNode?
+  mut right : AstNode?
+  mut cond_test : AstNode?
+  mut consequent : AstNode?
+  mut alternate : AstNode?
+  mut array_value : Array[AstNode]
+  mut obj_value : Array[(String, AstNode)]
+  mut filter_expr : AstNode?
+  mut subject : AstNode?
+  mut filter_relative : Bool
+  mut func_name : String
+  mut args : Array[AstNode]
+  mut pool : String
+  mut parent : AstNode?
+}
+
+pub(all) enum NodeType {
+  LiteralNode
+  IdentifierNode
+  BinaryExpressionNode
+  UnaryExpressionNode
+  ConditionalExpressionNode
+  ArrayLiteralNode
+  ObjectLiteralNode
+  FilterExpressionNode
+  FunctionCallNode
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Value {
+  BoolVal(Bool)
+  NumVal(Double)
+  StrVal(String)
+  ArrayVal(Array[Value])
+  ObjectVal(Array[(String, Value)])
+  NullVal
+  UndefVal
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+

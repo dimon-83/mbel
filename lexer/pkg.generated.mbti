@@ -1,0 +1,30 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "dexter/mbel/lexer"
+
+import {
+  "dexter/mbel/grammar",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn tokenize(String) -> Result[Array[Token], String]
+
+// Errors
+
+// Types and methods
+pub(all) enum LiteralValue {
+  Bool(Bool)
+  Num(Double)
+  Str(String)
+} derive(@debug.Debug)
+
+pub struct Token {
+  typ : @grammar.TokenType
+  value : LiteralValue
+  raw : String
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+

@@ -1,0 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// mbel — MoonBit Expression Language
+// ast package: AST node types for parsed expressions
+//
+// Ported from Jexl's AST node shapes produced by the Parser.
+// The Parser builds trees incrementally (placeAtCursor, placeBeforeCursor),
+// so AstNode uses mutable fields to allow in-place modification.

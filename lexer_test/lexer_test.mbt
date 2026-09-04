@@ -4,7 +4,9 @@
 
 ///|
 /// Helper: unwrap Result tokens, aborting on Err.
-fn unwrap_tokens(r : Result[Array[@lexer.Token], String]) -> Array[@lexer.Token] {
+fn unwrap_tokens(
+  r : Result[Array[@lexer.Token], String],
+) -> Array[@lexer.Token] {
   match r {
     Ok(toks) => toks
     Err(msg) => abort(msg)
@@ -198,7 +200,9 @@ test "tokens: throws on invalid token" {
 
 ///|
 test "tokenizes a full expression" {
-  let toks = unwrap_tokens(@lexer.tokenize("6+x -  -17.55*y<= !foo.bar[\"baz\\\"foz\"]"))
+  let toks = unwrap_tokens(
+    @lexer.tokenize("6+x -  -17.55*y<= !foo.bar[\"baz\\\"foz\"]"),
+  )
   assert_eq(toks.length(), 15)
 
   expect_typ(toks[0], @grammar.Literal)

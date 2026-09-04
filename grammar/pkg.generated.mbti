@@ -1,0 +1,39 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "dexter/mbel/grammar"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn element_type(String) -> TokenType?
+
+pub fn minus_negates_after(TokenType) -> Bool
+
+pub fn precedence(String) -> Int
+
+// Errors
+
+// Types and methods
+pub(all) enum TokenType {
+  Literal
+  Identifier
+  BinaryOp
+  UnaryOp
+  Dot
+  OpenBracket
+  CloseBracket
+  Pipe
+  OpenCurl
+  CloseCurl
+  Colon
+  Comma
+  OpenParen
+  CloseParen
+  Question
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits
+

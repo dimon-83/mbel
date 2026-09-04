@@ -36,8 +36,22 @@ pub(all) enum TokenType {
 /// a literal, identifier, or invalid).
 pub fn element_type(s : String) -> TokenType? {
   match s {
-    "+" | "-" | "*" | "/" | "//" | "%" | "^" | "==" | "!=" | ">" | ">=" | "<" | "<=" | "&&" | "||" | "in" =>
-      Some(BinaryOp)
+    "+"
+    | "-"
+    | "*"
+    | "/"
+    | "//"
+    | "%"
+    | "^"
+    | "=="
+    | "!="
+    | ">"
+    | ">="
+    | "<"
+    | "<="
+    | "&&"
+    | "||"
+    | "in" => Some(BinaryOp)
     "!" => Some(UnaryOp)
     "." => Some(Dot)
     "[" => Some(OpenBracket)
@@ -55,11 +69,37 @@ pub fn element_type(s : String) -> TokenType? {
 }
 
 ///|
+/// Returns the precedence of a binary operator.
+/// Higher number = binds tighter. Non-operators return 0.
+/// Values from Jexl's grammar.js. `!` (unary) has Infinity there;
+/// the parser walks through unary nodes when placing binary ops, so
+/// it must outrank every finite precedence.
+pub fn precedence(op : String) -> Int {
+  match op {
+    "!" => 1000000
+    "^" | "%" => 50
+    "*" | "/" | "//" => 40
+    "+" | "-" => 30
+    "==" | "!=" | ">" | ">=" | "<" | "<=" | "in" => 20
+    "&&" | "||" => 10
+    _ => 0
+  }
+}
+
+///|
 /// Token types after which a `-` should be interpreted as negation
 /// rather than subtraction.  Mirrors Jexl's `minusNegatesAfter`.
 pub fn minus_negates_after(t : TokenType) -> Bool {
   match t {
-    BinaryOp | UnaryOp | OpenParen | OpenBracket | Question | Colon => true
+    BinaryOp
+    | UnaryOp
+    | OpenParen
+    | OpenBracket
+    | Question
+    | Colon
+    | Comma
+    | Pipe
+    | OpenCurl => true
     _ => false
   }
 }
