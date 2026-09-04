@@ -84,7 +84,10 @@ pub fn to_number(v : @ast.Value) -> Double {
     @ast.StrVal(s) => str_to_number(s)
     @ast.NullVal => 0.0
     @ast.UndefVal => nan()
-    @ast.ArrayVal(_) | @ast.ObjectVal(_) => nan()
+    // JS ToNumber on arrays runs them through ToPrimitive (join):
+    // [] -> "" -> 0, [5] -> "5" -> 5, [1,2] -> "1,2" -> NaN.
+    @ast.ArrayVal(xs) => str_to_number(arr_to_string(xs))
+    @ast.ObjectVal(_) => nan()
   }
 }
 
@@ -118,30 +121,39 @@ pub fn parse_decimal(s : String) -> Double {
   if i >= n {
     return nan()
   }
-  let mut result = 0.0
+  // Accumulate all digits as one integer, then divide by 10^k once:
+  // a single correctly-rounded division, matching JS parseFloat
+  // (double-rounding only matters past 15 significant digits).
+  let mut acc = 0.0
   let mut digits = 0
-  while i < n && is_digit(chars[i]) {
-    result = result * 10.0 + (chars[i].to_int() - '0'.to_int()).to_double()
-    digits += 1
-    i += 1
-  }
-  if i < n && chars[i] == '.' {
-    i += 1
-    let mut scale = 0.1
-    while i < n && is_digit(chars[i]) {
-      result += (chars[i].to_int() - '0'.to_int()).to_double() * scale
-      scale *= 0.1
-      i += 1
+  let mut frac = 0
+  let mut saw_dot = false
+  while i < n {
+    let c = chars[i]
+    if is_digit(c) {
+      acc = acc * 10.0 + (c.to_int() - '0'.to_int()).to_double()
+      digits += 1
+      if saw_dot {
+        frac += 1
+      }
+    } else if c == '.' && !saw_dot {
+      saw_dot = true
+    } else {
+      return nan()
     }
+    i += 1
   }
-  if i != n || digits == 0 {
+  if digits == 0 {
     return nan()
   }
-  if neg {
-    -result
-  } else {
-    result
+  if saw_dot {
+    let mut p10 = 1.0
+    for _ in 0..<frac {
+      p10 = p10 * 10.0
+    }
+    acc = acc / p10
   }
+  if neg { -acc } else { acc }
 }
 
 ///|
@@ -207,8 +219,11 @@ pub fn loose_eq(a : @ast.Value, b : @ast.Value) -> Bool {
     (@ast.NumVal(x), @ast.StrVal(y)) => x == str_to_number(y)
     (@ast.StrVal(x), @ast.StrVal(y)) => x == y
     (@ast.NumVal(x), @ast.NumVal(y)) => x == y
-    (@ast.StrVal(_), _) => false
-    (_, @ast.StrVal(_)) => false
+    // JS == against objects/arrays first coerces them via ToPrimitive.
+    (@ast.ArrayVal(_) | @ast.ObjectVal(_), @ast.NumVal(y)) => to_number(a) == y
+    (@ast.NumVal(x), @ast.ArrayVal(_) | @ast.ObjectVal(_)) => x == to_number(b)
+    (@ast.ArrayVal(_) | @ast.ObjectVal(_), @ast.StrVal(y)) => to_string(a) == y
+    (@ast.StrVal(x), @ast.ArrayVal(_) | @ast.ObjectVal(_)) => x == to_string(b)
     (_, _) => strict_eq(a, b)
   }
 }
@@ -217,42 +232,111 @@ pub fn loose_eq(a : @ast.Value, b : @ast.Value) -> Bool {
 /// JS relational comparison semantics for `< <= > >=`:
 /// both strings → lexicographic; otherwise numeric with NaN → false.
 pub fn compare(op : String, a : @ast.Value, b : @ast.Value) -> Bool {
-  match (a, b) {
-    (@ast.StrVal(x), @ast.StrVal(y)) => {
-      let c = x.compare(y)
-      match op {
-        "<" => c < 0
-        "<=" => c <= 0
-        ">" => c > 0
-        _ => c >= 0
-      }
+  // JS relational semantics: operands go through ToPrimitive first.
+  // Arrays become their joined string, objects "[object Object]".
+  // When BOTH results are strings the comparison is lexicographic by
+  // code unit; otherwise both sides coerce to numbers (NaN → false).
+  if str_like(a) && str_like(b) {
+    let c = lex_compare(to_string(a), to_string(b))
+    match op {
+      "<" => c < 0
+      "<=" => c <= 0
+      ">" => c > 0
+      _ => c >= 0
     }
-    (_, _) => {
-      let x = to_number(a)
-      let y = to_number(b)
-      if x == nan() || y == nan() || x != x || y != y {
-        return false
-      }
-      match op {
-        "<" => x < y
-        "<=" => x <= y
-        ">" => x > y
-        _ => x >= y
-      }
+  } else {
+    let x = to_number(a)
+    let y = to_number(b)
+    if x != x || y != y {
+      return false
     }
+    match op {
+      "<" => x < y
+      "<=" => x <= y
+      ">" => x > y
+      _ => x >= y
+    }
+  }
+}
+
+///|
+/// Whether a value is string-like after JS ToPrimitive: strings stay,
+/// arrays join, objects become "[object Object]".
+fn str_like(v : @ast.Value) -> Bool {
+  match v {
+    @ast.StrVal(_) | @ast.ArrayVal(_) | @ast.ObjectVal(_) => true
+    _ => false
+  }
+}
+
+///|
+/// Lexicographic comparison by code unit (JS String relational
+/// semantics). Returns negative/zero/positive.
+fn lex_compare(x : String, y : String) -> Int {
+  let a = x.to_array()
+  let b = y.to_array()
+  let n = if a.length() < b.length() { a.length() } else { b.length() }
+  for i in 0..<n {
+    let ca = a[i].to_int()
+    let cb = b[i].to_int()
+    if ca != cb {
+      return if ca < cb { -1 } else { 1 }
+    }
+  }
+  if a.length() == b.length() {
+    0
+  } else if a.length() < b.length() {
+    -1
+  } else {
+    1
   }
 }
 
 ///|
 /// JS remainder semantics (sign of dividend). MoonBit Double has no %,
 /// so: a - trunc(a/b) * b.
+///|
+/// JS `%` — the IEEE fmod remainder (sign of the dividend, exact
+/// residual). MoonBit has no fmod, so compute a - trunc(a/b)*b with
+/// the product in double-double precision (Dekker splitting), which
+/// avoids the double-rounding a naive Double multiply would cause.
 pub fn remainder(a : Double, b : Double) -> Double {
-  if b == 0.0 {
+  if b == 0.0 || a != a || b != b || a == 1.0 / 0.0 || a == -1.0 / 0.0 {
     return nan()
   }
+  if a == 0.0 {
+    return a
+  }
   let q = a / b
-  let trunc_q = if q < 0.0 { -(-q).floor() } else { q.floor() }
-  a - trunc_q * b
+  let trunc_q = if q < 0.0 { -((-q).floor()) } else { q.floor() }
+  let (p_hi, p_lo) = two_prod(trunc_q, b)
+  let (s1, t1) = two_sum(a, -p_hi)
+  let e = t1 - p_lo
+  s1 + e
+}
+
+///|
+/// Error-free transform of a product: p + err == x*y exactly
+/// (Veltkamp/Dekker splitting, no FMA required).
+fn two_prod(x : Double, y : Double) -> (Double, Double) {
+  let p = x * y
+  let c = 134217729.0 * x
+  let x_hi = c - (c - x)
+  let x_lo = x - x_hi
+  let c2 = 134217729.0 * y
+  let y_hi = c2 - (c2 - y)
+  let y_lo = y - y_hi
+  let err = ((x_hi * y_hi - p) + x_hi * y_lo + x_lo * y_hi) + x_lo * y_lo
+  (p, err)
+}
+
+///|
+/// Error-free transform of a sum: s + err == x + y exactly.
+fn two_sum(x : Double, y : Double) -> (Double, Double) {
+  let s = x + y
+  let bb = s - x
+  let err = (x - (s - bb)) + (y - bb)
+  (s, err)
 }
 
 ///|

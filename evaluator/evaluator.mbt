@@ -155,11 +155,24 @@ fn default_binary_ops() -> Array[(String, FnB)] {
 ///|
 /// JS `+`: string concatenation when either operand is a string,
 /// otherwise numeric addition.
-fn plus(a : @ast.Value, b : @ast.Value) -> @ast.Value {
-  match (a, b) {
-    (@ast.StrVal(x), _) => @ast.StrVal(x + to_string(b))
-    (_, @ast.StrVal(y)) => @ast.StrVal(to_string(a) + y)
-    (_, _) => @ast.NumVal(to_number(a) + to_number(b))
+///|
+/// JS `+`: concatenation when either operand is string-like. JS first
+/// coerces operands via ToPrimitive, and arrays/objects become
+/// strings ("1,2", "[object Object]"), so any array/object/string
+/// operand makes `+` a concatenation. Otherwise numeric addition.
+pub fn plus(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+  if concat_like(a) || concat_like(b) {
+    @ast.StrVal(to_string(a) + to_string(b))
+  } else {
+    @ast.NumVal(to_number(a) + to_number(b))
+  }
+}
+
+///|
+fn concat_like(v : @ast.Value) -> Bool {
+  match v {
+    @ast.StrVal(_) | @ast.ArrayVal(_) | @ast.ObjectVal(_) => true
+    _ => false
   }
 }
 

@@ -450,23 +450,38 @@ fn parse_double(s : String) -> Result[Double, String] {
     neg = true
     i = 1
   }
-  let mut result = 0.0
-  // Integer part [0-9]*
-  while i < n && is_digit(chars[i]) {
-    result = result * 10.0 + (chars[i].to_int() - '0'.to_int()).to_double()
-    i += 1
-  }
-  // Fractional part \.[0-9]+
-  if i < n && chars[i] == '.' {
-    i += 1
-    let mut scale = 0.1
-    while i < n && is_digit(chars[i]) {
-      result += (chars[i].to_int() - '0'.to_int()).to_double() * scale
-      scale *= 0.1
-      i += 1
+  // Integer accumulation + one division: correctly rounded like JS
+  // parseFloat (double-rounding only matters past 15 digits).
+  let mut acc = 0.0
+  let mut digits = 0
+  let mut frac = 0
+  let mut saw_dot = false
+  while i < n {
+    let c = chars[i]
+    if is_digit(c) {
+      acc = acc * 10.0 + (c.to_int() - '0'.to_int()).to_double()
+      digits += 1
+      if saw_dot {
+        frac += 1
+      }
+    } else if c == '.' && !saw_dot {
+      saw_dot = true
+    } else {
+      return Err("Invalid expression token: " + s)
     }
+    i += 1
   }
-  Ok(if neg { -result } else { result })
+  if digits == 0 {
+    return Err("Invalid expression token: " + s)
+  }
+  if saw_dot {
+    let mut p10 = 1.0
+    for _ in 0..<frac {
+      p10 = p10 * 10.0
+    }
+    acc = acc / p10
+  }
+  Ok(if neg { -acc } else { acc })
 }
 
 ///|

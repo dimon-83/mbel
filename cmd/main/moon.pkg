@@ -1,6 +1,9 @@
-// import {
-//   "dexter/mbel" @lib,
-// }
+import {
+  "dexter/mbel/ast",
+  "dexter/mbel/evaluator",
+  "dexter/mbel/jexl",
+  "moonbitlang/core/env",
+}
 
 options(
   "is-main": true,
