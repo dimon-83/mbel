@@ -1,0 +1,2 @@
+assoc[.first == "Lana"].last
+items[.qty > 0].total == 0	{"items":[]}

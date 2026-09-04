@@ -45,3 +45,17 @@ optional JSON context. JSON null → NullVal, numbers → NumVal, objects
 keep insertion order. Verified identical to real Jexl `evalSync` on the
 same context (e.g. `items[.price <= 2].name` → `"apple"`, because
 drilling into a filtered array takes element 0 per Jexl semantics).
+
+## Context corpus
+
+`tools/corpus_ctx.txt` — 29 lines of `expr<TAB>{json-context}` pairs
+(README-style use cases: nested names, assoc filtering, math on
+context vars, null/undefined lookups, empty-array filters, object
+literal with context refs). Both runners parse the per-line context;
+29/29 identical to real Jexl.
+
+Known intentional divergence (not in the diff corpora, see
+`tools/divergence.txt` and docs/parity-contract.md §4): Jexl throws a
+TypeError for `arr[.f == x].prop` when the filtered array is empty
+(its README example `assoc[.first == "Lana"].last` without a context
+crashes there); mbel returns undefined.

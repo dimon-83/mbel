@@ -31,14 +31,36 @@ fn main {
     if line == "" {
       continue
     }
-    let expr = line.to_owned()
+    // A line may carry its own context: expr<TAB>{json}. The context
+    // column must start with '{' so expressions containing literal
+    // tabs (whitespace tests) are left intact.
+    let (expr, line_ctx) = split_line_context(line.to_owned())
+    let ctx = match line_ctx {
+      Some(json) => parse_context(json)
+      None => context
+    }
     let out = try {
-      canon(@jexl.Jexl::eval(inst, expr, context))
+      canon(@jexl.Jexl::eval(inst, expr, ctx))
     } catch {
       @jexl.JexlErr(_) => "{\"$error\":true}"
     }
     println(out)
   }
+}
+
+///|
+/// Splits a corpus line into (expression, optional context JSON):
+/// the context is the text after the first tab when it starts with '{'.
+fn split_line_context(line : String) -> (String, String?) {
+  let chars = line.to_array()
+  for i in 0..<chars.length() {
+    if chars[i] == '\t' && i + 1 < chars.length() && chars[i + 1] == '{' {
+      let expr = line[:i].to_owned()
+      let ctx = line[i + 1:].to_owned()
+      return (expr, Some(ctx))
+    }
+  }
+  (line, None)
 }
 
 ///|

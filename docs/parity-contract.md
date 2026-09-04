@@ -198,6 +198,7 @@ Known divergences (all documented):
 | 1 | `8 ^ [2.5]` | 181.01933598375618 | 181.01933598375615 | V8 `Math.pow` vs MoonBit pow differ 1 ulp (libm, not logic) |
 | 2 | `{a:1} == {a:1}` | false | true | JS object equality is by reference; mbel compares structurally (see §3.1) |
 | 3 | async transforms | — | — | JS Promises have no MoonBit counterpart; eval is synchronous |
+| 4 | `arr[.f == x].prop` when the filter yields `[]` | throws TypeError | `undefined` | Jexl drills into `undefined` after unwrapping the empty array's element 0 (its README example claims `undefined`-free output); mbel follows the documented intent. Tracked in `tools/divergence.txt` |
 
 Numeric-parity fixes this phase discovered: correctly-rounded decimal
 literal parsing (integer accumulation, single division); JS relational

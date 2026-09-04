@@ -43,8 +43,16 @@ function main() {
   const lines = fs.readFileSync(file, 'utf8').split('\n')
   for (const line of lines) {
     if (line === '') continue
+    // expr<TAB>{json} lines carry their own context (JSON.parse).
+    const tab = line.indexOf('\t')
+    let expr = line
+    let ctx = {}
+    if (tab >= 0 && line[tab + 1] === '{') {
+      expr = line.slice(0, tab)
+      ctx = JSON.parse(line.slice(tab + 1))
+    }
     try {
-      console.log(canon(jexl.evalSync(line, {})))
+      console.log(canon(jexl.evalSync(expr, ctx)))
     } catch (e) {
       console.log('{"$error":true}')
     }

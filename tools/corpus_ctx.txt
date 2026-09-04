@@ -1,0 +1,29 @@
+assoc[.first == "Lana"].last	{"name":{"first":"Sterling","last":"Archer"},"assoc":[{"first":"Lana","last":"Kane"},{"first":"Cyril","last":"Figgis"},{"first":"Pam","last":"Poovey"}],"age":36}
+age * (3 - 1)	{"name":{"first":"Sterling","last":"Archer"},"assoc":[{"first":"Lana","last":"Kane"},{"first":"Cyril","last":"Figgis"},{"first":"Pam","last":"Poovey"}],"age":36}
+name.first + " " + name.last	{"name":{"first":"Sterling","last":"Archer"},"age":36}
+assoc[.last == "Poovey"].first	{"assoc":[{"first":"Lana","last":"Kane"},{"first":"Cyril","last":"Figgis"},{"first":"Pam","last":"Poovey"}]}
+age * (3 - 1) + assoc.length	{"assoc":[1,2,3],"age":36}
+foo.bar	{"foo":{"bar":42}}
+foo.bar	{}
+foo	{"foo":null}
+foo == null	{"foo":null}
+missing == null	{}
+assoc[.first == "Lana"]	{"assoc":[{"first":"Lana","last":"Kane"},{"first":"Cyril","last":"Figgis"},{"first":"Pam","last":"Poovey"}]}
+assoc[.first != "Lana"].first	{"assoc":[{"first":"Lana","last":"Kane"},{"first":"Cyril","last":"Figgis"},{"first":"Pam","last":"Poovey"}]}
+name.last + ", " + name.first	{"name":{"first":"Sterling","last":"Archer"}}
+age > 18 ? "adult" : "minor"	{"age":36}
+age > 18 ? "adult" : "minor"	{"age":10}
+"Dr. " + (title ? title + " " : "") + name.last	{"title":"Prof","name":{"last":"Farnsworth"}}
+"Dr. " + (title ? title + " " : "") + name.last	{"name":{"last":"Farnsworth"}}
+items[.qty > 0]	{"items":[{"n":"a","qty":0},{"n":"b","qty":2}]}
+user.settings.theme == "dark" && user.admin	{"user":{"settings":{"theme":"dark"},"admin":true}}
+user.settings.theme == "dark" && user.admin	{"user":{"settings":{"theme":"light"},"admin":true}}
+nums[1] + nums[nums.length - 1]	{"nums":[10,20,30,40]}
+{"sum": a + b}.sum	{"a":5,"b":7}
+nested.list[0].deep[1]	{"nested":{"list":[{"deep":[1,2,3]}]}}
+empty.arr[0]	{"empty":{"arr":[]}}
+big ^ 0.5	{"big":256}
+"x" in flags	{"flags":["a","x","z"]}
+2 in nums	{"nums":[1,2,3]}
+age / 0	{"age":36}
+"count: " + n	{"n":3}
