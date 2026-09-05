@@ -228,9 +228,11 @@ dependencies) are tracked as explicit cut items in the gap document.
 
 ## Performance & stability report (Walk vs Vm)
 
-Measured with `moon bench -p jexl_test` (wasm-gc, moonrun, 2026-09-06).
-Both engines share one semantic layer; the Vm's compiled `Program` is
-cached per `Expression`, so compile cost is paid once.
+Full three-target report (native / js V8-JIT / wasm-gc) in
+[docs/perf-report.md](docs/perf-report.md). Headline numbers below are
+wasm-gc via moonrun (2026-09-06). Both engines share one semantic
+layer; the Vm's compiled `Program` is cached per `Expression`, so
+compile cost is paid once.
 
 | Scenario | Walk | Vm | Delta |
 |---|---|---|---|
@@ -243,13 +245,14 @@ cached per `Expression`, so compile cost is paid once.
 | 100-element relative filter | 4.17 µs | 4.20 µs | ≈0 |
 | Tokenize only (engine-independent) | 3.0 µs | — | — |
 
-Reading the numbers: v1 of the Vm executes the same shared semantic
-functions as Walk (instructions only dispatch), and filter subtrees —
-the hot path — run as tree-walk callbacks that share the step budget.
-The engines are therefore at parity today; the step-change gains
-(3–10× on aggregate/predicate workloads) arrive with v2, when
-predicate loops become native instructions (staged in
-[docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) §6.1).
+Reading the numbers: both engines execute the same shared semantic
+functions (instructions only dispatch), and the Vm's relative-filter
+loop is now native bytecode (no per-element evaluator allocation).
+The engines are at parity across every target; on the native backend
+the Vm leads by 1–5% on long-predicate filters, with the advantage
+growing with predicate complexity. The remaining step-change gains
+(aggregate/predicate workloads) arrive with expr-syntax predicates
+([docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) §6.1).
 
 Stability invariants are asserted **per engine** with one shared
 suite (`jexl_test/stability_test.mbt`): instance isolation, 500×
