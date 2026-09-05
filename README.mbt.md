@@ -46,6 +46,30 @@ $ moon run cmd/main -- "items[.price <= 2].name" \
 "apple"
 ```
 
+expr-style predicate aggregates work on both engines:
+
+```text
+$ moon run cmd/main -- "map(nums, # * 2)" '{"nums": [1, 2, 3, 4, 5]}'
+[2,4,6,8,10]
+
+$ moon run cmd/main -- "filter(users, .age >= 18) | map(.name)" \
+  '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 15}]}'
+["Alice"]
+
+$ moon run cmd/main -- "sum(1..100)"
+5050
+
+$ moon run cmd/main -- "count(users, .age >= 18)" \
+  '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 15}, {"name": "Cyx", "age": 24}]}'
+2
+
+$ moon run cmd/main -- "groupBy(nums, # % 2)" '{"nums": [1, 2, 3, 4, 5]}'
+{"1":[1,3,5],"0":[2,4]}
+
+$ moon run cmd/main -- "reduce(nums, #acc + #, 100)" '{"nums": [1, 2, 3, 4, 5]}'
+115
+```
+
 Contexts are JSON: `null` → `nil`, numbers and nested objects/arrays
 work as expected. A few demo transforms (`dbl`, `first`,
 `concatWith`) are registered in the CLI, so pipes work too:
@@ -195,13 +219,20 @@ The reference material below is the target blueprint, staged in
 [docs/expr-gap-analysis.md](docs/expr-gap-analysis.md) (stage 4,
 estimated 75–105 person-days; stages 4.1 done — resource budgets).
 
-- **Literals & data**: booleans, integers (decimal, hex `0x`, octal
-  `0o`, binary `0b`), floats, strings (incl. backtick raw strings),
-  byte arrays `b"..."`, arrays, maps `{key: value}`, `nil`.
-- **Operators**: full arithmetic (`+ - * / % ^`/`**`), comparisons,
-  logic (`not/! and/&& or/||`), conditionals (ternary, `??`, `if-else`
-  blocks), member access with optional chaining `?.`, `in`, ranges
-  `..`, slices `[:]`, pipes `|`.
+Remaining roadmap items (see
+[docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) for the full
+matrix):
+
+- **Language front-end (4.4 remainder)**: `{expr}` brace-wrapped
+  predicate blocks, `if/else` blocks, `let` declarations + sequences,
+  slices `[:]`, optional chaining `?.`, chained comparisons, `not in`,
+  right-assoc `**`, hex/oct/binary/exponent literals, raw strings and
+  byte strings, comments, `$env`, int/float type system + static type
+  checker with `行:列` error locations.
+- **Dependencies (4.5)**: full RE2-style regex for `matches` (the
+  MoonBit core regex is literal-only), full time objects/timezones.
+- **Vm v2 remainder**: `let` variable slots, slice/optional-chain
+  instructions, disassembler output.
 - **Strings**: `trim`, `upper/lower`, `split`, `replace`, `repeat`,
   `indexOf`, `hasPrefix/hasSuffix`, and regex matching `matches`.
 - **Date & time**: `now()`, `duration()`, `date()` (multiple layouts,
@@ -211,7 +242,7 @@ estimated 75–105 person-days; stages 4.1 done — resource budgets).
 - **Arrays & collections**: predicates `all/any/one/none`,
   `map/filter`, `find/findIndex/...`, `groupBy`, `count`, `concat`,
   `flatten`, `uniq`, `join`, `reduce`, `sort/sortBy`, `reverse`,
-  `first/last/take`.
+  `first/last/take`. — DELIVERED 4.4.2 (57/64 builtins total).
 - **Maps**: `keys`, `values`, `toPairs/fromPairs`.
 - **Type & encoding**: `type()`, `int/float/string` conversions,
   `toJSON/fromJSON`, `toBase64/fromBase64`.
@@ -228,30 +259,33 @@ dependencies) are tracked as explicit cut items in the gap document.
 
 ## Performance & stability report (Walk vs Vm)
 
-Full three-target report (native / js V8-JIT / wasm-gc) in
-[docs/perf-report.md](docs/perf-report.md). Headline numbers below are
-wasm-gc via moonrun (2026-09-06). Both engines share one semantic
-layer; the Vm's compiled `Program` is cached per `Expression`, so
-compile cost is paid once.
+Full three-target report in [docs/perf-report.md](docs/perf-report.md).
+Both engines share one semantic layer (instructions only dispatch), so
+results and error messages are identical by construction and by test.
+Latest paired benchmarks (wasm-gc / moonrun, 2026-09-06; native in
+parentheses):
 
-| Scenario | Walk | Vm | Delta |
-|---|---|---|---|
-| End-to-end compile + eval | 6.10 µs | 6.19 µs | +1.5% |
-| Precompiled eval (constant-folded path) | 13.2 ns | 13.7 ns | ≈0 |
-| Ternary + logic + `??` chain | 94.7 ns | 95.3 ns | ≈0 |
-| String builtin chain | 437 ns | 439 ns | ≈0 |
-| `toJSON`/`fromJSON` roundtrip | 591 ns | 605 ns | +2% |
-| 50-term un-foldable chain | 1.23 µs | 1.26 µs | +2% |
-| 100-element relative filter | 4.17 µs | 4.20 µs | ≈0 |
-| Tokenize only (engine-independent) | 3.0 µs | — | — |
+| Scenario | Walk | Vm |
+|---|---|---|
+| Precompiled eval (constant-folded) | 12.5 ns (17.9) | 12.5 ns (18.7) |
+| Ternary + logic + `??` chain | 93 ns (108) | 95 ns (110) |
+| 50-term un-foldable chain | 1.24 µs (1.28) | 1.27 µs (1.32) |
+| End-to-end compile + eval | 6.21 µs (13.3) | 6.06 µs (13.3) |
+| 100-item relative filter | 4.01 µs (4.87) | 4.10 µs (4.91) |
+| 100-item long-predicate filter | 15.17 µs (18.03) | 15.30 µs (17.85) |
+| Aggregate `map` over 100 items | 3.57 µs (4.05) | 3.47 µs (4.04) |
+| Aggregate `filter`+`sum` over 100 items | 6.07 µs (6.55) | 6.08 µs (6.63) |
+| String builtin chain | 443 ns (452) | 445 ns (449) |
+| `toJSON`/`fromJSON` roundtrip | 588 ns (810) | 589 ns (801) |
+| Tokenize only (engine-independent) | 3.03 µs | — |
 
-Reading the numbers: both engines execute the same shared semantic
-functions (instructions only dispatch), and the Vm's relative-filter
-loop is now native bytecode (no per-element evaluator allocation).
-The engines are at parity across every target; on the native backend
-the Vm leads by 1–5% on long-predicate filters, with the advantage
-growing with predicate complexity. The remaining step-change gains
-(aggregate/predicate workloads) arrive with expr-syntax predicates
+Reading the numbers: the engines are at parity on every target — the
+shared semantic functions dominate, and the Vm's relative-filter loop
+plus typed-slot aggregate loop (one reused sub-VM per aggregate) have
+removed the per-element allocation that classic tree-walks pay. On the
+native backend the Vm leads by 1–5% on long-predicate filters, with
+the advantage growing with predicate complexity; remaining gains are
+tied to the expr-syntax predicate front-end
 ([docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) §6.1).
 
 Stability invariants are asserted **per engine** with one shared
@@ -260,10 +294,10 @@ deterministic re-evaluation, budget non-bypass against 100k-element
 contexts, recovery after parse/transform/budget failures, interleaved
 multi-instance evaluation, nesting/wide-structure limits, and
 1000-record JSON contexts — all green on both engines. Three
-independent safety nets guard behavior: 150 unit/parity tests, the
-internal Walk-vs-Vm parity corpus (207 expressions, results and error
-messages byte-equal), and the external Jexl differential harness
-(3,360+ expressions, byte-identical).
+independent safety nets guard behavior: 149 unit/parity tests (green
+on wasm-gc AND native), the internal Walk-vs-Vm parity corpus (207
+expressions, results and error messages byte-equal), and the external
+Jexl differential harness (3,360+ expressions, byte-identical).
 
 ## Development
 
