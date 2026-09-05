@@ -480,12 +480,9 @@ pub fn Evaluator::eval(
   self : Evaluator,
   ast : @ast.AstNode,
 ) -> @ast.Value raise EvalError {
-  if self.max_steps > 0 {
-    self.budget.steps = self.budget.steps + 1
-    if self.budget.steps > self.max_steps {
-      raise EvalError::EvalErr("memory budget exceeded")
-    }
-  }
+  // Step budget is charged at ALLOCATION points only (array/object
+  // literals, ranges, relative filters), mirroring expr's VM
+  // memGrow — constant and arithmetic work is free.
   if self.max_depth > 0 {
     self.depth = self.depth + 1
     if self.depth > self.max_depth {
@@ -506,6 +503,18 @@ pub fn Evaluator::eval(
     return result
   }
   self.dispatch(ast)
+}
+
+///|
+/// Charges `n` allocation units against the shared budget (expr's
+/// memGrow analogue).
+fn Evaluator::charge_alloc(self : Evaluator, n : Int) -> Unit raise EvalError {
+  if self.max_steps > 0 {
+    self.budget.steps = self.budget.steps + n
+    if self.budget.steps > self.max_steps {
+      raise EvalError::EvalErr("memory budget exceeded")
+    }
+  }
 }
 
 ///|
@@ -700,6 +709,7 @@ fn Evaluator::eval_array_literal(
   self : Evaluator,
   ast : @ast.AstNode,
 ) -> @ast.Value raise EvalError {
+  self.charge_alloc(1 + ast.array_value.length())
   @ast.ArrayVal(self.eval_array(ast.array_value))
 }
 
@@ -708,6 +718,7 @@ fn Evaluator::eval_object_literal(
   self : Evaluator,
   ast : @ast.AstNode,
 ) -> @ast.Value raise EvalError {
+  self.charge_alloc(1 + ast.obj_value.length())
   let pairs : Array[(String, @ast.Value)] = []
   for kv in ast.obj_value {
     let (k, v) = kv
@@ -727,8 +738,13 @@ fn Evaluator::eval_filter(
 ) -> @ast.Value raise EvalError {
   let subject = self.eval(ast.subject.unwrap())
   if ast.filter_relative {
+    // Relative filtering allocates a result array proportional to the
+    // subject — charge per element (expr memGrow semantics).
     let list : Array[@ast.Value] = match subject {
-      @ast.ArrayVal(xs) => xs
+      @ast.ArrayVal(xs) => {
+        self.charge_alloc(xs.length())
+        xs
+      }
       @ast.UndefVal => []
       other => [other]
     }

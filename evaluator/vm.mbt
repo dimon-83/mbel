@@ -5,16 +5,19 @@
 // 1. Single-source semantics: instructions only *schedule*; every
 //    semantic decision (arithmetic, coercion, regex, pool lookup,
 //    drill-down) goes through the same functions the tree-walk engine
-//    uses (apply_binary_op, call_pool_function, fetch_from, ...).
-//    The engines can therefore only diverge in dispatch order, never
-//    in what an operation computes.
-// 2. FilterExpression and lazy (manual-eval) operators are compiled
-//    to callback instructions that run the corresponding AST subtree
-//    on the tree-walk engine with a shared budget — correct first,
-//    instruction-encoded in a later revision.
-// 3. The step budget is charged per instruction, and callback paths
-//    charge the same shared BudgetCell, so budgets behave equivalently
-//    on both engines.
+//    uses. The engines can therefore only diverge in dispatch order,
+//    never in what an operation computes.
+// 2. Operators are PRE-RESOLVED at compile time: eager binary/unary
+//    ops become direct function references in the constant pool
+//    (CFn/CUFn) — the VM never searches by name. Grammar changes
+//    invalidate compiled programs via Expression recompilation.
+// 3. Instructions are parallel Int arrays (opcode + operand), the
+//    operand stack is pre-allocated at compile-time max depth and
+//    driven by an sp pointer, and relative filters compile to native
+//    loop frames (OP_FILTERBEGIN/END) or static index ops — no
+//    per-element Evaluator allocation on the hot path.
+// 4. The step budget is charged at ALLOCATION points only (array/
+//    object construction, filter size), mirroring expr's memGrow.
 
 ///|
 /// Compile-time constant pool entries.
@@ -23,67 +26,129 @@ pub(all) enum Const {
   CAst(@ast.AstNode)
   CKeys(Array[String])
   CFunc(String, String, Int) // name, pool, argc
+  CFn((@ast.Value, @ast.Value) -> @ast.Value raise EvalError)
+  CUFn((@ast.Value) -> @ast.Value raise EvalError)
 }
 
 ///|
-/// The instruction set (16 opcodes).
-pub(all) enum Instr {
-  OpConst(Int) // push consts[i]
-  OpLoadCtx(String) // push context[key]
-  OpLoadRel(String) // push rel_context[key]
-  OpFetch(String) // pop from-value, push from[name]
-  OpBinary(String) // pop r, l; push apply_binary_op(op, l, r)
-  OpMatches // pop pattern, s; push regex match
-  OpAndJump(Int) // peek; falsy -> jump (keep left); else pop, fall through
-  OpOrJump(Int) // peek; truthy -> jump (keep left); else pop, fall through
-  OpCoalesceJump(Int) // peek; non-nil -> jump (keep left); else pop
-  OpJump(Int)
-  OpJumpIfFalse(Int) // pop; falsy -> jump
-  OpUnary(String) // pop; push unary op eval
-  OpArray(Int) // pop n, build array
-  OpObject(Int) // consts[i] = keys; pop n values, build object
-  OpCallFunc(Int) // consts[i] = CFunc; pop argc args, push result
-  OpFilter(Int) // consts[i] = CAst; tree-walk callback, push result
-  OpLazyBinary(Int) // consts[i] = CAst(binary node); lazy-op callback
-}
+/// Opcodes (parallel-array encoding: opcode + Int operand).
+const OP_CONST = 0
 
 ///|
-/// A compiled program: instruction array + constant pool.
+const OP_LOADCTX = 1
+
+///|
+const OP_LOADREL = 2
+
+///|
+const OP_FETCH = 3
+
+///|
+const OP_CALLBINFN = 4
+
+///|
+const OP_CALLUNFN = 5
+
+///|
+const OP_MATCHES = 6
+
+///|
+const OP_ANDJUMP = 7
+
+///|
+const OP_ORJUMP = 8
+
+///|
+const OP_COALESCE = 9
+
+///|
+const OP_JUMP = 10
+
+///|
+const OP_JUMPIFFALSE = 11
+
+///|
+const OP_ARRAY = 12
+
+///|
+const OP_OBJECT = 13
+
+///|
+const OP_CALLFUNC = 14
+
+///|
+const OP_FILTERBEGIN = 15
+
+///|
+const OP_FILTEREND = 16
+
+///|
+const OP_FILTERSTATIC = 17
+
+///|
+const OP_LAZYBIN = 18
+
+///|
+/// A compiled program.
 pub struct Program {
-  instrs : Array[Instr]
+  opcodes : Array[Int]
+  operands : Array[Int]
   consts : Array[Const]
+  max_stack : Int
 }
 
 ///|
 priv struct Compiler {
-  instrs : Array[Instr]
+  opcodes : Array[Int]
+  operands : Array[Int]
   consts : Array[Const]
   grammar : Grammar
+  // stack-depth simulation for max_stack (filter frames tracked)
+  mut cur_depth : Int
+  mut max_depth_seen : Int
+  filter_depths : Array[Int]
 }
 
 ///|
 /// Compiles a (preferably constant-folded) AST into a Program.
-/// Compilation needs the grammar to detect lazy (manual-eval)
-/// operators at compile time, mirroring how expr's compiler consults
-/// evalOnDemand.
+/// Compilation needs the grammar to pre-resolve operators and detect
+/// lazy (manual-eval) operators, mirroring expr's compiler.
 pub fn compile_program(
   ast : @ast.AstNode,
   grammar : Grammar,
 ) -> Program raise EvalError {
-  let c = { instrs: [], consts: [], grammar }
+  let c = {
+    opcodes: [],
+    operands: [],
+    consts: [],
+    grammar,
+    cur_depth: 0,
+    max_depth_seen: 0,
+    filter_depths: [],
+  }
   c.compile_node(ast)
-  { instrs: c.instrs, consts: c.consts }
+  {
+    opcodes: c.opcodes,
+    operands: c.operands,
+    consts: c.consts,
+    max_stack: c.max_depth_seen + 2,
+  }
 }
 
 ///|
-fn Compiler::emit(self : Compiler, i : Instr) -> Int {
-  self.instrs.push(i)
-  self.instrs.length() - 1
+fn Compiler::emit(self : Compiler, op : Int, operand : Int) -> Int {
+  self.opcodes.push(op)
+  self.operands.push(operand)
+  self.opcodes.length() - 1
+}
+
+///|
+fn Compiler::patch(self : Compiler, addr : Int, operand : Int) -> Unit {
+  self.operands[addr] = operand
 }
 
 ///|
 fn Compiler::const_idx(self : Compiler, c : Const) -> Int {
-  // Deduplicate values (structural) — cheap pool for common literals.
   match c {
     CVal(v) =>
       for i in 0..<self.consts.length() {
@@ -99,6 +164,16 @@ fn Compiler::const_idx(self : Compiler, c : Const) -> Int {
 }
 
 ///|
+/// Tracks stack depth: `pops` then `pushes`, recording the peak.
+fn Compiler::track(self : Compiler, pops : Int, pushes : Int) -> Unit {
+  self.cur_depth -= pops
+  self.cur_depth += pushes
+  if self.cur_depth > self.max_depth_seen {
+    self.max_depth_seen = self.cur_depth
+  }
+}
+
+///|
 fn Compiler::compile_node(
   self : Compiler,
   node : @ast.AstNode,
@@ -106,20 +181,26 @@ fn Compiler::compile_node(
   match node.node_type {
     @ast.LiteralNode => {
       let idx = self.const_idx(CVal(node.value))
-      ignore(self.emit(OpConst(idx)))
+      ignore(self.emit(OP_CONST, idx))
+      self.track(0, 1)
     }
     @ast.IdentifierNode =>
       match node.from {
         Some(from) => {
           self.compile_node(from)
-          ignore(self.emit(OpFetch(node.ident_name)))
+          let idx = self.const_idx(CVal(@ast.StrVal(node.ident_name)))
+          ignore(self.emit(OP_FETCH, idx))
+          self.track(1, 1)
         }
-        None =>
+        None => {
+          let idx = self.const_idx(CVal(@ast.StrVal(node.ident_name)))
           if node.relative {
-            ignore(self.emit(OpLoadRel(node.ident_name)))
+            ignore(self.emit(OP_LOADREL, idx))
           } else {
-            ignore(self.emit(OpLoadCtx(node.ident_name)))
+            ignore(self.emit(OP_LOADCTX, idx))
           }
+          self.track(0, 1)
+        }
       }
     @ast.BinaryExpressionNode => self.compile_binary(node)
     @ast.UnaryExpressionNode => {
@@ -127,31 +208,52 @@ fn Compiler::compile_node(
         Some(r) => self.compile_node(r)
         None => ()
       }
-      ignore(self.emit(OpUnary(node.operator)))
+      match find_un(self.grammar.unary_ops, node.operator) {
+        Some(f) => {
+          ignore(self.emit(OP_CALLUNFN, self.const_idx(CUFn(f))))
+          self.track(1, 1)
+        }
+        None => {
+          // Unknown op: deferred to runtime name lookup via a lazy
+          // callback (never happens for well-formed programs).
+          let idx = self.const_idx(CAst(node))
+          ignore(self.emit(OP_LAZYBIN, idx))
+          self.track(0, 1)
+        }
+      }
     }
     @ast.ConditionalExpressionNode => {
       match node.cond_test {
         Some(t) => self.compile_node(t)
         None => ()
       }
-      let jf = self.emit(OpJumpIfFalse(0))
+      let jf = self.emit(OP_JUMPIFFALSE, 0)
+      self.track(1, 0)
       match node.consequent {
         Some(c) => self.compile_node(c)
-        None => ignore(self.emit(OpConst(self.const_idx(CVal(@ast.UndefVal)))))
+        None => {
+          ignore(self.emit(OP_CONST, self.const_idx(CVal(@ast.UndefVal))))
+          self.track(0, 1)
+        }
       }
-      let jend = self.emit(OpJump(0))
-      self.instrs[jf] = OpJumpIfFalse(self.instrs.length())
+      let jend = self.emit(OP_JUMP, 0)
+      self.patch(jf, self.opcodes.length())
       match node.alternate {
         Some(a) => self.compile_node(a)
-        None => ignore(self.emit(OpConst(self.const_idx(CVal(@ast.UndefVal)))))
+        None => {
+          ignore(self.emit(OP_CONST, self.const_idx(CVal(@ast.UndefVal))))
+          self.track(0, 1)
+        }
       }
-      self.instrs[jend] = OpJump(self.instrs.length())
+      self.patch(jend, self.opcodes.length())
     }
     @ast.ArrayLiteralNode => {
+      let n = node.array_value.length()
       for x in node.array_value {
         self.compile_node(x)
       }
-      ignore(self.emit(OpArray(node.array_value.length())))
+      ignore(self.emit(OP_ARRAY, n))
+      self.track(n, 1)
     }
     @ast.ObjectLiteralNode => {
       let keys : Array[String] = []
@@ -161,22 +263,18 @@ fn Compiler::compile_node(
         self.compile_node(v)
       }
       let idx = self.const_idx(CKeys(keys))
-      ignore(self.emit(OpObject(idx)))
+      ignore(self.emit(OP_OBJECT, idx))
+      self.track(keys.length(), 1)
     }
-    @ast.FilterExpressionNode => {
-      // Callback: the whole filter subtree runs on the tree-walk
-      // engine (shared budget); instruction-encoded loops come later.
-      let idx = self.const_idx(CAst(node))
-      ignore(self.emit(OpFilter(idx)))
-    }
+    @ast.FilterExpressionNode => self.compile_filter(node)
     @ast.FunctionCallNode => {
+      let argc = node.args.length()
       for a in node.args {
         self.compile_node(a)
       }
-      let idx = self.const_idx(
-        CFunc(node.func_name, node.pool, node.args.length()),
-      )
-      ignore(self.emit(OpCallFunc(idx)))
+      let idx = self.const_idx(CFunc(node.func_name, node.pool, argc))
+      ignore(self.emit(OP_CALLFUNC, idx))
+      self.track(argc, 1)
     }
   }
 }
@@ -187,14 +285,14 @@ fn Compiler::compile_binary(
   node : @ast.AstNode,
 ) -> Unit raise EvalError {
   let op = node.operator
-  // Lazy (manual-eval) operators need unevaluated operands: compile to
-  // a tree-walk callback over the whole binary node.
+  // Lazy (manual-eval) operators need unevaluated operands: callback.
   if find_lazy(self.grammar.on_demand_ops, op) is Some(_) &&
     op != "&&" &&
     op != "||" &&
     op != "??" {
     let idx = self.const_idx(CAst(node))
-    ignore(self.emit(OpLazyBinary(idx)))
+    ignore(self.emit(OP_LAZYBIN, idx))
+    self.track(0, 1)
     return
   }
   match node.left {
@@ -207,21 +305,109 @@ fn Compiler::compile_binary(
   }
   match op {
     "&&" => {
-      // pop right, keep left when left falsy; result = left ?: right
-      let j = self.emit(OpAndJump(0))
-      self.instrs[j] = OpAndJump(self.instrs.length())
+      let j = self.emit(OP_ANDJUMP, 0)
+      self.track(1, 0)
+      self.patch(j, self.opcodes.length())
     }
     "||" => {
-      let j = self.emit(OpOrJump(0))
-      self.instrs[j] = OpOrJump(self.instrs.length())
+      let j = self.emit(OP_ORJUMP, 0)
+      self.track(1, 0)
+      self.patch(j, self.opcodes.length())
     }
     "??" => {
-      let j = self.emit(OpCoalesceJump(0))
-      self.instrs[j] = OpCoalesceJump(self.instrs.length())
+      let j = self.emit(OP_COALESCE, 0)
+      self.track(1, 0)
+      self.patch(j, self.opcodes.length())
     }
-    "matches" => ignore(self.emit(OpMatches))
-    _ => ignore(self.emit(OpBinary(op)))
+    "matches" => {
+      ignore(self.emit(OP_MATCHES, 0))
+      self.track(2, 1)
+    }
+    _ =>
+      match find_bin(self.grammar.binary_ops, op) {
+        Some(f) => {
+          ignore(self.emit(OP_CALLBINFN, self.const_idx(CFn(f))))
+          self.track(2, 1)
+        }
+        None => {
+          let idx = self.const_idx(CAst(node))
+          ignore(self.emit(OP_LAZYBIN, idx))
+          self.track(0, 1)
+        }
+      }
   }
+}
+
+///|
+/// Compiles a FilterExpression:
+///   relative -> subject; FILTERBEGIN(pred_start); <predicate>;
+///   FILTEREND(pred_start)  — a native loop over the subject elements
+///   with the rel-context slot swapped per element (no per-element
+///   evaluator allocation).
+///   static  -> subject; <expr>; FILTERSTATIC.
+fn Compiler::compile_filter(
+  self : Compiler,
+  node : @ast.AstNode,
+) -> Unit raise EvalError {
+  match node.subject {
+    Some(sub) => self.compile_node(sub)
+    None => ()
+  }
+  if !node.filter_relative {
+    match node.filter_expr {
+      Some(e) => self.compile_node(e)
+      None => ignore(self.emit(OP_CONST, self.const_idx(CVal(@ast.UndefVal))))
+    }
+    ignore(self.emit(OP_FILTERSTATIC, 0))
+    self.track(2, 1)
+    return
+  }
+  let fb = self.emit(OP_FILTERBEGIN, 0)
+  self.track(1, 0)
+  // loop body runs with the predicate result pushed per iteration
+  self.filter_depths.push(self.cur_depth)
+  let pred_start = self.opcodes.length()
+  match node.filter_expr {
+    Some(e) => self.compile_node(e)
+    None => {
+      ignore(self.emit(OP_CONST, self.const_idx(CVal(@ast.UndefVal))))
+      self.track(0, 1)
+    }
+  }
+  ignore(self.emit(OP_FILTEREND, pred_start))
+  self.cur_depth = self.filter_depths.pop().unwrap_or(0) + 1
+  if self.cur_depth > self.max_depth_seen {
+    self.max_depth_seen = self.cur_depth
+  }
+  self.patch(fb, self.opcodes.length())
+}
+
+///|
+/// Loop frame for relative filters.
+priv struct LoopFrame {
+  list : Array[@ast.Value]
+  mut idx : Int
+  results : Array[@ast.Value]
+  saved_rel : @ast.Value
+  return_pc : Int
+  pred_start : Int
+}
+
+///|
+priv struct VmState {
+  opcodes : Array[Int]
+  operands : Array[Int]
+  consts : Array[Const]
+  mut pc : Int
+  stack : Array[@ast.Value]
+  mut sp : Int
+  frames : Array[LoopFrame]
+  grammar : Grammar
+  context : @ast.Value
+  mut rel_context : @ast.Value
+  budget : BudgetCell
+  max_steps : Int
+  max_depth : Int
 }
 
 ///|
@@ -236,10 +422,13 @@ pub fn run_program(
   max_steps : Int,
 ) -> @ast.Value raise EvalError {
   let vm = {
-    instrs: program.instrs,
+    opcodes: program.opcodes,
+    operands: program.operands,
     consts: program.consts,
     pc: 0,
-    stack: [],
+    stack: Array::make(program.max_stack, @ast.UndefVal),
+    sp: 0,
+    frames: [],
     grammar,
     context,
     rel_context: context,
@@ -251,47 +440,44 @@ pub fn run_program(
 }
 
 ///|
-priv struct VmState {
-  instrs : Array[Instr]
-  consts : Array[Const]
-  mut pc : Int
-  stack : Array[@ast.Value]
-  grammar : Grammar
-  context : @ast.Value
-  rel_context : @ast.Value
-  budget : BudgetCell
-  max_steps : Int
-  max_depth : Int
+fn VmState::charge(self : VmState, n : Int) -> Unit raise EvalError {
+  if self.max_steps > 0 {
+    self.budget.steps = self.budget.steps + n
+    if self.budget.steps > self.max_steps {
+      raise EvalError::EvalErr("memory budget exceeded")
+    }
+  }
 }
 
 ///|
-fn VmState::charge(self : VmState) -> Unit raise EvalError {
-  self.budget.steps = self.budget.steps + 1
-  if self.budget.steps > self.max_steps {
-    raise EvalError::EvalErr("memory budget exceeded")
-  }
+fn VmState::push(self : VmState, v : @ast.Value) -> Unit {
+  self.stack[self.sp] = v
+  self.sp += 1
 }
 
 ///|
 fn VmState::pop(self : VmState) -> @ast.Value raise EvalError {
-  match self.stack.pop() {
-    Some(v) => v
-    None => raise EvalError::EvalErr("VM stack underflow")
+  if self.sp <= 0 {
+    raise EvalError::EvalErr("VM stack underflow")
   }
+  self.sp -= 1
+  self.stack[self.sp]
 }
 
 ///|
 fn VmState::popn(self : VmState, n : Int) -> Array[@ast.Value] raise EvalError {
   let out : Array[@ast.Value] = []
-  for _ in 0..<n {
+  let mut i = 0
+  while i < n {
     out.push(self.pop())
+    i += 1
   }
   out.rev()
 }
 
 ///|
 /// Callback: run an AST subtree on the tree-walk engine with this
-/// VM's shared budget and contexts.
+/// VM's shared budget and contexts (manual-eval operators only).
 fn VmState::walk_eval(
   self : VmState,
   ast : @ast.AstNode,
@@ -310,146 +496,206 @@ fn VmState::walk_eval(
 
 ///|
 fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
-  let n = self.instrs.length()
+  let n = self.opcodes.length()
   while self.pc < n {
-    self.charge()
-    match self.instrs[self.pc] {
-      OpConst(i) => {
-        match self.consts[i] {
-          CVal(v) => self.stack.push(v)
+    let op = self.opcodes[self.pc]
+    let operand = self.operands[self.pc]
+    match op {
+      OP_CONST => {
+        match self.consts[operand] {
+          CVal(v) => self.push(v)
           _ => raise EvalError::EvalErr("VM: bad constant")
         }
         self.pc += 1
       }
-      OpLoadCtx(key) => {
-        self.stack.push(key_of_value(self.context, key))
+      OP_LOADCTX => {
+        match self.consts[operand] {
+          CVal(@ast.StrVal(key)) => self.push(key_of_value(self.context, key))
+          _ => raise EvalError::EvalErr("VM: bad name constant")
+        }
         self.pc += 1
       }
-      OpLoadRel(key) => {
-        self.stack.push(key_of_value(self.rel_context, key))
+      OP_LOADREL => {
+        match self.consts[operand] {
+          CVal(@ast.StrVal(key)) =>
+            self.push(key_of_value(self.rel_context, key))
+          _ => raise EvalError::EvalErr("VM: bad name constant")
+        }
         self.pc += 1
       }
-      OpFetch(name) => {
+      OP_FETCH => {
         let from = self.pop()
-        self.stack.push(fetch_from(from, name))
+        match self.consts[operand] {
+          CVal(@ast.StrVal(name)) => self.push(fetch_from(from, name))
+          _ => raise EvalError::EvalErr("VM: bad name constant")
+        }
         self.pc += 1
       }
-      OpBinary(op) => {
+      OP_CALLBINFN => {
         let r = self.pop()
         let l = self.pop()
-        self.stack.push(apply_binary_op(self.grammar, op, l, r))
+        match self.consts[operand] {
+          CFn(f) => self.push(f(l, r))
+          _ => raise EvalError::EvalErr("VM: bad binary fn constant")
+        }
         self.pc += 1
       }
-      OpMatches => {
+      OP_CALLUNFN => {
+        let v = self.pop()
+        match self.consts[operand] {
+          CUFn(f) => self.push(f(v))
+          _ => raise EvalError::EvalErr("VM: bad unary fn constant")
+        }
+        self.pc += 1
+      }
+      OP_MATCHES => {
         let pattern = self.pop()
         let s = self.pop()
         let p = match pattern {
           @ast.StrVal(p) => p
           _ => raise EvalError::EvalErr("matches: pattern must be a string")
         }
-        self.stack.push(
+        self.push(
           @ast.BoolVal(grammar_regex_match(self.grammar, to_string(s), p)),
         )
         self.pc += 1
       }
-      OpAndJump(addr) => {
-        let v = self.stack[self.stack.length() - 1]
+      OP_ANDJUMP => {
+        let v = self.stack[self.sp - 1]
         if truthy(v) {
-          ignore(self.pop())
+          self.sp -= 1
           self.pc += 1
         } else {
-          self.pc = addr
+          self.pc = operand
         }
       }
-      OpOrJump(addr) => {
-        let v = self.stack[self.stack.length() - 1]
+      OP_ORJUMP => {
+        let v = self.stack[self.sp - 1]
         if truthy(v) {
-          self.pc = addr
+          self.pc = operand
         } else {
-          ignore(self.pop())
+          self.sp -= 1
           self.pc += 1
         }
       }
-      OpCoalesceJump(addr) => {
-        let v = self.stack[self.stack.length() - 1]
+      OP_COALESCE => {
+        let v = self.stack[self.sp - 1]
         match v {
           @ast.NullVal | @ast.UndefVal => {
-            ignore(self.pop())
+            self.sp -= 1
             self.pc += 1
           }
-          _ => self.pc = addr
+          _ => self.pc = operand
         }
       }
-      OpJump(addr) => self.pc = addr
-      OpJumpIfFalse(addr) => {
+      OP_JUMP => self.pc = operand
+      OP_JUMPIFFALSE => {
         let v = self.pop()
         if truthy(v) {
           self.pc += 1
         } else {
-          self.pc = addr
+          self.pc = operand
         }
       }
-      OpUnary(op) => {
-        let v = self.pop()
-        match find_un(self.grammar.unary_ops, op) {
-          Some(f) => {
-            self.stack.push(f(v))
-            self.pc += 1
-          }
-          None =>
-            raise EvalError::EvalErr("Unary operator " + op + " is not defined")
-        }
-      }
-      OpArray(cnt) => {
-        let items = self.popn(cnt)
-        self.stack.push(@ast.ArrayVal(items))
+      OP_ARRAY => {
+        let items = self.popn(operand)
+        self.charge(1 + operand)
+        self.push(@ast.ArrayVal(items))
         self.pc += 1
       }
-      OpObject(idx) =>
-        match self.consts[idx] {
+      OP_OBJECT =>
+        match self.consts[operand] {
           CKeys(keys) => {
             let vals = self.popn(keys.length())
+            self.charge(1 + keys.length())
             let pairs : Array[(String, @ast.Value)] = []
             for i in 0..<keys.length() {
               pairs.push((keys[i], vals[i]))
             }
-            self.stack.push(@ast.ObjectVal(pairs))
+            self.push(@ast.ObjectVal(pairs))
             self.pc += 1
           }
           _ => raise EvalError::EvalErr("VM: bad keys constant")
         }
-      OpCallFunc(idx) =>
-        match self.consts[idx] {
+      OP_CALLFUNC =>
+        match self.consts[operand] {
           CFunc(name, pool, argc) => {
             let args = self.popn(argc)
-            self.stack.push(call_pool_function(self.grammar, pool, name, args))
+            self.push(call_pool_function(self.grammar, pool, name, args))
             self.pc += 1
           }
           _ => raise EvalError::EvalErr("VM: bad function constant")
         }
-      OpFilter(idx) =>
-        match self.consts[idx] {
+      OP_FILTERBEGIN => {
+        let subject = self.pop()
+        let list : Array[@ast.Value] = match subject {
+          @ast.ArrayVal(xs) => xs
+          @ast.UndefVal => []
+          other => [other]
+        }
+        // Allocation grows with the subject size (expr memGrow).
+        self.charge(list.length())
+        if list.length() == 0 {
+          self.push(@ast.ArrayVal([]))
+          self.pc = operand
+        } else {
+          self.frames.push({
+            list,
+            idx: 0,
+            results: [],
+            saved_rel: self.rel_context,
+            return_pc: self.pc + 1,
+            pred_start: 0,
+          })
+          self.rel_context = list[0]
+          self.pc = operand
+        }
+      }
+      OP_FILTEREND => {
+        let pred = self.pop()
+        match self.frames[self.frames.length() - 1] {
+          frame => {
+            if truthy(pred) {
+              frame.results.push(frame.list[frame.idx])
+            }
+            frame.idx += 1
+            if frame.idx < frame.list.length() {
+              self.rel_context = frame.list[frame.idx]
+              self.pc = operand
+            } else {
+              self.push(@ast.ArrayVal(frame.results.copy()))
+              self.rel_context = frame.saved_rel
+              self.pc = frame.return_pc
+              ignore(self.frames.pop())
+            }
+          }
+        }
+      }
+      OP_FILTERSTATIC => {
+        let res = self.pop()
+        let subject = self.pop()
+        match res {
+          @ast.BoolVal(b) => self.push(if b { subject } else { @ast.UndefVal })
+          _ => self.push(index_value(subject, res))
+        }
+        self.pc += 1
+      }
+      OP_LAZYBIN =>
+        match self.consts[operand] {
           CAst(node) => {
-            self.stack.push(self.walk_eval(node))
+            self.push(self.walk_eval(node))
             self.pc += 1
           }
           _ => raise EvalError::EvalErr("VM: bad ast constant")
         }
-      OpLazyBinary(idx) =>
-        match self.consts[idx] {
-          CAst(node) => {
-            // Run the lazy operator on the tree-walk engine: its
-            // evalOnDemand dispatch provides lazy operands backed by
-            // shared-budget subtree evaluation.
-            self.stack.push(self.walk_eval(node))
-            self.pc += 1
-          }
-          _ => raise EvalError::EvalErr("VM: bad ast constant")
-        }
+      _ => raise EvalError::EvalErr("VM: unknown opcode")
     }
   }
-  match self.stack.pop() {
-    Some(v) => v
-    None => @ast.UndefVal
+  match self.sp > 0 {
+    true => {
+      self.sp -= 1
+      self.stack[self.sp]
+    }
+    false => @ast.UndefVal
   }
 }

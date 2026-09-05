@@ -273,3 +273,37 @@ test "bench vm 50-term chain (un-foldable)" (it : @bench.T) {
     it.keep(r)
   })
 }
+
+///|
+test "bench walk filter long predicate (100 items)" (it : @bench.T) {
+  let inst = bench_inst(false)
+  let expr_obj = @jexl.Jexl::compile(
+    inst, "items[.qty > 2 && .price < 7 && .name != \"zz\" && .qty * 2 != 3]",
+  ) catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}
+
+///|
+test "bench vm filter long predicate (100 items)" (it : @bench.T) {
+  let inst = bench_inst(true)
+  let expr_obj = @jexl.Jexl::compile(
+    inst, "items[.qty > 2 && .price < 7 && .name != \"zz\" && .qty * 2 != 3]",
+  ) catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}

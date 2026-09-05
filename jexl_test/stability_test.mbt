@@ -121,9 +121,7 @@ fn stability_suite(vm : Bool) -> Unit raise {
   }
   @jexl.Jexl::set_limits(inst, 0, 0, 5)
   try {
-    ignore(
-      @jexl.Jexl::eval(inst, "q+q+q+q+q+q+q+q+q+q", v_obj([("q", v_num(1.0))])),
-    )
+    ignore(@jexl.Jexl::eval(inst, "[1]+[1]+[1]+[1]+[1]+[1]", v_obj([])))
     abort("expected budget error")
   } catch {
     @jexl.JexlErr(_) => ()

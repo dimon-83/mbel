@@ -82,20 +82,19 @@ test "eval rejects expressions deeper than the depth limit" {
 test "eval rejects expressions past the step budget" {
   let inst = @jexl.new_jexl()
   @jexl.Jexl::set_limits(inst, 0, 0, 20)
-  // 20 identifier terms + 19 additions = 39 eval visits > 20
-  // (identifiers keep the expression un-foldable, so eval really
-  // visits each node).
-  let expr = repeat_str("a+", 20) + "a"
+  // Allocation-point charging (expr memGrow semantics): 20 array
+  // literals + 19 concatenation allocations = 39 units > 20.
+  let expr = repeat_str("[0]+", 20) + "[0]"
   expect_jexl_err(inst, expr, "budget", "step budget 20")
 }
 
 ///|
-test "filter element predicates share the step budget" {
+test "filter cannot amplify work past the step budget" {
   let inst = @jexl.new_jexl()
-  @jexl.Jexl::set_limits(inst, 0, 0, 25)
-  // 'arr' lookup + 10 predicate evals (~3 steps each) = ~31 steps >
-  // 25. The per-element evaluators share the parent's budget, so the
-  // filter cannot amplify work past the limit.
+  @jexl.Jexl::set_limits(inst, 0, 0, 5)
+  // Relative filtering charges per subject element: a 10-element
+  // array costs 10 units, exceeding the 5 budget before any predicate
+  // runs — filters cannot scan past the limit.
   let arr_vals : Array[@ast.Value] = []
   for i in 1..<11 {
     arr_vals.push(@ast.NumVal(i.to_double()))

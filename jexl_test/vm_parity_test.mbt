@@ -226,7 +226,7 @@ test "vm parity: budgets behave equivalently" {
   for inst in [walk, vm] {
     @jexl.Jexl::set_limits(inst, 0, 0, 20)
   }
-  let expr = "a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a+a"
+  let expr = "[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]"
   let rw = Ok(
     @jexl.Jexl::eval(walk, expr, @ast.ObjectVal([("a", @ast.NumVal(1.0))])),
   ) catch {

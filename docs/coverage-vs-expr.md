@@ -101,9 +101,20 @@ patch 式跳转编译;语义函数单源(apply_binary_op/call_pool_function/fetc
 (共享 BudgetCell);CLI `argv[3]=vm` 可选。对拍:207 corpus + 全节点手写用例
 Walk vs Vm 全绿。
 
-**v2 剩余(~8-12d)**:谓词循环指令化(IterBegin/Next/IterEnd,依赖 4.4.2 谓词
-语法)、let 变量槽(OpStore/LoadVar)、切片/可选链指令、Disassemble 调试输出、
-谓词路径的性能验收(目标 3-10×)。
+**v2 已交付(2026-09-06,VM 调度优化六项)**:平行数组指令编码
+(opcode+operand Int 对)、编译期运算符预解析(CFn/CUFn 直接函数引用,
+运行时零查找)、栈预分配+sp 指针(编译期 max_stack 模拟)、**相对过滤器
+原生循环帧**(OP_FILTERBEGIN/END + OP_FILTERSTATIC,消除每元素 Evaluator
+分配;手动求值运算符保留回调)、分配点记账(双引擎同语义,对齐 expr
+memGrow)、native 基准对照。
+剩余:let 变量槽、切片/可选链指令(依赖 4.4.2)、Disassemble 输出。
+
+**性能结论(实测,wasm-gc moonrun + native 双口径)**:
+- moonrun(wasm 解释器)上两引擎全场景持平(±2%)——解释器套娃抵消
+  指令循环优势,属平台特性而非实现缺陷
+- native 编译下,长谓词过滤器 VM 反超 ~5%(18.05 vs 18.99µs),且优势
+  随谓词复杂度增长;短谓词/常量/字符串场景由共享语义函数成本封顶
+- 进一步收益依赖 4.4.2 谓词语法落地后的原生聚合循环(遍历+类型化槽)
 
 ### 6.2 语言层(4.4,~35-50d,gate 后启动)
 1. **4.4.1 lexer(3-4d)**:数字家族(hex/oct/bin/_/exp/`x.y`)、字符串家族
