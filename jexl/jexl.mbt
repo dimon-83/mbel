@@ -22,6 +22,16 @@ pub(all) suberror JexlError {
 pub type Fn = (Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError
 
 ///|
+/// Execution engine selection. Walk is the reference tree-walk
+/// interpreter; Vm compiles the (folded) AST to bytecode and runs the
+/// stack machine. Both engines share one semantic layer
+/// (evaluator/semantics), so they can only differ in dispatch.
+pub(all) enum EngineMode {
+  Walk
+  Vm
+}
+
+///|
 /// The Jexl instance: an expression language engine with an isolated
 /// grammar. Ported from Jexl's `Jexl` class.
 pub struct Jexl {
@@ -34,6 +44,7 @@ pub struct Jexl {
   mut max_nodes : Int
   mut max_depth : Int
   mut max_steps : Int
+  mut engine : EngineMode
 }
 
 ///|
@@ -51,6 +62,7 @@ pub fn new_jexl() -> Jexl {
     max_nodes: @parser.default_max_nodes(),
     max_depth: @evaluator.default_max_depth(),
     max_steps: @evaluator.default_max_steps(),
+    engine: Walk,
   }
 }
 
@@ -68,6 +80,16 @@ pub fn Jexl::set_limits(
   self.max_nodes = max_nodes
   self.max_depth = max_depth
   self.max_steps = max_steps
+}
+
+///|
+/// Selects the execution engine. The Vm mode compiles the AST to
+/// bytecode once per Expression and reuses the program; the default
+/// Walk mode is the reference tree-walk interpreter. Both engines
+/// share one semantic layer, and vm_parity tests assert their
+/// equality across the whole corpus.
+pub fn Jexl::set_engine(self : Jexl, mode : EngineMode) -> Unit {
+  self.engine = mode
 }
 
 ///|
@@ -258,7 +280,7 @@ pub fn Jexl::remove_op(self : Jexl, operator : String) -> Unit {
 /// Constructs an Expression object without compiling it.
 /// Mirrors `createExpression`.
 pub fn Jexl::create_expression(self : Jexl, expr_str : String) -> Expression {
-  Expression::{ jexl: self, expr_str, compiled: None }
+  Expression::{ jexl: self, expr_str, compiled: None, program: None }
 }
 
 ///|

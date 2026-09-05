@@ -553,15 +553,22 @@ fn Evaluator::eval_identifier(
     return key_of_value(ctx, ast.ident_name)
   }
   let from = self.eval(ast.from.unwrap())
+  fetch_from(from, ast.ident_name)
+}
+
+///|
+/// Shared drill-down semantics (arrays unwrap to element 0) for both
+/// engines.
+fn fetch_from(from : @ast.Value, name : String) -> @ast.Value {
   match from {
     @ast.UndefVal | @ast.NullVal => @ast.UndefVal
     @ast.ArrayVal(xs) =>
       if xs.length() == 0 {
         @ast.UndefVal
       } else {
-        key_of_value(xs[0], ast.ident_name)
+        key_of_value(xs[0], name)
       }
-    _ => key_of_value(from, ast.ident_name)
+    _ => key_of_value(from, name)
   }
 }
 
@@ -621,12 +628,33 @@ fn Evaluator::eval_binary(
           grammar_regex_match(self.grammar, to_string(l), pattern),
         )
       }
-      match find_bin(self.grammar.binary_ops, op) {
-        Some(f) => f(l, r)
-        None =>
-          raise EvalError::EvalErr("Binary operator " + op + " is not defined")
-      }
+      apply_binary_op(self.grammar, op, l, r)
     }
+  }
+}
+
+///|
+/// Shared eager binary dispatch — the single source of semantics for
+/// both the tree-walk engine and the VM (which emit OpBinary for the
+/// same operators). Matches is handled here too since it needs the
+/// grammar's regex cache.
+fn apply_binary_op(
+  g : Grammar,
+  op : String,
+  l : @ast.Value,
+  r : @ast.Value,
+) -> @ast.Value raise EvalError {
+  if op == "matches" {
+    let pattern = match r {
+      @ast.StrVal(p) => p
+      _ => raise EvalError::EvalErr("matches: pattern must be a string")
+    }
+    return @ast.BoolVal(grammar_regex_match(g, to_string(l), pattern))
+  }
+  match find_bin(g.binary_ops, op) {
+    Some(f) => f(l, r)
+    None =>
+      raise EvalError::EvalErr("Binary operator " + op + " is not defined")
   }
 }
 
@@ -738,24 +766,28 @@ fn Evaluator::eval_function_call(
   self : Evaluator,
   ast : @ast.AstNode,
 ) -> @ast.Value raise EvalError {
-  let pool_name = match ast.pool {
+  let args = self.eval_array(ast.args)
+  call_pool_function(self.grammar, ast.pool, ast.func_name, args)
+}
+
+///|
+/// Shared function/transform pool dispatch for both engines.
+fn call_pool_function(
+  g : Grammar,
+  pool : String,
+  name : String,
+  args : Array[@ast.Value],
+) -> @ast.Value raise EvalError {
+  let pool_name = match pool {
     "functions" => "Jexl Function"
     "transforms" => "Transform"
-    _ =>
-      raise EvalError::EvalErr("Corrupt AST: Pool '" + ast.pool + "' not found")
+    _ => raise EvalError::EvalErr("Corrupt AST: Pool '" + pool + "' not found")
   }
-  let pool = if ast.pool == "functions" {
-    self.grammar.functions
-  } else {
-    self.grammar.transforms
-  }
-  let f = match find_fn(pool, ast.func_name) {
+  let pool_fns = if pool == "functions" { g.functions } else { g.transforms }
+  let f = match find_fn(pool_fns, name) {
     Some(f) => f
     None =>
-      raise EvalError::EvalErr(
-        pool_name + " " + ast.func_name + " is not defined.",
-      )
+      raise EvalError::EvalErr(pool_name + " " + name + " is not defined.")
   }
-  let args = self.eval_array(ast.args)
   f(args)
 }

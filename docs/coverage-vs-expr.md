@@ -85,25 +85,25 @@ Jexl API 26 / 预算 7 / builtin+运算符 16 / bench 8 / 稳定性 7)+ 与
 | env 白名单 / Strict | ❌ | 4.4.4(Jexl 缺失键→undefined) |
 | 常量折叠 | ✅ | builtin_test fold 套件 |
 | 12-pass optimizer 其余 | ❌ | 4.3 剩余(需 VM 落点) |
-| 字节码 VM | ❌ | 见 §6 方案 |
+| 字节码 VM | ✅ v1(混合) | 16 opcode + 编译器 + 栈机(evaluator/vm.mbt);FilterExpression 与手动求值运算符回调 tree-walk(共享预算);`Jexl::set_engine(Walk \| Vm)` 开关,默认 Walk;207 条 corpus + 手写用例 Walk vs Vm 对拍全绿(值+错误消息严格相等,NaN-aware);bench:常量路径 13ns 持平,filter 回调路径持平(谓词循环指令化是 v2) |
 | 编译错误 行:列\|…^ | ❌ | 4.4.1 位置信息 |
 | 差分验证 harness | ✅ | tools/(expr 侧待 go 差分) |
 | 并发模型 | ✅ 文档化 | wasm 单线程原子 eval;实例隔离测试 7 项 |
 
 ## 6. 剩余功能实现方案(阶段 4.3 剩余 + 4.4/4.5)
 
-### 6.1 字节码 VM + compiler(4.3 剩余,~10-14d)
-- 新包 `compiler/`(AST→指令)与 `vm/`(栈机):指令集先取 expr 的核心 30-40 个
-  opcode 子集:Const/True/False/Nil/Pop/Dup、Load/StoreVar(let)、LoadFast(上下文
-  字段索引)、GetIndex/GetSlice、Add..Mod/FloorDiv/Pow、Eq..Le、In、Matches(常量池
-  正则)、Range、Jump/JumpIfFalse/JumpIfTrue(短路 + 三元 + ??)、Call0..N/
-  CallBuiltin1、LoadEnv、Arr/Map 构建、IterBegin/Next/IterEnd(谓词循环,4.4.2 后)。
-- 常量池去重、变量槽、函数池索引;`Program{bytecode, constants, source}` +
-  Disassemble()(对齐 expr 的可反汇编产物)。
-- eval_binary 的短路/手动求值 op 以 Jump 指令化;BudgetCell 转为 VM 步数记账
-  (memGrow 对应 Arr/Map/Range/Sort)。
-- 验收:全部 136 测试语义等价(新增 vm_test 对拍 tree-walk)+ 自基准(fold 后
-  常量路径应到 ns;整体预期 3-10× 于 tree-walk)。
+### 6.1 字节码 VM(4.3)——v1 已交付,剩余 v2
+**已交付(2026-09-05)**:双引擎架构。`evaluator/vm.mbt`:16 opcode
+(OpConst/LoadCtx/LoadRel/Fetch/Binary/Matches/AndJump/OrJump/CoalesceJump/
+Jump/JumpIfFalse/Unary/Array/Object/CallFunc/Filter+LazyBinary)、常量池去重、
+patch 式跳转编译;语义函数单源(apply_binary_op/call_pool_function/fetch_from
+由两引擎共享,指令只做调度);FilterExpression 与手动求值运算符回调 tree-walk
+(共享 BudgetCell);CLI `argv[3]=vm` 可选。对拍:207 corpus + 全节点手写用例
+Walk vs Vm 全绿。
+
+**v2 剩余(~8-12d)**:谓词循环指令化(IterBegin/Next/IterEnd,依赖 4.4.2 谓词
+语法)、let 变量槽(OpStore/LoadVar)、切片/可选链指令、Disassemble 调试输出、
+谓词路径的性能验收(目标 3-10×)。
 
 ### 6.2 语言层(4.4,~35-50d,gate 后启动)
 1. **4.4.1 lexer(3-4d)**:数字家族(hex/oct/bin/_/exp/`x.y`)、字符串家族

@@ -151,3 +151,53 @@ test "bench tokenize only (lexer throughput)" (it : @bench.T) {
     it.keep(r)
   })
 }
+
+///|
+test "bench vm eval arithmetic precompiled" (it : @bench.T) {
+  let inst = @jexl.new_jexl()
+  @jexl.Jexl::set_engine(inst, Vm)
+  let expr_obj = @jexl.Jexl::compile(inst, "2 + 3 * 4 == 5/6 - 7") catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}
+
+///|
+test "bench vm eval identifier chain + filter over 100 items" (it : @bench.T) {
+  let inst = @jexl.new_jexl()
+  @jexl.Jexl::set_engine(inst, Vm)
+  let expr_obj = @jexl.Jexl::compile(inst, "items[.qty > 2].price") catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}
+
+///|
+test "bench vm eval nested ternary + logic" (it : @bench.T) {
+  let inst = @jexl.new_jexl()
+  @jexl.Jexl::set_engine(inst, Vm)
+  let expr_obj = @jexl.Jexl::compile(
+    inst, "age > 18 && name.first ?? 'none' ? 'adult' : 'minor'",
+  ) catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}

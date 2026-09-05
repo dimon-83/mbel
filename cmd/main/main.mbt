@@ -18,12 +18,17 @@ fn main {
   let corpus = args[1]
   // Optional JSON context (argv[2]); expressions without a context
   // arg keep evaluating against an empty object.
-  let context = if args.length() > 2 {
+  let context = if args.length() > 2 && args[2] != "" {
     parse_context(args[2])
   } else {
     @ast.ObjectVal([])
   }
   let inst = @jexl.new_jexl()
+  // argv[3] == "vm" selects the bytecode engine (argv[2] stays the
+  // optional JSON context).
+  if args.length() > 3 && args[3] == "vm" {
+    @jexl.Jexl::set_engine(inst, Vm)
+  }
   register_demo_transforms(inst)
   for line in corpus.split("\n") {
     if line == "" {

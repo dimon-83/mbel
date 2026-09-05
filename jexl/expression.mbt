@@ -14,6 +14,7 @@ pub struct Expression {
   jexl : Jexl
   expr_str : String
   mut compiled : @ast.AstNode?
+  mut program : @evaluator.Program?
 }
 
 ///|
@@ -38,6 +39,9 @@ pub fn Expression::compile(self : Expression) -> Unit raise JexlError {
     Some(node) => Some(@evaluator.constant_fold(node))
     None => None
   }
+  // Grammar may have changed: drop any cached bytecode so the next
+  // Vm-mode evaluation recompiles against the new element registry.
+  self.program = None
 }
 
 ///|
