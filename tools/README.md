@@ -55,7 +55,7 @@ literal with context refs). Both runners parse the per-line context;
 29/29 identical to real Jexl.
 
 Known intentional divergence (not in the diff corpora, see
-`tools/divergence.txt` and docs/parity-contract.md §4): Jexl throws a
+`tools/divergence.txt` and docs/parity-contract.md §4): Engine throws a
 TypeError for `arr[.f == x].prop` when the filtered array is empty
 (its README example `assoc[.first == "Lana"].last` without a context
 crashes there); mbel returns undefined.

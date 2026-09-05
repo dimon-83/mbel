@@ -219,10 +219,21 @@ pub fn precedence(op : String) -> Int {
 /// predicate (0-based arg index 1).
 pub fn is_aggregate(name : String) -> Bool {
   match name {
-    "all" | "none" | "any" | "one" | "filter" | "map" | "count" | "sum" |
-    "find" | "findIndex" | "findLast" | "findLastIndex" | "groupBy" |
-    "sortBy" | "reduce" =>
-      true
+    "all"
+    | "none"
+    | "any"
+    | "one"
+    | "filter"
+    | "map"
+    | "count"
+    | "sum"
+    | "find"
+    | "findIndex"
+    | "findLast"
+    | "findLastIndex"
+    | "groupBy"
+    | "sortBy"
+    | "reduce" => true
     _ => false
   }
 }

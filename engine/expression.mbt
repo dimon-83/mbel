@@ -11,7 +11,7 @@
 /// A lazily compiled expression string bound to a Jexl instance.
 /// Mirrors Jexl's `Expression` class.
 pub struct Expression {
-  jexl : Jexl
+  engine : Engine
   expr_str : String
   mut compiled : @ast.AstNode?
   mut program : @evaluator.Program?
@@ -21,17 +21,17 @@ pub struct Expression {
 /// Forces compilation of the expression string. Can be called
 /// multiple times — useful when the owning instance's grammar
 /// changes. Mirrors `Expression.compile`.
-pub fn Expression::compile(self : Expression) -> Unit raise JexlError {
-  let toks = match @lexer.tokenize_with(self.expr_str, self.jexl.elements) {
+pub fn Expression::compile(self : Expression) -> Unit raise EngineError {
+  let toks = match @lexer.tokenize_with(self.expr_str, self.engine.elements) {
     Ok(t) => t
-    Err(msg) => raise JexlError::JexlErr(msg)
+    Err(msg) => raise EngineError::EngineErr(msg)
   }
   let ast = @parser.parse_with_limits(
     toks,
-    self.jexl.elements,
-    self.jexl.max_nodes,
+    self.engine.elements,
+    self.engine.max_nodes,
   ) catch {
-    @parser.ParseErr(msg) => raise JexlError::JexlErr(msg)
+    @parser.ParseErr(msg) => raise EngineError::EngineErr(msg)
   }
   // Constant-folding pass (expr-style fold): pure literal subtrees
   // are computed at compile time.
@@ -51,22 +51,22 @@ pub fn Expression::compile(self : Expression) -> Unit raise JexlError {
 pub fn Expression::eval(
   self : Expression,
   ctx : @ast.Value,
-) -> @ast.Value raise JexlError {
+) -> @ast.Value raise EngineError {
   if self.compiled is None {
     self.compile()
   }
   let node = match self.compiled {
     Some(n) => n
-    None => raise JexlError::JexlErr("Cannot evaluate an empty expression")
+    None => raise EngineError::EngineErr("Cannot evaluate an empty expression")
   }
   let evaluator = @evaluator.new_evaluator_limited(
-    self.jexl.grammar,
+    self.engine.grammar,
     ctx,
-    self.jexl.max_depth,
-    self.jexl.max_steps,
+    self.engine.max_depth,
+    self.engine.max_steps,
   )
   let result = evaluator.eval(node) catch {
-    @evaluator.EvalErr(msg) => raise JexlError::JexlErr(msg)
+    @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
   }
   result
 }
@@ -75,6 +75,6 @@ pub fn Expression::eval(
 /// Evaluates with an empty context.
 pub fn Expression::eval_default(
   self : Expression,
-) -> @ast.Value raise JexlError {
+) -> @ast.Value raise EngineError {
   self.eval(@ast.ObjectVal([]))
 }

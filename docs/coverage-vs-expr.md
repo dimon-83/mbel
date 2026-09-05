@@ -85,7 +85,7 @@ Jexl API 26 / 预算 7 / builtin+运算符 16 / bench 8 / 稳定性 7)+ 与
 | env 白名单 / Strict | ❌ | 4.4.4(Jexl 缺失键→undefined) |
 | 常量折叠 | ✅ | builtin_test fold 套件 |
 | 12-pass optimizer 其余 | ❌ | 4.3 剩余(需 VM 落点) |
-| 字节码 VM | ✅ v1(混合) | 16 opcode + 编译器 + 栈机(evaluator/vm.mbt);FilterExpression 与手动求值运算符回调 tree-walk(共享预算);`Jexl::set_engine(Walk \| Vm)` 开关,默认 Walk;207 条 corpus + 手写用例 Walk vs Vm 对拍全绿(值+错误消息严格相等,NaN-aware);bench:常量路径 13ns 持平,filter 回调路径持平(谓词循环指令化是 v2) |
+| 字节码 VM | ✅ v1(混合) | 16 opcode + 编译器 + 栈机(evaluator/vm.mbt);FilterExpression 与手动求值运算符回调 tree-walk(共享预算);`Engine::set_engine(Walk \| Vm)` 开关,默认 Walk;207 条 corpus + 手写用例 Walk vs Vm 对拍全绿(值+错误消息严格相等,NaN-aware);bench:常量路径 13ns 持平,filter 回调路径持平(谓词循环指令化是 v2) |
 | 编译错误 行:列\|…^ | ❌ | 4.4.1 位置信息 |
 | 差分验证 harness | ✅ | tools/(expr 侧待 go 差分) |
 | 并发模型 | ✅ 文档化 | wasm 单线程原子 eval;实例隔离测试 7 项 |

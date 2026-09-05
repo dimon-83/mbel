@@ -1,7 +1,7 @@
 import {
   "dimon-83/mbel/ast",
   "dimon-83/mbel/evaluator",
-  "dimon-83/mbel/jexl",
+  "dimon-83/mbel/engine",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }

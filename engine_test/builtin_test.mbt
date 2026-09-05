@@ -3,15 +3,15 @@
 // Semantics follow expr-lang's builtin.go and language definition.
 
 ///|
-fn eval1(expr : String) -> @ast.Value raise @jexl.JexlError {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::eval(inst, expr, @ast.ObjectVal([]))
+fn eval1(expr : String) -> @ast.Value raise @engine.EngineError {
+  let inst = @engine.new()
+  @engine.Engine::eval(inst, expr, @ast.ObjectVal([]))
 }
 
 ///|
 fn expect_v(expr : String, expected : @ast.Value, label : String) -> Unit {
   let r = eval1(expr) catch {
-    @jexl.JexlErr(msg) => abort(label + " failed: " + msg)
+    @engine.EngineErr(msg) => abort(label + " failed: " + msg)
   }
   if !@ast.value_equal(r, expected) {
     abort(label + ": value mismatch")
@@ -24,7 +24,7 @@ fn expect_err(expr : String, frag : String, label : String) -> Unit {
     ignore(eval1(expr))
     abort(label + ": expected error")
   } catch {
-    @jexl.JexlErr(msg) =>
+    @engine.EngineErr(msg) =>
       if !msg.contains(frag) {
         abort(label + ": error '" + msg + "' lacks '" + frag + "'")
       }
@@ -227,7 +227,7 @@ test "date parses ISO 8601" {
 
 ///|
 test "now is a plausible unix-ms timestamp" {
-  let r = eval1("now()") catch { @jexl.JexlErr(msg) => abort(msg) }
+  let r = eval1("now()") catch { @engine.EngineErr(msg) => abort(msg) }
   match r {
     @ast.NumVal(d) => assert_true(d > 1700000000000.0 && d < 4000000000000.0)
     _ => abort("now: expected number")
@@ -256,13 +256,13 @@ test "range operator" {
 
 ///|
 test "range respects the step budget" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::set_limits(inst, 0, 0, 100)
+  let inst = @engine.new()
+  @engine.Engine::set_limits(inst, 0, 0, 100)
   try {
-    ignore(@jexl.Jexl::eval(inst, "len(1..2000000)", @ast.ObjectVal([])))
+    ignore(@engine.Engine::eval(inst, "len(1..2000000)", @ast.ObjectVal([])))
     abort("expected budget error for huge range")
   } catch {
-    @jexl.JexlErr(msg) => assert_true(msg.contains("budget"))
+    @engine.EngineErr(msg) => assert_true(msg.contains("budget"))
   }
 }
 
@@ -280,7 +280,7 @@ test "matches operator (limited regex engine)" {
 
 ///|
 test "constant folding computes literal subtrees" {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   let toks = match @lexer.tokenize_with("1+2*3", inst.elements) {
     Ok(t) => t
     Err(m) => abort(m)

@@ -1,7 +1,7 @@
 # 性能测试报告:native / JS(V8 JIT)/ wasm-gc(解释)三口径,Walk vs Vm
 
 日期:2026-09-06,同批次采集。构建:139/139 测试在 wasm-gc 与 native 两个
-后端全绿。方法:`moon bench -p jexl_test`(10×N runs,mean ± σ)。
+后端全绿。方法:`moon bench -p engine_test`(10×N runs,mean ± σ)。
 
 ## 1. 双引擎对比(三口径汇总,单位见行)
 
@@ -65,7 +65,7 @@
 
 复现命令:
 
-    moon bench -p jexl_test                      # wasm-gc (moonrun)
-    moon bench --target js -p jexl_test          # js (V8 JIT via node)
-    moon bench --target native -p jexl_test      # native (C toolchain)
+    moon bench -p engine_test                      # wasm-gc (moonrun)
+    moon bench --target js -p engine_test          # js (V8 JIT via node)
+    moon bench --target native -p engine_test      # native (C toolchain)
     moon test --target native                    # native 全量回归

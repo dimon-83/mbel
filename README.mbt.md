@@ -61,29 +61,29 @@ $ moon run cmd/main -- "5|dbl|dbl"
 ## Using mbel as a library
 
 The engine is organized into small packages — `grammar`, `lexer`,
-`parser`, `ast`, `evaluator`, and `jexl` (the top-level API):
+`parser`, `ast`, `evaluator`, and `engine` (the top-level API):
 
 ```moonbit nocheck
 import {
   "dimon-83/mbel/ast",
   "dimon-83/mbel/evaluator",
-  "dimon-83/mbel/jexl",
+  "dimon-83/mbel/engine",
 }
 
-let inst = @jexl.new_jexl()
+let inst = @engine.new()
 
 // Evaluate against a context
 let ctx = @ast.ObjectVal([
   ("user", @ast.ObjectVal([("age", @ast.NumVal(36.0))])),
 ])
 let v = try {
-  @jexl.Jexl::eval(inst, "user.age > 18 ? 'adult' : 'minor'", ctx)
+  @engine.Engine::eval(inst, "user.age > 18 ? 'adult' : 'minor'", ctx)
 } catch {
-  @jexl.JexlErr(msg) => abort(msg)
+  @engine.EngineErr(msg) => abort(msg)
 } // StrVal("adult")
 
 // Register transforms / functions / operators
-@jexl.Jexl::add_transform(
+@engine.Engine::add_transform(
   inst,
   "dbl",
   fn(args : Array[@ast.Value]) -> @ast.Value {
@@ -91,14 +91,14 @@ let v = try {
   },
 )
 let doubled = try {
-  @jexl.Jexl::eval(inst, "21|dbl", @ast.ObjectVal([]))
+  @engine.Engine::eval(inst, "21|dbl", @ast.ObjectVal([]))
 } catch {
-  @jexl.JexlErr(msg) => abort(msg)
+  @engine.EngineErr(msg) => abort(msg)
 } // NumVal(42.0)
 
 // expr-style resource budgets: nodes at parse time, depth + steps at
 // eval time (0 disables a limit)
-@jexl.Jexl::set_limits(inst, 10000, 10000, 1000000)
+@engine.Engine::set_limits(inst, 10000, 10000, 1000000)
 ```
 
 ### Choosing an engine: Walk (tree-walk) or Vm (bytecode)
@@ -110,18 +110,18 @@ the engine per instance:
 
 ```moonbit nocheck
 // Walk — the reference tree-walk interpreter (default)
-let walk_inst = @jexl.new_jexl()
-@jexl.Jexl::set_engine(walk_inst, Walk)
+let walk_inst = @engine.new()
+@engine.Engine::set_engine(walk_inst, Walk)
 
 // Vm — compiles the (constant-folded) AST to bytecode once per
 // Expression, caches the program, and runs a 16-opcode stack machine
-let vm_inst = @jexl.new_jexl()
-@jexl.Jexl::set_engine(vm_inst, Vm)
+let vm_inst = @engine.new()
+@engine.Engine::set_engine(vm_inst, Vm)
 
 // Both engines run the same expressions, transforms, and budgets
 let ctx = @ast.ObjectVal([("x", @ast.NumVal(3.0))])
-let a = @jexl.Jexl::eval(walk_inst, "6+x*2>10 ? 'big' : 'small'", ctx)
-let b = @jexl.Jexl::eval(vm_inst, "6+x*2>10 ? 'big' : 'small'", ctx)
+let a = @engine.Engine::eval(walk_inst, "6+x*2>10 ? 'big' : 'small'", ctx)
+let b = @engine.Engine::eval(vm_inst, "6+x*2>10 ? 'big' : 'small'", ctx)
 // value_equal(a, b) — always true; vm_parity tests enforce it
 
 // The CLI can run either engine too:
@@ -255,7 +255,7 @@ growing with predicate complexity. The remaining step-change gains
 ([docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) §6.1).
 
 Stability invariants are asserted **per engine** with one shared
-suite (`jexl_test/stability_test.mbt`): instance isolation, 500×
+suite (`engine_test/stability_test.mbt`): instance isolation, 500×
 deterministic re-evaluation, budget non-bypass against 100k-element
 contexts, recovery after parse/transform/budget failures, interleaved
 multi-instance evaluation, nesting/wide-structure limits, and

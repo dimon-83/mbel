@@ -23,11 +23,11 @@ fn main {
   } else {
     @ast.ObjectVal([])
   }
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   // argv[3] == "vm" selects the bytecode engine (argv[2] stays the
   // optional JSON context).
   if args.length() > 3 && args[3] == "vm" {
-    @jexl.Jexl::set_engine(inst, Vm)
+    @engine.Engine::set_engine(inst, Vm)
   }
   register_demo_transforms(inst)
   for line in corpus.split("\n") {
@@ -42,8 +42,8 @@ fn main {
       Some(json) => parse_context(json)
       None => context
     }
-    let out = canon(@jexl.Jexl::eval(inst, expr, ctx)) catch {
-      @jexl.JexlErr(_) => "{\"$error\":true}"
+    let out = canon(@engine.Engine::eval(inst, expr, ctx)) catch {
+      @engine.EngineErr(_) => "{\"$error\":true}"
     }
     println(out)
   }
@@ -102,13 +102,13 @@ fn json_to_value(j : Json) -> @ast.Value {
 /// Demo transforms shared with the differential harness (see
 /// tools/jexl_driver.js) so corpus and interactive expressions behave
 /// identically on both sides.
-fn register_demo_transforms(inst : @jexl.Jexl) -> Unit {
-  @jexl.Jexl::add_transform(inst, "dbl", fn(
+fn register_demo_transforms(inst : @engine.Engine) -> Unit {
+  @engine.Engine::add_transform(inst, "dbl", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     @ast.NumVal(@evaluator.to_number(args[0]) * 2.0)
   })
-  @jexl.Jexl::add_transform(inst, "first", fn(
+  @engine.Engine::add_transform(inst, "first", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     match args[0] {
@@ -116,7 +116,7 @@ fn register_demo_transforms(inst : @jexl.Jexl) -> Unit {
       _ => @ast.UndefVal
     }
   })
-  @jexl.Jexl::add_transform(inst, "concatWith", fn(
+  @engine.Engine::add_transform(inst, "concatWith", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     @evaluator.plus(args[0], args[1])

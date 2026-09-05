@@ -77,7 +77,7 @@ pub fn aggregate_call(
       }
       @ast.ArrayVal(out)
     }
-    "count" => {
+    "count" =>
       if !has_pred {
         @ast.NumVal(n.to_double())
       } else {
@@ -89,7 +89,6 @@ pub fn aggregate_call(
         }
         @ast.NumVal(c.to_double())
       }
-    }
     "sum" => {
       let mut total = 0.0
       for i in 0..<n {
@@ -174,7 +173,11 @@ pub fn aggregate_call(
       }
       idxs.sort_by(fn(a, b) {
         let c = key_compare(keys[a], keys[b])
-        if order == "desc" { -c } else { c }
+        if order == "desc" {
+          -c
+        } else {
+          c
+        }
       })
       let out : Array[@ast.Value] = []
       for i in idxs {
@@ -217,7 +220,13 @@ pub fn aggregate_call(
 fn key_compare(a : @ast.Value, b : @ast.Value) -> Int {
   match (a, b) {
     (@ast.NumVal(x), @ast.NumVal(y)) =>
-      if x < y { -1 } else if x > y { 1 } else { 0 }
+      if x < y {
+        -1
+      } else if x > y {
+        1
+      } else {
+        0
+      }
     (@ast.StrVal(x), @ast.StrVal(y)) => lex_compare(x, y)
     (_, _) => lex_compare(to_string(a), to_string(b))
   }

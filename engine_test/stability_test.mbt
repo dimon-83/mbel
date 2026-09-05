@@ -13,9 +13,9 @@
 /// Runs the full stability suite on the given engine. All assertions
 /// are engine-independent; the walk suite doubles as the reference.
 fn stability_suite(vm : Bool) -> Unit raise {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   if vm {
-    @jexl.Jexl::set_engine(inst, Vm)
+    @engine.Engine::set_engine(inst, Vm)
   }
   let v_num = fn(d : Double) -> @ast.Value { @ast.NumVal(d) }
   let v_obj = fn(pairs : Array[(String, @ast.Value)]) -> @ast.Value {
@@ -23,15 +23,15 @@ fn stability_suite(vm : Bool) -> Unit raise {
   }
 
   // 1. Instance isolation: a's grammar/transform changes never leak.
-  let a = @jexl.new_jexl()
+  let a = @engine.new()
   if vm {
-    @jexl.Jexl::set_engine(a, Vm)
+    @engine.Engine::set_engine(a, Vm)
   }
-  let b = @jexl.new_jexl()
+  let b = @engine.new()
   if vm {
-    @jexl.Jexl::set_engine(b, Vm)
+    @engine.Engine::set_engine(b, Vm)
   }
-  @jexl.Jexl::add_transform(a, "shout", fn(
+  @engine.Engine::add_transform(a, "shout", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     match args[0] {
@@ -39,31 +39,31 @@ fn stability_suite(vm : Bool) -> Unit raise {
       other => other
     }
   })
-  @jexl.Jexl::remove_op(a, "+")
-  let ra = @jexl.Jexl::eval(a, "\"hey\"|shout", v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort("a shout failed: " + msg)
+  @engine.Engine::remove_op(a, "+")
+  let ra = @engine.Engine::eval(a, "\"hey\"|shout", v_obj([])) catch {
+    @engine.EngineErr(msg) => abort("a shout failed: " + msg)
   }
   assert_true(@ast.value_equal(ra, @ast.StrVal("hey!")))
   try {
-    ignore(@jexl.Jexl::eval(a, "1+2", v_obj([])))
+    ignore(@engine.Engine::eval(a, "1+2", v_obj([])))
     abort("a should reject + after remove_op")
   } catch {
-    @jexl.JexlErr(_) => ()
+    @engine.EngineErr(_) => ()
   }
   try {
-    ignore(@jexl.Jexl::eval(b, "\"hey\"|shout", v_obj([])))
+    ignore(@engine.Engine::eval(b, "\"hey\"|shout", v_obj([])))
     abort("b should not know 'shout'")
   } catch {
-    @jexl.JexlErr(_) => ()
+    @engine.EngineErr(_) => ()
   }
-  let rb = @jexl.Jexl::eval(b, "1+2", v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort("b plus failed: " + msg)
+  let rb = @engine.Engine::eval(b, "1+2", v_obj([])) catch {
+    @engine.EngineErr(msg) => abort("b plus failed: " + msg)
   }
   assert_true(@ast.value_equal(rb, v_num(3.0)))
 
   // 2. Determinism: 500 repeated evaluations of a compiled expression.
-  let expr_obj = @jexl.Jexl::compile(inst, "items[.qty > 2].name ?? 'none'") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(inst, "items[.qty > 2].name ?? 'none'") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let items : Array[@ast.Value] = []
   for i in 0..<20 {
@@ -75,12 +75,12 @@ fn stability_suite(vm : Bool) -> Unit raise {
     )
   }
   let ctx = v_obj([("items", @ast.ArrayVal(items))])
-  let first = @jexl.Expression::eval(expr_obj, ctx) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let first = @engine.Expression::eval(expr_obj, ctx) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   for _ in 0..<500 {
-    let again = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort("nondeterministic: " + msg)
+    let again = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort("nondeterministic: " + msg)
     }
     if !@ast.value_equal(first, again) {
       abort("repeated eval diverged")
@@ -89,72 +89,72 @@ fn stability_suite(vm : Bool) -> Unit raise {
 
   // 3. Budget non-bypass: a 100k-element context array cannot scan
   //    past the shared step budget.
-  let budgeted = @jexl.new_jexl()
+  let budgeted = @engine.new()
   if vm {
-    @jexl.Jexl::set_engine(budgeted, Vm)
+    @engine.Engine::set_engine(budgeted, Vm)
   }
-  @jexl.Jexl::set_limits(budgeted, 0, 0, 5000)
+  @engine.Engine::set_limits(budgeted, 0, 0, 5000)
   let big : Array[@ast.Value] = []
   for i in 0..<100000 {
     big.push(v_obj([("qty", v_num(i.to_double()))]))
   }
   let big_ctx = v_obj([("items", @ast.ArrayVal(big))])
   try {
-    ignore(@jexl.Jexl::eval(budgeted, "items[.qty > 2]", big_ctx))
+    ignore(@engine.Engine::eval(budgeted, "items[.qty > 2]", big_ctx))
     abort("expected budget error on 100k filter")
   } catch {
-    @jexl.JexlErr(msg) => assert_true(msg.contains("budget"))
+    @engine.EngineErr(msg) => assert_true(msg.contains("budget"))
   }
 
   // 4. Engine stays usable after parse / transform / budget failures.
   try {
-    ignore(@jexl.Jexl::eval(inst, "1 +", v_obj([])))
+    ignore(@engine.Engine::eval(inst, "1 +", v_obj([])))
     abort("expected parse error")
   } catch {
-    @jexl.JexlErr(_) => ()
+    @engine.EngineErr(_) => ()
   }
   try {
-    ignore(@jexl.Jexl::eval(inst, "\"x\"|nope", v_obj([])))
+    ignore(@engine.Engine::eval(inst, "\"x\"|nope", v_obj([])))
     abort("expected transform error")
   } catch {
-    @jexl.JexlErr(_) => ()
+    @engine.EngineErr(_) => ()
   }
-  @jexl.Jexl::set_limits(inst, 0, 0, 5)
+  @engine.Engine::set_limits(inst, 0, 0, 5)
   try {
-    ignore(@jexl.Jexl::eval(inst, "[1]+[1]+[1]+[1]+[1]+[1]", v_obj([])))
+    ignore(@engine.Engine::eval(inst, "[1]+[1]+[1]+[1]+[1]+[1]", v_obj([])))
     abort("expected budget error")
   } catch {
-    @jexl.JexlErr(_) => ()
+    @engine.EngineErr(_) => ()
   }
-  @jexl.Jexl::set_limits(inst, 10000, 10000, 1000000)
-  let r4 = @jexl.Jexl::eval(inst, "2 * 21", v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort("engine broken after errors: " + msg)
+  @engine.Engine::set_limits(inst, 10000, 10000, 1000000)
+  let r4 = @engine.Engine::eval(inst, "2 * 21", v_obj([])) catch {
+    @engine.EngineErr(msg) => abort("engine broken after errors: " + msg)
   }
   assert_true(@ast.value_equal(r4, v_num(42.0)))
 
   // 5. Interleaved evaluation across configured instances.
-  let ia = @jexl.new_jexl()
-  let ib = @jexl.new_jexl()
+  let ia = @engine.new()
+  let ib = @engine.new()
   if vm {
-    @jexl.Jexl::set_engine(ia, Vm)
-    @jexl.Jexl::set_engine(ib, Vm)
+    @engine.Engine::set_engine(ia, Vm)
+    @engine.Engine::set_engine(ib, Vm)
   }
-  @jexl.Jexl::add_transform(ia, "dbl", fn(
+  @engine.Engine::add_transform(ia, "dbl", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     v_num(@evaluator.to_number(args[0]) * 2.0)
   })
-  @jexl.Jexl::add_transform(ib, "dbl", fn(
+  @engine.Engine::add_transform(ib, "dbl", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     v_num(@evaluator.to_number(args[0]) * 3.0)
   })
   for i in 0..<200 {
-    let ra2 = @jexl.Jexl::eval(ia, "10|dbl", v_obj([])) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let ra2 = @engine.Engine::eval(ia, "10|dbl", v_obj([])) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
-    let rb2 = @jexl.Jexl::eval(ib, "10|dbl", v_obj([])) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let rb2 = @engine.Engine::eval(ib, "10|dbl", v_obj([])) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     if !@ast.value_equal(ra2, v_num(20.0)) ||
       !@ast.value_equal(rb2, v_num(30.0)) {
@@ -169,17 +169,17 @@ fn stability_suite(vm : Bool) -> Unit raise {
     deep = "(" + deep + ")"
   }
   try {
-    ignore(@jexl.Jexl::eval(inst, deep, v_obj([])))
+    ignore(@engine.Engine::eval(inst, deep, v_obj([])))
     abort("expected nesting error")
   } catch {
-    @jexl.JexlErr(msg) => assert_true(msg.contains("nested"))
+    @engine.EngineErr(msg) => assert_true(msg.contains("nested"))
   }
   let mut wide = "0"
   for i in 1..<200 {
     wide = wide + "+" + i.to_string()
   }
-  let r6 = @jexl.Jexl::eval(inst, wide, v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort("wide expression failed: " + msg)
+  let r6 = @engine.Engine::eval(inst, wide, v_obj([])) catch {
+    @engine.EngineErr(msg) => abort("wide expression failed: " + msg)
   }
   match r6 {
     @ast.NumVal(d) => assert_eq(d, 19900.0)
@@ -199,12 +199,12 @@ fn stability_suite(vm : Bool) -> Unit raise {
       ]),
     )
   }
-  let r7 = @jexl.Jexl::eval(
+  let r7 = @engine.Engine::eval(
     inst,
     "records[.active].score",
     v_obj([("records", @ast.ArrayVal(records))]),
   ) catch {
-    @jexl.JexlErr(msg) => abort("json ctx failed: " + msg)
+    @engine.EngineErr(msg) => abort("json ctx failed: " + msg)
   }
   assert_true(@ast.value_equal(r7, v_num(0.0)))
 }
@@ -238,17 +238,17 @@ test "walk and vm agree across the stability workload" {
   ]
   for expr in exprs {
     let rw = try {
-      let i = @jexl.new_jexl()
-      Ok(@jexl.Jexl::eval(i, expr, ctx))
+      let i = @engine.new()
+      Ok(@engine.Engine::eval(i, expr, ctx))
     } catch {
-      @jexl.JexlErr(m) => Err(m)
+      @engine.EngineErr(m) => Err(m)
     }
     let rv = try {
-      let i = @jexl.new_jexl()
-      @jexl.Jexl::set_engine(i, Vm)
-      Ok(@jexl.Jexl::eval(i, expr, ctx))
+      let i = @engine.new()
+      @engine.Engine::set_engine(i, Vm)
+      Ok(@engine.Engine::eval(i, expr, ctx))
     } catch {
-      @jexl.JexlErr(m) => Err(m)
+      @engine.EngineErr(m) => Err(m)
     }
     match (rw, rv) {
       (Ok(a), Ok(b)) => assert_true(parity_value_eq(a, b))

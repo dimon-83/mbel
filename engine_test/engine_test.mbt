@@ -47,9 +47,9 @@ fn expect_eval(
   context : @ast.Value,
   expected : @ast.Value,
 ) -> Unit {
-  let inst = @jexl.new_jexl()
-  let result = @jexl.Jexl::eval(inst, expr, context) catch {
-    @jexl.JexlErr(msg) => abort("eval failed for '" + expr + "': " + msg)
+  let inst = @engine.new()
+  let result = @engine.Engine::eval(inst, expr, context) catch {
+    @engine.EngineErr(msg) => abort("eval failed for '" + expr + "': " + msg)
   }
   expect_eq(result, expected, expr)
 }
@@ -57,12 +57,12 @@ fn expect_eval(
 ///|
 /// Expects evaluation to raise with a message containing `frag`.
 fn expect_eval_err(expr : String, context : @ast.Value, frag : String) -> Unit {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   try {
-    ignore(@jexl.Jexl::eval(inst, expr, context))
+    ignore(@engine.Engine::eval(inst, expr, context))
     abort("expected error for '" + expr + "'")
   } catch {
-    @jexl.JexlErr(msg) =>
+    @engine.EngineErr(msg) =>
       if !msg.contains(frag) {
         abort("error message '" + msg + "' lacks '" + frag + "'")
       }
@@ -73,50 +73,50 @@ fn expect_eval_err(expr : String, context : @ast.Value, frag : String) -> Unit {
 
 ///|
 test "compile returns an evaluatable expression" {
-  let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::compile(inst, "2/2") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let inst = @engine.new()
+  let expr_obj = @engine.Engine::compile(inst, "2/2") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
-  let result = @jexl.Expression::eval(expr_obj, v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let result = @engine.Expression::eval(expr_obj, v_obj([])) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   expect_eq(result, v_num(1.0), "2/2")
 }
 
 ///|
 test "compile throws on invalid tokens" {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   try {
-    ignore(@jexl.Jexl::compile(inst, "2 & 2"))
+    ignore(@engine.Engine::compile(inst, "2 & 2"))
     abort("expected compile error")
   } catch {
-    @jexl.JexlErr(msg) =>
+    @engine.EngineErr(msg) =>
       assert_true(msg.contains("Invalid expression token: &"))
   }
 }
 
 ///|
 test "createExpression does not compile" {
-  let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::create_expression(inst, "2 wouldFail &^% ..4")
+  let inst = @engine.new()
+  let expr_obj = @engine.Engine::create_expression(inst, "2 wouldFail &^% ..4")
   // evaluation would fail at compile time; construction itself is fine
   try {
-    ignore(@jexl.Expression::eval(expr_obj, v_obj([])))
+    ignore(@engine.Expression::eval(expr_obj, v_obj([])))
     abort("expected error")
   } catch {
-    @jexl.JexlErr(_) => ()
+    @engine.EngineErr(_) => ()
   }
 }
 
 ///|
 test "Expression eval lazily compiles once" {
-  let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::create_expression(inst, "2*2")
-  let r1 = @jexl.Expression::eval(expr_obj, v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let inst = @engine.new()
+  let expr_obj = @engine.Engine::create_expression(inst, "2*2")
+  let r1 = @engine.Expression::eval(expr_obj, v_obj([])) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
-  let r2 = @jexl.Expression::eval(expr_obj, v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let r2 = @engine.Expression::eval(expr_obj, v_obj([])) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   expect_eq(r1, v_num(4.0), "2*2 first")
   expect_eq(r2, v_num(4.0), "2*2 second")
@@ -167,39 +167,39 @@ test "evalSync semantics (same as eval — synchronous)" {
 
 ///|
 test "throws if transform fails" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_transform(inst, "abort", fn(
+  let inst = @engine.new()
+  @engine.Engine::add_transform(inst, "abort", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value raise @evaluator.EvalError {
     raise @evaluator.EvalErr("oops")
   })
   try {
-    ignore(@jexl.Jexl::eval(inst, "\"hello\"|abort", v_obj([])))
+    ignore(@engine.Engine::eval(inst, "\"hello\"|abort", v_obj([])))
     abort("expected error")
   } catch {
-    @jexl.JexlErr(msg) => assert_true(msg.contains("oops"))
+    @engine.EngineErr(msg) => assert_true(msg.contains("oops"))
   }
 }
 
 ///|
 test "throws if nested transform fails" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_transform(inst, "q1", fn(
+  let inst = @engine.new()
+  @engine.Engine::add_transform(inst, "q1", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value raise @evaluator.EvalError {
     raise @evaluator.EvalErr("oops")
   })
-  @jexl.Jexl::add_binary_op(inst, "is", 100, fn(
+  @engine.Engine::add_binary_op(inst, "is", 100, fn(
     a : @ast.Value,
     b : @ast.Value,
   ) -> @ast.Value {
     v_bool(true)
   })
   try {
-    ignore(@jexl.Jexl::eval(inst, "\"hello\"|q1 is asdf", v_obj([])))
+    ignore(@engine.Engine::eval(inst, "\"hello\"|q1 is asdf", v_obj([])))
     abort("expected error")
   } catch {
-    @jexl.JexlErr(msg) => assert_true(msg.contains("oops"))
+    @engine.EngineErr(msg) => assert_true(msg.contains("oops"))
   }
 }
 
@@ -213,15 +213,15 @@ test "early-exits boolean AND when the left is false (issue #64)" {
 
 ///|
 test "allows functions to be defined" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_function(inst, "sayHi", fn(
+  let inst = @engine.new()
+  @engine.Engine::add_function(inst, "sayHi", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     v_str("Hello")
   })
   expect_eq(
-    @jexl.Jexl::eval(inst, "sayHi()", v_obj([])) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    @engine.Engine::eval(inst, "sayHi()", v_obj([])) catch {
+      @engine.EngineErr(msg) => abort(msg)
     },
     v_str("Hello"),
     "sayHi()",
@@ -230,13 +230,13 @@ test "allows functions to be defined" {
 
 ///|
 test "allows functions to be retrieved" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_function(inst, "ret2", fn(
+  let inst = @engine.new()
+  @engine.Engine::add_function(inst, "ret2", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     v_num(2.0)
   })
-  match @jexl.Jexl::get_function(inst, "ret2") {
+  match @engine.Engine::get_function(inst, "ret2") {
     Some(f) => expect_eq(f([]), v_num(2.0), "ret2()")
     None => abort("get_function returned None")
   }
@@ -244,8 +244,8 @@ test "allows functions to be retrieved" {
 
 ///|
 test "allows functions to be set in batch" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_functions(inst, [
+  let inst = @engine.new()
+  @engine.Engine::add_functions(inst, [
     (
       "add1",
       fn(args : Array[@ast.Value]) -> @ast.Value {
@@ -260,8 +260,8 @@ test "allows functions to be set in batch" {
     ),
   ])
   expect_eq(
-    @jexl.Jexl::eval(inst, "add1(add2(2))", v_obj([])) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    @engine.Engine::eval(inst, "add1(add2(2))", v_obj([])) catch {
+      @engine.EngineErr(msg) => abort(msg)
     },
     v_num(5.0),
     "add1(add2(2))",
@@ -272,8 +272,8 @@ test "allows functions to be set in batch" {
 
 ///|
 test "allows transforms to be defined" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_transform(inst, "toCase", fn(
+  let inst = @engine.new()
+  @engine.Engine::add_transform(inst, "toCase", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     let val = args[0]
@@ -301,8 +301,8 @@ test "allows transforms to be defined" {
     }
   })
   expect_eq(
-    @jexl.Jexl::eval(inst, "\"hello\"|toCase({case:\"upper\"})", v_obj([])) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    @engine.Engine::eval(inst, "\"hello\"|toCase({case:\"upper\"})", v_obj([])) catch {
+      @engine.EngineErr(msg) => abort(msg)
     },
     v_str("HELLO"),
     "toCase upper",
@@ -337,13 +337,13 @@ fn to_lower_ascii(s : String) -> String {
 
 ///|
 test "allows transforms to be retrieved" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_transform(inst, "ret2", fn(
+  let inst = @engine.new()
+  @engine.Engine::add_transform(inst, "ret2", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     v_num(2.0)
   })
-  match @jexl.Jexl::get_transform(inst, "ret2") {
+  match @engine.Engine::get_transform(inst, "ret2") {
     Some(f) => expect_eq(f([]), v_num(2.0), "ret2 transform")
     None => abort("get_transform returned None")
   }
@@ -351,8 +351,8 @@ test "allows transforms to be retrieved" {
 
 ///|
 test "allows transforms to be set in batch" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_transforms(inst, [
+  let inst = @engine.new()
+  @engine.Engine::add_transforms(inst, [
     (
       "add1",
       fn(args : Array[@ast.Value]) -> @ast.Value {
@@ -367,8 +367,8 @@ test "allows transforms to be set in batch" {
     ),
   ])
   expect_eq(
-    @jexl.Jexl::eval(inst, "2|add1|add2", v_obj([])) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    @engine.Engine::eval(inst, "2|add1|add2", v_obj([])) catch {
+      @engine.EngineErr(msg) => abort(msg)
     },
     v_num(5.0),
     "2|add1|add2",
@@ -379,8 +379,8 @@ test "allows transforms to be set in batch" {
 
 ///|
 test "allows binaryOps to be defined" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_binary_op(inst, "_=", 20, fn(
+  let inst = @engine.new()
+  @engine.Engine::add_binary_op(inst, "_=", 20, fn(
     a : @ast.Value,
     b : @ast.Value,
   ) -> @ast.Value {
@@ -390,8 +390,8 @@ test "allows binaryOps to be defined" {
     )
   })
   expect_eq(
-    @jexl.Jexl::eval(inst, "\"FoO\" _= \"fOo\"", v_obj([])) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    @engine.Engine::eval(inst, "\"FoO\" _= \"fOo\"", v_obj([])) catch {
+      @engine.EngineErr(msg) => abort(msg)
     },
     v_bool(true),
     "_=",
@@ -400,24 +400,24 @@ test "allows binaryOps to be defined" {
 
 ///|
 test "observes precedence on binaryOps" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_binary_op(inst, "**", 0, fn(
+  let inst = @engine.new()
+  @engine.Engine::add_binary_op(inst, "**", 0, fn(
     a : @ast.Value,
     b : @ast.Value,
   ) -> @ast.Value {
     @ast.NumVal(@evaluator.to_number(a) * 2.0 + @evaluator.to_number(b) * 2.0)
   })
-  @jexl.Jexl::add_binary_op(inst, "***", 1000, fn(
+  @engine.Engine::add_binary_op(inst, "***", 1000, fn(
     a : @ast.Value,
     b : @ast.Value,
   ) -> @ast.Value {
     @ast.NumVal(@evaluator.to_number(a) * 2.0 + @evaluator.to_number(b) * 2.0)
   })
-  let r1 = @jexl.Jexl::eval(inst, "1 + 2 ** 3 + 4", v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let r1 = @engine.Engine::eval(inst, "1 + 2 ** 3 + 4", v_obj([])) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
-  let r2 = @jexl.Jexl::eval(inst, "1 + 2 *** 3 + 4", v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let r2 = @engine.Engine::eval(inst, "1 + 2 *** 3 + 4", v_obj([])) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   expect_eq(r1, v_num(20.0), "low precedence **")
   expect_eq(r2, v_num(15.0), "high precedence ***")
@@ -425,8 +425,8 @@ test "observes precedence on binaryOps" {
 
 ///|
 test "allows binaryOps with manual operand evaluation" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_binary_op_manual(inst, "$$", 50, fn(
+  let inst = @engine.new()
+  @engine.Engine::add_binary_op_manual(inst, "$$", 50, fn(
     l : @evaluator.Lazy,
     r : @evaluator.Lazy,
   ) -> @ast.Value raise @evaluator.EvalError {
@@ -438,22 +438,22 @@ test "allows binaryOps with manual operand evaluation" {
     }
   })
   let cell : Array[Int] = [0]
-  @jexl.Jexl::add_transform(inst, "inc", fn(
+  @engine.Engine::add_transform(inst, "inc", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {
     cell[0] = cell[0] + 1
     args[0]
   })
-  let r1 = @jexl.Jexl::eval(inst, "-2|inc $$ 5|inc", v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort("EVALERR: " + msg)
+  let r1 = @engine.Engine::eval(inst, "-2|inc $$ 5|inc", v_obj([])) catch {
+    @engine.EngineErr(msg) => abort("EVALERR: " + msg)
   }
   expect_eq(r1, v_num(5.0), "$$ left falsy path")
   if cell[0] != 2 {
     abort("count after first = " + cell[0].to_string())
   }
   cell[0] = 0
-  let r2 = @jexl.Jexl::eval(inst, "2|inc $$ -5|inc", v_obj([])) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let r2 = @engine.Engine::eval(inst, "2|inc $$ -5|inc", v_obj([])) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   expect_eq(r2, v_num(2.0), "$$ left truthy path")
   assert_eq(cell[0], 1)
@@ -463,13 +463,13 @@ test "allows binaryOps with manual operand evaluation" {
 
 ///|
 test "allows unaryOps to be defined" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::add_unary_op(inst, "~", fn(v : @ast.Value) -> @ast.Value {
+  let inst = @engine.new()
+  @engine.Engine::add_unary_op(inst, "~", fn(v : @ast.Value) -> @ast.Value {
     @ast.NumVal(@evaluator.to_number(v).floor())
   })
   expect_eq(
-    @jexl.Jexl::eval(inst, "~5.7 + 5", v_obj([])) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    @engine.Engine::eval(inst, "~5.7 + 5", v_obj([])) catch {
+      @engine.EngineErr(msg) => abort(msg)
     },
     v_num(10.0),
     "~5.7+5",
@@ -478,25 +478,27 @@ test "allows unaryOps to be defined" {
 
 ///|
 test "allows binaryOps to be removed" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::remove_op(inst, "+")
+  let inst = @engine.new()
+  @engine.Engine::remove_op(inst, "+")
   try {
-    ignore(@jexl.Jexl::eval(inst, "1+2", v_obj([])))
+    ignore(@engine.Engine::eval(inst, "1+2", v_obj([])))
     abort("expected error")
   } catch {
-    @jexl.JexlErr(msg) => assert_true(to_lower_ascii(msg).contains("invalid"))
+    @engine.EngineErr(msg) =>
+      assert_true(to_lower_ascii(msg).contains("invalid"))
   }
 }
 
 ///|
 test "allows unaryOps to be removed" {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::remove_op(inst, "!")
+  let inst = @engine.new()
+  @engine.Engine::remove_op(inst, "!")
   try {
-    ignore(@jexl.Jexl::eval(inst, "!true", v_obj([])))
+    ignore(@engine.Engine::eval(inst, "!true", v_obj([])))
     abort("expected error")
   } catch {
-    @jexl.JexlErr(msg) => assert_true(to_lower_ascii(msg).contains("invalid"))
+    @engine.EngineErr(msg) =>
+      assert_true(to_lower_ascii(msg).contains("invalid"))
   }
 }
 
@@ -504,32 +506,32 @@ test "allows unaryOps to be removed" {
 
 ///|
 test "Expression compiles '2 % 2' and evaluates to 0" {
-  let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::compile(inst, "2 % 2") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let inst = @engine.new()
+  let expr_obj = @engine.Engine::compile(inst, "2 % 2") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
-  let result = @jexl.Expression::eval_default(expr_obj) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let result = @engine.Expression::eval_default(expr_obj) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   expect_eq(result, v_num(0.0), "2 % 2")
 }
 
 ///|
 test "Expression re-compiles after grammar changes" {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   // 'a/a' cannot be constant-folded (identifier), so removing '/'
   // surfaces at re-compile time; a foldable '2/2' would legitimately
   // keep its compiled value (that is what the optimizer is for).
-  let expr_obj = @jexl.Jexl::create_expression(inst, "a/a")
-  let before = @jexl.Expression::eval(expr_obj, v_obj([("a", v_num(2.0))])) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::create_expression(inst, "a/a")
+  let before = @engine.Expression::eval(expr_obj, v_obj([("a", v_num(2.0))])) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   expect_eq(before, v_num(1.0), "a/a before")
-  @jexl.Jexl::remove_op(inst, "/")
+  @engine.Engine::remove_op(inst, "/")
   try {
-    ignore(@jexl.Expression::eval(expr_obj, v_obj([("a", v_num(2.0))])))
+    ignore(@engine.Expression::eval(expr_obj, v_obj([("a", v_num(2.0))])))
     abort("expected error after removing '/'")
   } catch {
-    @jexl.JexlErr(_) => ()
+    @engine.EngineErr(_) => ()
   }
 }

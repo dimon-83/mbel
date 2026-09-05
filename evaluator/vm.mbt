@@ -88,7 +88,11 @@ const OP_FILTERSTATIC = 17
 
 ///|
 const OP_LAZYBIN = 18
+
+///|
 const OP_LOADSLOT = 19
+
+///|
 const OP_CALLAGG = 20
 
 ///|

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates jexl_test/corpus_data_test.mbt from tools/corpus*.txt."""
+"""Regenerates engine_test/corpus_data_test.mbt from tools/corpus*.txt."""
 def mbt_escape(s):
     out = []
     for ch in s:
@@ -23,7 +23,7 @@ for line in open(os.path.join(base, 'tools/corpus_ctx.txt')).read().split('\n'):
         e, c = line.split('\t', 1); exprs.append(e); ctxs.append(c)
     else:
         exprs.append(line); ctxs.append('')
-with open(os.path.join(base, 'jexl_test/corpus_data_test.mbt'), 'w') as f:
+with open(os.path.join(base, 'engine_test/corpus_data_test.mbt'), 'w') as f:
     f.write('// AUTO-GENERATED from tools/corpus.txt + corpus_ctx.txt — do not edit.\n')
     f.write('// Regenerate with tools/gen_corpus_mbt.py\n\n///|\nlet corpus_exprs : Array[String] = [\n')
     for e in exprs: f.write('  "' + mbt_escape(e) + '",\n')

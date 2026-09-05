@@ -11,14 +11,14 @@
 ///|
 /// Result type for cross-engine comparison (value or error message).
 fn parity_eval(
-  mode : @jexl.EngineMode,
+  mode : @engine.EngineMode,
   expr : String,
   ctx : @ast.Value,
 ) -> Result[@ast.Value, String] {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::set_engine(inst, mode)
-  Ok(@jexl.Jexl::eval(inst, expr, ctx)) catch {
-    @jexl.JexlErr(msg) => Err(msg)
+  let inst = @engine.new()
+  @engine.Engine::set_engine(inst, mode)
+  Ok(@engine.Engine::eval(inst, expr, ctx)) catch {
+    @engine.EngineErr(msg) => Err(msg)
   }
 }
 
@@ -166,8 +166,8 @@ test "vm parity: custom operators incl. manual eval" {
   // eager custom op
   expect_parity("\"FoO\" _= \"fOo\"", "", "custom op")
   // manual-eval (lazy) custom op compiles to the callback path
-  let walk = @jexl.new_jexl()
-  @jexl.Jexl::add_binary_op_manual(walk, "$$", 50, fn(
+  let walk = @engine.new()
+  @engine.Engine::add_binary_op_manual(walk, "$$", 50, fn(
     l : @evaluator.Lazy,
     r : @evaluator.Lazy,
   ) -> @ast.Value raise @evaluator.EvalError {
@@ -178,9 +178,9 @@ test "vm parity: custom operators incl. manual eval" {
       r()
     }
   })
-  let vm = @jexl.new_jexl()
-  @jexl.Jexl::set_engine(vm, Vm)
-  @jexl.Jexl::add_binary_op_manual(vm, "$$", 50, fn(
+  let vm = @engine.new()
+  @engine.Engine::set_engine(vm, Vm)
+  @engine.Engine::add_binary_op_manual(vm, "$$", 50, fn(
     l : @evaluator.Lazy,
     r : @evaluator.Lazy,
   ) -> @ast.Value raise @evaluator.EvalError {
@@ -192,24 +192,24 @@ test "vm parity: custom operators incl. manual eval" {
     }
   })
   let rw = Ok(
-    @jexl.Jexl::eval(
+    @engine.Engine::eval(
       walk,
       "2|inc $$ -5|inc",
       @ast.ObjectVal([("inc_unused", @ast.NumVal(0.0))]),
     ),
   ) catch {
-    @jexl.JexlErr(m) => Err(m)
+    @engine.EngineErr(m) => Err(m)
   }
   // note: 'inc' transform is not registered on these instances; both
   // engines must fail identically
   let rv = Ok(
-    @jexl.Jexl::eval(
+    @engine.Engine::eval(
       vm,
       "2|inc $$ -5|inc",
       @ast.ObjectVal([("inc_unused", @ast.NumVal(0.0))]),
     ),
   ) catch {
-    @jexl.JexlErr(m) => Err(m)
+    @engine.EngineErr(m) => Err(m)
   }
   match (rw, rv) {
     (Err(m1), Err(m2)) => assert_eq(m1, m2)
@@ -220,22 +220,22 @@ test "vm parity: custom operators incl. manual eval" {
 
 ///|
 test "vm parity: budgets behave equivalently" {
-  let walk = @jexl.new_jexl()
-  let vm = @jexl.new_jexl()
-  @jexl.Jexl::set_engine(vm, Vm)
+  let walk = @engine.new()
+  let vm = @engine.new()
+  @engine.Engine::set_engine(vm, Vm)
   for inst in [walk, vm] {
-    @jexl.Jexl::set_limits(inst, 0, 0, 20)
+    @engine.Engine::set_limits(inst, 0, 0, 20)
   }
   let expr = "[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]+[0]"
   let rw = Ok(
-    @jexl.Jexl::eval(walk, expr, @ast.ObjectVal([("a", @ast.NumVal(1.0))])),
+    @engine.Engine::eval(walk, expr, @ast.ObjectVal([("a", @ast.NumVal(1.0))])),
   ) catch {
-    @jexl.JexlErr(m) => Err(m)
+    @engine.EngineErr(m) => Err(m)
   }
   let rv = Ok(
-    @jexl.Jexl::eval(vm, expr, @ast.ObjectVal([("a", @ast.NumVal(1.0))])),
+    @engine.Engine::eval(vm, expr, @ast.ObjectVal([("a", @ast.NumVal(1.0))])),
   ) catch {
-    @jexl.JexlErr(m) => Err(m)
+    @engine.EngineErr(m) => Err(m)
   }
   match (rw, rv) {
     (Err(m1), Err(m2)) => {

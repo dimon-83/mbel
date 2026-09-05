@@ -12,8 +12,8 @@
 /// Top-level expression error carrying a Jexl-style message.
 /// Lex, parse, and evaluation errors all surface here so callers
 /// handle one error type, like Jexl callers catch one Error.
-pub(all) suberror JexlError {
-  JexlErr(String)
+pub(all) suberror EngineError {
+  EngineErr(String)
 }
 
 ///|
@@ -34,7 +34,7 @@ pub(all) enum EngineMode {
 ///|
 /// The Jexl instance: an expression language engine with an isolated
 /// grammar. Ported from Jexl's `Jexl` class.
-pub struct Jexl {
+pub struct Engine {
   // Element registry, kept sorted by symbol length descending so the
   // lexer's longest-first matching stays correct after add/remove op.
   elements : Array[@grammar.ElementDef]
@@ -49,7 +49,7 @@ pub struct Jexl {
 
 ///|
 /// Creates a new Jexl instance with the default grammar.
-pub fn new_jexl() -> Jexl {
+pub fn new() -> Engine {
   let g = @evaluator.default_grammar()
   // Seed the function pool with the expr-style builtin library.
   for pair in @builtin.functions() {
@@ -71,8 +71,8 @@ pub fn new_jexl() -> Jexl {
 /// at parse time, and max evaluation depth / steps applied at eval
 /// time. 0 disables a limit. Mirrors expr's MaxNodes and memory
 /// budget options.
-pub fn Jexl::set_limits(
-  self : Jexl,
+pub fn Engine::set_limits(
+  self : Engine,
   max_nodes : Int,
   max_depth : Int,
   max_steps : Int,
@@ -88,14 +88,14 @@ pub fn Jexl::set_limits(
 /// Walk mode is the reference tree-walk interpreter. Both engines
 /// share one semantic layer, and vm_parity tests assert their
 /// equality across the whole corpus.
-pub fn Jexl::set_engine(self : Jexl, mode : EngineMode) -> Unit {
+pub fn Engine::set_engine(self : Engine, mode : EngineMode) -> Unit {
   self.engine = mode
 }
 
 ///|
 /// Inserts an element definition keeping the length-descending sort
 /// order the lexer relies on; replaces an existing same-symbol entry.
-fn Jexl::upsert_element(self : Jexl, def : @grammar.ElementDef) -> Unit {
+fn Engine::upsert_element(self : Engine, def : @grammar.ElementDef) -> Unit {
   let sym = def.symbol
   let mut idx = 0
   let mut found = false
@@ -143,13 +143,13 @@ fn[A] remove_pair(list : Array[(String, A)], name : String) -> Unit {
 
 ///|
 /// Adds or replaces a transform function. Mirrors `addTransform`.
-pub fn Jexl::add_transform(self : Jexl, name : String, f : Fn) -> Unit {
+pub fn Engine::add_transform(self : Engine, name : String, f : Fn) -> Unit {
   upsert_fn(self.grammar.transforms, name, f)
 }
 
 ///|
 /// Adds or replaces transforms in batch. Mirrors `addTransforms`.
-pub fn Jexl::add_transforms(self : Jexl, map : Array[(String, Fn)]) -> Unit {
+pub fn Engine::add_transforms(self : Engine, map : Array[(String, Fn)]) -> Unit {
   for pair in map {
     let (name, f) = pair
     self.add_transform(name, f)
@@ -158,13 +158,13 @@ pub fn Jexl::add_transforms(self : Jexl, map : Array[(String, Fn)]) -> Unit {
 
 ///|
 /// Adds or replaces an expression function. Mirrors `addFunction`.
-pub fn Jexl::add_function(self : Jexl, name : String, f : Fn) -> Unit {
+pub fn Engine::add_function(self : Engine, name : String, f : Fn) -> Unit {
   upsert_fn(self.grammar.functions, name, f)
 }
 
 ///|
 /// Adds or replaces expression functions in batch. Mirrors `addFunctions`.
-pub fn Jexl::add_functions(self : Jexl, map : Array[(String, Fn)]) -> Unit {
+pub fn Engine::add_functions(self : Engine, map : Array[(String, Fn)]) -> Unit {
   for pair in map {
     let (name, f) = pair
     self.add_function(name, f)
@@ -173,7 +173,7 @@ pub fn Jexl::add_functions(self : Jexl, map : Array[(String, Fn)]) -> Unit {
 
 ///|
 /// Retrieves a previously set transform function. Mirrors `getTransform`.
-pub fn Jexl::get_transform(self : Jexl, name : String) -> Fn? {
+pub fn Engine::get_transform(self : Engine, name : String) -> Fn? {
   for pair in self.grammar.transforms {
     let (n, f) = pair
     if n == name {
@@ -185,7 +185,7 @@ pub fn Jexl::get_transform(self : Jexl, name : String) -> Fn? {
 
 ///|
 /// Retrieves a previously set expression function. Mirrors `getFunction`.
-pub fn Jexl::get_function(self : Jexl, name : String) -> Fn? {
+pub fn Engine::get_function(self : Engine, name : String) -> Fn? {
   for pair in self.grammar.functions {
     let (n, f) = pair
     if n == name {
@@ -198,8 +198,8 @@ pub fn Jexl::get_function(self : Jexl, name : String) -> Fn? {
 ///|
 /// Adds a binary operator at the given precedence. Mirrors
 /// `addBinaryOp` (eager operand evaluation).
-pub fn Jexl::add_binary_op(
-  self : Jexl,
+pub fn Engine::add_binary_op(
+  self : Engine,
   operator : String,
   precedence : Int,
   f : (@ast.Value, @ast.Value) -> @ast.Value,
@@ -227,8 +227,8 @@ pub fn Jexl::add_binary_op(
 /// Adds a binary operator with manual (on-demand) operand evaluation:
 /// the callback receives two lazy operands and decides whether to
 /// evaluate each. Mirrors `addBinaryOp` with `manualEval=true`.
-pub fn Jexl::add_binary_op_manual(
-  self : Jexl,
+pub fn Engine::add_binary_op_manual(
+  self : Engine,
   operator : String,
   precedence : Int,
   f : (@evaluator.Lazy, @evaluator.Lazy) -> @ast.Value raise @evaluator.EvalError,
@@ -243,8 +243,8 @@ pub fn Jexl::add_binary_op_manual(
 
 ///|
 /// Adds a unary operator. Mirrors `addUnaryOp`.
-pub fn Jexl::add_unary_op(
-  self : Jexl,
+pub fn Engine::add_unary_op(
+  self : Engine,
   operator : String,
   f : (@ast.Value) -> @ast.Value,
 ) -> Unit {
@@ -262,7 +262,7 @@ pub fn Jexl::add_unary_op(
 /// Removes a binary or unary operator. Mirrors `removeOp`: the symbol
 /// leaves the element registry (so the lexer no longer splits on it)
 /// and its eval function is dropped.
-pub fn Jexl::remove_op(self : Jexl, operator : String) -> Unit {
+pub fn Engine::remove_op(self : Engine, operator : String) -> Unit {
   let mut i = 0
   while i < self.elements.length() {
     if self.elements[i].symbol == operator {
@@ -279,17 +279,20 @@ pub fn Jexl::remove_op(self : Jexl, operator : String) -> Unit {
 ///|
 /// Constructs an Expression object without compiling it.
 /// Mirrors `createExpression`.
-pub fn Jexl::create_expression(self : Jexl, expr_str : String) -> Expression {
-  Expression::{ jexl: self, expr_str, compiled: None, program: None }
+pub fn Engine::create_expression(
+  self : Engine,
+  expr_str : String,
+) -> Expression {
+  Expression::{ engine: self, expr_str, compiled: None, program: None }
 }
 
 ///|
 /// Compiles an expression string into an Expression immediately.
 /// Mirrors Jexl's `compile`.
-pub fn Jexl::compile(
-  self : Jexl,
+pub fn Engine::compile(
+  self : Engine,
   expr_str : String,
-) -> Expression raise JexlError {
+) -> Expression raise EngineError {
   let expr_obj = self.create_expression(expr_str)
   expr_obj.compile()
   expr_obj
@@ -298,20 +301,20 @@ pub fn Jexl::compile(
 ///|
 /// Evaluates an expression string within a context.
 /// Mirrors Jexl's `eval`/`evalSync` (identical here — synchronous).
-pub fn Jexl::eval(
-  self : Jexl,
+pub fn Engine::eval(
+  self : Engine,
   expr_str : String,
   context : @ast.Value,
-) -> @ast.Value raise JexlError {
+) -> @ast.Value raise EngineError {
   let expr_obj = self.create_expression(expr_str)
   expr_obj.eval(context)
 }
 
 ///|
 /// Tokenizes + parses + evaluates with an empty context.
-pub fn Jexl::eval_default(
-  self : Jexl,
+pub fn Engine::eval_default(
+  self : Engine,
   expr_str : String,
-) -> @ast.Value raise JexlError {
+) -> @ast.Value raise EngineError {
   self.eval(expr_str, @ast.ObjectVal([]))
 }

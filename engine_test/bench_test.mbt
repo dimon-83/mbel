@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// mbel — performance benchmarks (moon test --bench -p jexl_test).
+// mbel — performance benchmarks (moon test --bench -p engine_test).
 // Compile-once/eval-many is the hot path; every bench evaluates the
 // full pipeline unless stated otherwise.
 
@@ -31,10 +31,14 @@ fn bench_ctx() -> @ast.Value {
 
 ///|
 test "bench compile arithmetic (end-to-end parse+fold)" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   it.bench(() => {
-    let r = @jexl.Jexl::eval(inst, "6+x*2>10 ? 'big' : 'small'", bench_ctx()) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Engine::eval(
+      inst,
+      "6+x*2>10 ? 'big' : 'small'",
+      bench_ctx(),
+    ) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -42,15 +46,15 @@ test "bench compile arithmetic (end-to-end parse+fold)" (it : @bench.T) {
 
 ///|
 test "bench eval identifier chain + filter over 100 items" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   // Compile once, evaluate repeatedly (the hot path for rules engines).
-  let expr_obj = @jexl.Jexl::compile(inst, "items[.qty > 2].price") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(inst, "items[.qty > 2].price") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -58,14 +62,14 @@ test "bench eval identifier chain + filter over 100 items" (it : @bench.T) {
 
 ///|
 test "bench eval arithmetic precompiled" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::compile(inst, "2 + 3 * 4 == 5/6 - 7") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let inst = @engine.new()
+  let expr_obj = @engine.Engine::compile(inst, "2 + 3 * 4 == 5/6 - 7") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -73,16 +77,16 @@ test "bench eval arithmetic precompiled" (it : @bench.T) {
 
 ///|
 test "bench eval nested ternary + logic" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::compile(
+  let inst = @engine.new()
+  let expr_obj = @engine.Engine::compile(
     inst, "age > 18 && name.first ?? 'none' ? 'adult' : 'minor'",
   ) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -90,16 +94,16 @@ test "bench eval nested ternary + logic" (it : @bench.T) {
 
 ///|
 test "bench string builtins" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::compile(
+  let inst = @engine.new()
+  let expr_obj = @engine.Engine::compile(
     inst, "upper(trim(\"  hello world  \")) + '|' + replace(\"a,b,c\", \",\", \"-\")",
   ) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -107,14 +111,14 @@ test "bench string builtins" (it : @bench.T) {
 
 ///|
 test "bench toJSON/fromJSON roundtrip" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::compile(inst, "fromJSON(toJSON(name))") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let inst = @engine.new()
+  let expr_obj = @engine.Engine::compile(inst, "fromJSON(toJSON(name))") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -122,18 +126,18 @@ test "bench toJSON/fromJSON roundtrip" (it : @bench.T) {
 
 ///|
 test "bench eval 50-term chain (un-foldable)" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   let mut big = "x"
   for _ in 0..<50 {
     big = big + "+1"
   }
-  let expr_obj = @jexl.Jexl::compile(inst, big) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(inst, big) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -141,7 +145,7 @@ test "bench eval 50-term chain (un-foldable)" (it : @bench.T) {
 
 ///|
 test "bench tokenize only (lexer throughput)" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
+  let inst = @engine.new()
   let src = "6+x*2>10 ? 'big' : 'small'"
   it.bench(() => {
     let r = match @lexer.tokenize_with(src, inst.elements) {
@@ -154,15 +158,15 @@ test "bench tokenize only (lexer throughput)" (it : @bench.T) {
 
 ///|
 test "bench vm arithmetic precompiled" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::set_engine(inst, Vm)
-  let expr_obj = @jexl.Jexl::compile(inst, "2 + 3 * 4 == 5/6 - 7") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let inst = @engine.new()
+  @engine.Engine::set_engine(inst, Vm)
+  let expr_obj = @engine.Engine::compile(inst, "2 + 3 * 4 == 5/6 - 7") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -170,15 +174,15 @@ test "bench vm arithmetic precompiled" (it : @bench.T) {
 
 ///|
 test "bench vm filter over 100 items" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::set_engine(inst, Vm)
-  let expr_obj = @jexl.Jexl::compile(inst, "items[.qty > 2].price") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let inst = @engine.new()
+  @engine.Engine::set_engine(inst, Vm)
+  let expr_obj = @engine.Engine::compile(inst, "items[.qty > 2].price") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -186,17 +190,17 @@ test "bench vm filter over 100 items" (it : @bench.T) {
 
 ///|
 test "bench vm nested ternary + logic" (it : @bench.T) {
-  let inst = @jexl.new_jexl()
-  @jexl.Jexl::set_engine(inst, Vm)
-  let expr_obj = @jexl.Jexl::compile(
+  let inst = @engine.new()
+  @engine.Engine::set_engine(inst, Vm)
+  let expr_obj = @engine.Engine::compile(
     inst, "age > 18 && name.first ?? 'none' ? 'adult' : 'minor'",
   ) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -204,10 +208,10 @@ test "bench vm nested ternary + logic" (it : @bench.T) {
 
 ///|
 /// Builds a fresh instance in the given engine mode.
-fn bench_inst(vm : Bool) -> @jexl.Jexl {
-  let inst = @jexl.new_jexl()
+fn bench_inst(vm : Bool) -> @engine.Engine {
+  let inst = @engine.new()
   if vm {
-    @jexl.Jexl::set_engine(inst, Vm)
+    @engine.Engine::set_engine(inst, Vm)
   }
   inst
 }
@@ -216,8 +220,12 @@ fn bench_inst(vm : Bool) -> @jexl.Jexl {
 test "bench vm compile arithmetic (end-to-end parse+fold+code)" (it : @bench.T) {
   let inst = bench_inst(true)
   it.bench(() => {
-    let r = @jexl.Jexl::eval(inst, "6+x*2>10 ? 'big' : 'small'", bench_ctx()) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Engine::eval(
+      inst,
+      "6+x*2>10 ? 'big' : 'small'",
+      bench_ctx(),
+    ) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -226,15 +234,15 @@ test "bench vm compile arithmetic (end-to-end parse+fold+code)" (it : @bench.T) 
 ///|
 test "bench vm string builtins" (it : @bench.T) {
   let inst = bench_inst(true)
-  let expr_obj = @jexl.Jexl::compile(
+  let expr_obj = @engine.Engine::compile(
     inst, "upper(trim(\"  hello world  \")) + '|' + replace(\"a,b,c\", \",\", \"-\")",
   ) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -243,13 +251,13 @@ test "bench vm string builtins" (it : @bench.T) {
 ///|
 test "bench vm toJSON/fromJSON roundtrip" (it : @bench.T) {
   let inst = bench_inst(true)
-  let expr_obj = @jexl.Jexl::compile(inst, "fromJSON(toJSON(name))") catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(inst, "fromJSON(toJSON(name))") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -262,13 +270,13 @@ test "bench vm 50-term chain (un-foldable)" (it : @bench.T) {
   for _ in 0..<50 {
     big = big + "+1"
   }
-  let expr_obj = @jexl.Jexl::compile(inst, big) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(inst, big) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -277,15 +285,15 @@ test "bench vm 50-term chain (un-foldable)" (it : @bench.T) {
 ///|
 test "bench walk filter long predicate (100 items)" (it : @bench.T) {
   let inst = bench_inst(false)
-  let expr_obj = @jexl.Jexl::compile(
+  let expr_obj = @engine.Engine::compile(
     inst, "items[.qty > 2 && .price < 7 && .name != \"zz\" && .qty * 2 != 3]",
   ) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -294,15 +302,15 @@ test "bench walk filter long predicate (100 items)" (it : @bench.T) {
 ///|
 test "bench vm filter long predicate (100 items)" (it : @bench.T) {
   let inst = bench_inst(true)
-  let expr_obj = @jexl.Jexl::compile(
+  let expr_obj = @engine.Engine::compile(
     inst, "items[.qty > 2 && .price < 7 && .name != \"zz\" && .qty * 2 != 3]",
   ) catch {
-    @jexl.JexlErr(msg) => abort(msg)
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = @jexl.Expression::eval(expr_obj, ctx) catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -311,17 +319,13 @@ test "bench vm filter long predicate (100 items)" (it : @bench.T) {
 ///|
 test "bench walk aggregate map over 100 items" (it : @bench.T) {
   let inst = bench_inst(false)
-  let expr_obj = try {
-    @jexl.Jexl::compile(inst, "map(items, .price * 2)")
-  } catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(inst, "map(items, .price * 2)") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = try {
-      @jexl.Expression::eval(expr_obj, ctx)
-    } catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -330,17 +334,13 @@ test "bench walk aggregate map over 100 items" (it : @bench.T) {
 ///|
 test "bench vm aggregate map over 100 items" (it : @bench.T) {
   let inst = bench_inst(true)
-  let expr_obj = try {
-    @jexl.Jexl::compile(inst, "map(items, .price * 2)")
-  } catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(inst, "map(items, .price * 2)") catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = try {
-      @jexl.Expression::eval(expr_obj, ctx)
-    } catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -349,17 +349,15 @@ test "bench vm aggregate map over 100 items" (it : @bench.T) {
 ///|
 test "bench walk aggregate filter+sum over 100 items" (it : @bench.T) {
   let inst = bench_inst(false)
-  let expr_obj = try {
-    @jexl.Jexl::compile(inst, "sum(filter(items, .qty > 2), .price)")
-  } catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(
+    inst, "sum(filter(items, .qty > 2), .price)",
+  ) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = try {
-      @jexl.Expression::eval(expr_obj, ctx)
-    } catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
@@ -368,17 +366,15 @@ test "bench walk aggregate filter+sum over 100 items" (it : @bench.T) {
 ///|
 test "bench vm aggregate filter+sum over 100 items" (it : @bench.T) {
   let inst = bench_inst(true)
-  let expr_obj = try {
-    @jexl.Jexl::compile(inst, "sum(filter(items, .qty > 2), .price)")
-  } catch {
-    @jexl.JexlErr(msg) => abort(msg)
+  let expr_obj = @engine.Engine::compile(
+    inst, "sum(filter(items, .qty > 2), .price)",
+  ) catch {
+    @engine.EngineErr(msg) => abort(msg)
   }
   let ctx = bench_ctx()
   it.bench(() => {
-    let r = try {
-      @jexl.Expression::eval(expr_obj, ctx)
-    } catch {
-      @jexl.JexlErr(msg) => abort(msg)
+    let r = @engine.Expression::eval(expr_obj, ctx) catch {
+      @engine.EngineErr(msg) => abort(msg)
     }
     it.keep(r)
   })
