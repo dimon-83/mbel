@@ -101,6 +101,39 @@ let doubled = try {
 @jexl.Jexl::set_limits(inst, 10000, 10000, 1000000)
 ```
 
+### Choosing an engine: Walk (tree-walk) or Vm (bytecode)
+
+mbel ships two execution engines that share one semantic layer, so
+they produce identical results and identical error messages (asserted
+by an internal parity suite over the whole differential corpus). Pick
+the engine per instance:
+
+```moonbit nocheck
+// Walk — the reference tree-walk interpreter (default)
+let walk_inst = @jexl.new_jexl()
+@jexl.Jexl::set_engine(walk_inst, Walk)
+
+// Vm — compiles the (constant-folded) AST to bytecode once per
+// Expression, caches the program, and runs a 16-opcode stack machine
+let vm_inst = @jexl.new_jexl()
+@jexl.Jexl::set_engine(vm_inst, Vm)
+
+// Both engines run the same expressions, transforms, and budgets
+let ctx = @ast.ObjectVal([("x", @ast.NumVal(3.0))])
+let a = @jexl.Jexl::eval(walk_inst, "6+x*2>10 ? 'big' : 'small'", ctx)
+let b = @jexl.Jexl::eval(vm_inst, "6+x*2>10 ? 'big' : 'small'", ctx)
+// value_equal(a, b) — always true; vm_parity tests enforce it
+
+// The CLI can run either engine too:
+//   moon run cmd/main -- "2+2*3" "" vm
+```
+
+Engine notes: the Vm mode's value is the compiled `Program` cached on
+each `Expression` (re-evaluations skip compilation entirely);
+`FilterExpression` subtrees and manual-eval (lazy) operators are
+executed by tree-walk callbacks that share the step budget, so
+budgets behave identically on both engines.
+
 ## Current capabilities (Jexl parity)
 
 - **Literals**: numbers, single/double-quoted strings with escapes,
@@ -192,6 +225,42 @@ with an optimizer, and — after a review gate — the expr-language
 front-end (lexer/parser/AST/type checker). Items that cannot map 1:1
 to MoonBit (Go-reflection struct environments, the Go `time`/`regexp`
 dependencies) are tracked as explicit cut items in the gap document.
+
+## Performance & stability report (Walk vs Vm)
+
+Measured with `moon bench -p jexl_test` (wasm-gc, moonrun, 2026-09-06).
+Both engines share one semantic layer; the Vm's compiled `Program` is
+cached per `Expression`, so compile cost is paid once.
+
+| Scenario | Walk | Vm | Delta |
+|---|---|---|---|
+| End-to-end compile + eval | 6.10 µs | 6.19 µs | +1.5% |
+| Precompiled eval (constant-folded path) | 13.2 ns | 13.7 ns | ≈0 |
+| Ternary + logic + `??` chain | 94.7 ns | 95.3 ns | ≈0 |
+| String builtin chain | 437 ns | 439 ns | ≈0 |
+| `toJSON`/`fromJSON` roundtrip | 591 ns | 605 ns | +2% |
+| 50-term un-foldable chain | 1.23 µs | 1.26 µs | +2% |
+| 100-element relative filter | 4.17 µs | 4.20 µs | ≈0 |
+| Tokenize only (engine-independent) | 3.0 µs | — | — |
+
+Reading the numbers: v1 of the Vm executes the same shared semantic
+functions as Walk (instructions only dispatch), and filter subtrees —
+the hot path — run as tree-walk callbacks that share the step budget.
+The engines are therefore at parity today; the step-change gains
+(3–10× on aggregate/predicate workloads) arrive with v2, when
+predicate loops become native instructions (staged in
+[docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) §6.1).
+
+Stability invariants are asserted **per engine** with one shared
+suite (`jexl_test/stability_test.mbt`): instance isolation, 500×
+deterministic re-evaluation, budget non-bypass against 100k-element
+contexts, recovery after parse/transform/budget failures, interleaved
+multi-instance evaluation, nesting/wide-structure limits, and
+1000-record JSON contexts — all green on both engines. Three
+independent safety nets guard behavior: 150 unit/parity tests, the
+internal Walk-vs-Vm parity corpus (207 expressions, results and error
+messages byte-equal), and the external Jexl differential harness
+(3,360+ expressions, byte-identical).
 
 ## Development
 
