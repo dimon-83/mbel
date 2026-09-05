@@ -53,6 +53,10 @@ priv struct Parser {
   mut next_ident_encapsulate : Bool
   mut next_ident_relative : Bool
   mut cur_obj_key : String
+  // Predicate-argument tracking: the name of the function whose args
+  // are being parsed and the 0-based index of the current argument.
+  mut cur_func_name : String
+  mut cur_arg_idx : Int
 }
 
 ///|
@@ -128,6 +132,8 @@ fn new_parser(
     next_ident_encapsulate: false,
     next_ident_relative: false,
     cur_obj_key: "",
+    cur_func_name: "",
+    cur_arg_idx: 0,
   }
 }
 
@@ -208,6 +214,7 @@ fn token_type_name(typ : @grammar.TokenType) -> String {
     @grammar.OpenParen => "openParen"
     @grammar.CloseParen => "closeParen"
     @grammar.Question => "question"
+    @grammar.Pointer => "pointer"
   }
 }
 
@@ -300,7 +307,8 @@ fn state_accepts(state : String, typ : @grammar.TokenType) -> Bool {
         | @grammar.OpenParen
         | @grammar.OpenCurl
         | @grammar.Dot
-        | @grammar.OpenBracket => true
+        | @grammar.OpenBracket
+        | @grammar.Pointer => true
         _ => false
       }
     "expectBinOp" =>
@@ -442,6 +450,11 @@ fn Parser::handle_expect_operand(
     @grammar.OpenBracket => {
       self.array_start()
       self.state = "arrayVal"
+    }
+    @grammar.Pointer => {
+      // expr predicate pointer: # / #index / #acc
+      self.place_at_cursor(@ast.pointer(token_str(token)))
+      self.state = "expectBinOp"
     }
     _ => self.unexpected(token)
   }
@@ -802,6 +815,8 @@ fn Parser::obj_val_handler(self : Parser, ast : @ast.AstNode?) -> Unit {
 fn Parser::transform_handler(self : Parser, token : @lexer.Token) -> Unit {
   let node = @ast.function_call(token_str(token), "transforms")
   node.args = [self.cursor.unwrap()]
+  self.cur_func_name = token_str(token)
+  self.cur_arg_idx = 0
   self.place_before_cursor(node)
 }
 
@@ -811,6 +826,8 @@ fn Parser::transform_handler(self : Parser, token : @lexer.Token) -> Unit {
 fn Parser::function_call_handler(self : Parser) -> Unit {
   let cursor = self.cursor.unwrap()
   let node = @ast.function_call(cursor.ident_name, "functions")
+  self.cur_func_name = cursor.ident_name
+  self.cur_arg_idx = 0
   self.place_before_cursor(node)
 }
 
@@ -844,7 +861,16 @@ fn Parser::sub_expression_handler(self : Parser, ast : @ast.AstNode?) -> Unit {
 /// Mirrors `handlers.argVal`.
 fn Parser::arg_val_handler(self : Parser, ast : @ast.AstNode?) -> Unit {
   match ast {
-    Some(node) => self.cursor.unwrap().args.push(node)
+    Some(node) => {
+      // expr predicate position: second argument (index 1) of an
+      // aggregate call carries the predicate AST — flag it so the
+      // evaluator does not pre-evaluate it.
+      if @grammar.is_aggregate(self.cur_func_name) && self.cur_arg_idx == 1 {
+        node.is_pred = true
+      }
+      self.cursor.unwrap().args.push(node)
+      self.cur_arg_idx += 1
+    }
     None => ()
   }
 }

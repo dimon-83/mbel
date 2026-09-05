@@ -307,3 +307,79 @@ test "bench vm filter long predicate (100 items)" (it : @bench.T) {
     it.keep(r)
   })
 }
+
+///|
+test "bench walk aggregate map over 100 items" (it : @bench.T) {
+  let inst = bench_inst(false)
+  let expr_obj = try {
+    @jexl.Jexl::compile(inst, "map(items, .price * 2)")
+  } catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = try {
+      @jexl.Expression::eval(expr_obj, ctx)
+    } catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}
+
+///|
+test "bench vm aggregate map over 100 items" (it : @bench.T) {
+  let inst = bench_inst(true)
+  let expr_obj = try {
+    @jexl.Jexl::compile(inst, "map(items, .price * 2)")
+  } catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = try {
+      @jexl.Expression::eval(expr_obj, ctx)
+    } catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}
+
+///|
+test "bench walk aggregate filter+sum over 100 items" (it : @bench.T) {
+  let inst = bench_inst(false)
+  let expr_obj = try {
+    @jexl.Jexl::compile(inst, "sum(filter(items, .qty > 2), .price)")
+  } catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = try {
+      @jexl.Expression::eval(expr_obj, ctx)
+    } catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}
+
+///|
+test "bench vm aggregate filter+sum over 100 items" (it : @bench.T) {
+  let inst = bench_inst(true)
+  let expr_obj = try {
+    @jexl.Jexl::compile(inst, "sum(filter(items, .qty > 2), .price)")
+  } catch {
+    @jexl.JexlErr(msg) => abort(msg)
+  }
+  let ctx = bench_ctx()
+  it.bench(() => {
+    let r = try {
+      @jexl.Expression::eval(expr_obj, ctx)
+    } catch {
+      @jexl.JexlErr(msg) => abort(msg)
+    }
+    it.keep(r)
+  })
+}

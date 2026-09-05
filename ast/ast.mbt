@@ -14,6 +14,7 @@ pub(all) enum NodeType {
   ObjectLiteralNode
   FilterExpressionNode
   FunctionCallNode
+  PointerNode
 } derive(Debug, Eq)
 
 ///|
@@ -76,6 +77,9 @@ pub(all) struct AstNode {
   mut pool : String
   // Parent pointer (non-enumerable in JS, used by Parser cursor traversal)
   mut parent : AstNode?
+  // Marks a call argument that carries a predicate AST (expr-style
+  // aggregate calls); the evaluator must NOT pre-evaluate it.
+  mut is_pred : Bool
 }
 
 ///|
@@ -102,6 +106,7 @@ pub fn literal(val : Value) -> AstNode {
     args: [],
     pool: "",
     parent: None,
+    is_pred: false,
   }
 }
 
@@ -174,6 +179,15 @@ pub fn filter_expression(
   n.filter_expr = Some(expr)
   n.filter_relative = relative
   n.subject = Some(subject)
+  n
+}
+
+///|
+/// Creates a Pointer AST node ("#", "#index", "#acc").
+pub fn pointer(kind : String) -> AstNode {
+  let n = literal(UndefVal)
+  n.node_type = PointerNode
+  n.ident_name = kind
   n
 }
 
@@ -281,6 +295,7 @@ pub fn ast_equal(a : AstNode, b : AstNode) -> Bool {
       a.filter_relative == b.filter_relative &&
       node_equal(a.filter_expr, b.filter_expr) &&
       node_equal(a.subject, b.subject)
+    PointerNode => a.ident_name == b.ident_name
     FunctionCallNode =>
       a.func_name == b.func_name &&
       a.pool == b.pool &&

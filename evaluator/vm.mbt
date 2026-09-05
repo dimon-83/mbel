@@ -28,6 +28,7 @@ pub(all) enum Const {
   CFunc(String, String, Int) // name, pool, argc
   CFn((@ast.Value, @ast.Value) -> @ast.Value raise EvalError)
   CUFn((@ast.Value) -> @ast.Value raise EvalError)
+  CAgg(String, Int, Program?) // name, non-predicate argc, predicate program
 }
 
 ///|
@@ -87,6 +88,8 @@ const OP_FILTERSTATIC = 17
 
 ///|
 const OP_LAZYBIN = 18
+const OP_LOADSLOT = 19
+const OP_CALLAGG = 20
 
 ///|
 /// A compiled program.
@@ -269,12 +272,42 @@ fn Compiler::compile_node(
     @ast.FilterExpressionNode => self.compile_filter(node)
     @ast.FunctionCallNode => {
       let argc = node.args.length()
+      // Aggregate calls with a predicate compile to OP_CALLAGG with
+      // the predicate compiled into a reusable sub-program (typed
+      // slots: #, #index, #acc).
+      if node.pool == "functions" && @grammar.is_aggregate(node.func_name) {
+        let has_pred = argc > 1 && node.args[1].is_pred
+        let mut non_pred = 0
+        let mut pred_prog : Program? = None
+        for i in 0..<argc {
+          let a = node.args[i]
+          if i == 1 && has_pred {
+            pred_prog = Some(compile_program(a, self.grammar))
+          } else {
+            self.compile_node(a)
+            non_pred += 1
+          }
+        }
+        let idx = self.const_idx(CAgg(node.func_name, non_pred, pred_prog))
+        ignore(self.emit(OP_CALLAGG, idx))
+        self.track(argc, 1)
+        return
+      }
       for a in node.args {
         self.compile_node(a)
       }
       let idx = self.const_idx(CFunc(node.func_name, node.pool, argc))
       ignore(self.emit(OP_CALLFUNC, idx))
       self.track(argc, 1)
+    }
+    @ast.PointerNode => {
+      let slot = match node.ident_name {
+        "#index" => 1
+        "#acc" => 2
+        _ => 0
+      }
+      ignore(self.emit(OP_LOADSLOT, slot))
+      self.track(0, 1)
     }
   }
 }
@@ -394,6 +427,7 @@ priv struct LoopFrame {
 }
 
 ///|
+#warnings("-unused_mut")
 priv struct VmState {
   opcodes : Array[Int]
   operands : Array[Int]
@@ -408,6 +442,9 @@ priv struct VmState {
   budget : BudgetCell
   max_steps : Int
   max_depth : Int
+  mut slot_elem : @ast.Value
+  mut slot_idx : Int
+  mut slot_acc : @ast.Value
 }
 
 ///|
@@ -435,6 +472,9 @@ pub fn run_program(
     budget: { steps: 0 },
     max_steps,
     max_depth,
+    slot_elem: @ast.UndefVal,
+    slot_idx: 0,
+    slot_acc: @ast.UndefVal,
   }
   vm.run()
 }
@@ -490,6 +530,9 @@ fn VmState::walk_eval(
     max_depth: self.max_depth,
     budget: self.budget,
     max_steps: self.max_steps,
+    slot_elem: self.slot_elem,
+    slot_idx: self.slot_idx,
+    slot_acc: self.slot_acc,
   }
   e.eval(ast)
 }

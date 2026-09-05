@@ -416,6 +416,7 @@ pub(all) struct BudgetCell {
 /// The Evaluator walks an AST and computes its value within a context.
 /// A `rel_context` backs relative identifiers inside filters; the main
 /// context resolves plain identifiers.
+#warnings("-unused_mut")
 pub struct Evaluator {
   grammar : Grammar
   context : @ast.Value
@@ -424,6 +425,11 @@ pub struct Evaluator {
   max_depth : Int
   budget : BudgetCell
   max_steps : Int
+  // Predicate slots (expr # / #index / #acc), set while evaluating a
+  // predicate for aggregates; default to undefined elsewhere.
+  mut slot_elem : @ast.Value
+  mut slot_idx : Int
+  mut slot_acc : @ast.Value
 }
 
 ///|
@@ -451,6 +457,9 @@ pub fn new_evaluator_limited(
     max_depth,
     budget: { steps: 0 },
     max_steps,
+    slot_elem: @ast.UndefVal,
+    slot_idx: 0,
+    slot_acc: @ast.UndefVal,
   }
 }
 
@@ -468,6 +477,9 @@ pub fn new_relative_evaluator(
     max_depth: default_max_depth(),
     budget: { steps: 0 },
     max_steps: default_max_steps(),
+    slot_elem: @ast.UndefVal,
+    slot_idx: 0,
+    slot_acc: @ast.UndefVal,
   }
 }
 
@@ -532,6 +544,13 @@ fn Evaluator::dispatch(
     @ast.ObjectLiteralNode => self.eval_object_literal(ast)
     @ast.FilterExpressionNode => self.eval_filter(ast)
     @ast.FunctionCallNode => self.eval_function_call(ast)
+    @ast.PointerNode =>
+      match ast.ident_name {
+        "#" => self.slot_elem
+        "#index" => @ast.NumVal(self.slot_idx.to_double())
+        "#acc" => self.slot_acc
+        _ => @ast.UndefVal
+      }
   }
 }
 
@@ -760,6 +779,9 @@ fn Evaluator::eval_filter(
         max_depth: self.max_depth,
         budget: self.budget,
         max_steps: self.max_steps,
+        slot_elem: elem,
+        slot_idx: 0,
+        slot_acc: @ast.UndefVal,
       }
       if truthy(e.eval(ast.filter_expr.unwrap())) {
         results.push(elem)
@@ -782,8 +804,60 @@ fn Evaluator::eval_function_call(
   self : Evaluator,
   ast : @ast.AstNode,
 ) -> @ast.Value raise EvalError {
+  if ast.pool == "functions" && @grammar.is_aggregate(ast.func_name) {
+    return self.eval_aggregate(ast)
+  }
   let args = self.eval_array(ast.args)
   call_pool_function(self.grammar, ast.pool, ast.func_name, args)
+}
+
+///|
+/// Walk-side aggregate invocation: evaluate the non-predicate args,
+/// run the predicate AST on per-element evaluators with typed slots.
+fn Evaluator::eval_aggregate(
+  self : Evaluator,
+  ast : @ast.AstNode,
+) -> @ast.Value raise EvalError {
+  let has_pred = ast.args.length() > 1 && ast.args[1].is_pred
+  let values : Array[@ast.Value] = []
+  for i in 0..<ast.args.length() {
+    if i == 1 && has_pred {
+      continue
+    }
+    values.push(self.eval(ast.args[i]))
+  }
+  let list : Array[@ast.Value] = match values.get(0) {
+    Some(@ast.ArrayVal(xs)) => xs
+    Some(@ast.UndefVal) | None => []
+    Some(_) =>
+      raise EvalError::EvalErr(
+        ast.func_name + ": first argument must be an array",
+      )
+  }
+  let extra = values[1:].to_array()
+  if has_pred {
+    let pred_ast = ast.args[1]
+    let runner : PredRunner = fn(i, elem, acc) {
+      let e = {
+        grammar: self.grammar,
+        context: self.context,
+        rel_context: elem,
+        depth: 0,
+        max_depth: self.max_depth,
+        budget: self.budget,
+        max_steps: self.max_steps,
+        slot_elem: elem,
+        slot_idx: i,
+        slot_acc: acc,
+      }
+      e.eval(pred_ast)
+    }
+    aggregate_call(ast.func_name, list, true, extra, runner)
+  } else {
+    aggregate_call(ast.func_name, list, false, extra, fn(_, _, _) {
+      raise EvalError::EvalErr("aggregate: predicate required")
+    })
+  }
 }
 
 ///|

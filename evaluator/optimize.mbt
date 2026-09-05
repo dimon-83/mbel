@@ -95,7 +95,7 @@ fn fold_node(node : @ast.AstNode) -> @ast.AstNode {
       }
       node
     }
-    @ast.LiteralNode => node
+    @ast.LiteralNode | @ast.PointerNode => node
   }
 }
 

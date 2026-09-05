@@ -29,6 +29,7 @@ pub(all) enum TokenType {
   OpenParen
   CloseParen
   Question
+  Pointer
 } derive(Debug, Eq)
 
 ///|
@@ -210,6 +211,19 @@ pub fn precedence(op : String) -> Int {
     "==" | "!=" | ">" | ">=" | "<" | "<=" | "in" => 20
     "&&" | "||" => 10
     _ => 0
+  }
+}
+
+///|
+/// The expr-style aggregate functions whose second argument is a
+/// predicate (0-based arg index 1).
+pub fn is_aggregate(name : String) -> Bool {
+  match name {
+    "all" | "none" | "any" | "one" | "filter" | "map" | "count" | "sum" |
+    "find" | "findIndex" | "findLast" | "findLastIndex" | "groupBy" |
+    "sortBy" | "reduce" =>
+      true
+    _ => false
   }
 }
 

@@ -162,6 +162,23 @@ pub fn tokenize_with(
       continue
     }
 
+    // Pointer (#, #index, #acc — expr predicate pointers)
+    if c == '#' {
+      let (raw, end) = scan_pointer(chars, pos)
+      let final_raw = if negate {
+        negate = false
+        "-" + raw
+      } else {
+        raw
+      }
+      match create_token(final_raw, elements) {
+        Ok(t) => tokens.push(t)
+        Err(msg) => return Err(msg)
+      }
+      pos = end
+      continue
+    }
+
     // Grammar element (operators and control characters)
     match match_element_at(chars, pos, elements) {
       Some(def) => {
@@ -392,6 +409,21 @@ fn scan_identifier(chars : Array[Char], pos : Int) -> (String, Int) {
 // ---Token creation ---
 
 ///|
+/// Scans a pointer token: '#' optionally followed by identifier chars
+/// ("#", "#index", "#acc", ...).
+fn scan_pointer(chars : Array[Char], pos : Int) -> (String, Int) {
+  let n = chars.length()
+  let buf = StringBuilder::new()
+  buf.write_char('#')
+  let mut i = pos + 1
+  while i < n && is_ident_cont(chars[i]) {
+    buf.write_char(chars[i])
+    i += 1
+  }
+  (buf.to_string(), i)
+}
+
+///|
 /// Checks whether a string matches Jexl's numeric regex:
 ///   /^-?(?:(?:[0-9]*\.[0-9]+)|[0-9]+)$/
 fn is_numeric(s : String) -> Bool {
@@ -580,6 +612,15 @@ fn create_token(
     Some(def) =>
       return Ok(Token::{ typ: def.elem_type, value: Str(element), raw: element })
     None => ()
+  }
+
+  // Pointer (expr predicate pointers)
+  if first == '#' && element.length() >= 1 {
+    return Ok(Token::{
+      typ: @grammar.Pointer,
+      value: Str(element),
+      raw: element,
+    })
   }
 
   // Identifier
