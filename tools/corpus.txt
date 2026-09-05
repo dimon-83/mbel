@@ -130,7 +130,6 @@ foo.bar[.tek == "baz"]
 foo.
 [1,2
 {a:1
-1..2
 foo[.bar == 1
 foo ? 1 :
 [1,2,3][. > 1

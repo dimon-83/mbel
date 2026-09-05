@@ -86,7 +86,38 @@
 
 4.1 → 4.2 → 4.3(工程层,方言无关,立即改善 Jexl 安全/性能短板,现有 104 测试与差分资产不破坏);随后 **4.4 gate 评审**(对照本清单重新确认语言层是否启动、是否裁剪),4.4.x 顺序执行;4.5 并行;4.6 贯穿。
 
-## 4. 已决策与待决策
+## 4. Stage 4.2/4.3 delivery status (2026-09-05)
+
+Delivered (127/127 tests green; all Jexl differential corpora remain
+byte-identical):
+
+- **4.2 builtins** (`builtin/` package, seeded into every Jexl instance):
+  math 8 (abs/ceil/floor/round/max/min/mean/median, Go round semantics),
+  strings 16 (trim*/upper/lower/split/splitAfter/replace/repeat/join/
+  indexOf/lastIndexOf/hasPrefix/hasSuffix/string), collections 12 (len/
+  first/last/get/take/keys/values/reverse/uniq/concat/flatten/sort),
+  conversions 9 (int/float/string/type/toJSON/fromJSON/toBase64/
+  fromBase64/toPairs/fromPairs, with own UTF-8 + base64 codec),
+  bitwise 8 (Int64 semantics via the Double value model), time
+  minimal set (now/duration/date ISO/timezone=UTC only).
+- **4.2b expr operators**: `??` (nil coalescing, on-demand), `..`
+  (range, memory-budgeted at 1e6 elements), `matches` (limited regex —
+  the MoonBit core regex engine behaves as literal matching; full
+  RE2-style patterns remain future work).
+- **4.3 partial**: constant-folding optimizer pass (`constant_fold`,
+  expr-style `fold`) wired into Expression compile; bytecode VM not
+  started.
+
+New divergences recorded:
+| Case | expr | mbel | Cause |
+|---|---|---|---|
+| `type(1)` | "int" | "number" | no int/float split until 4.4.3 |
+| `?? mixed with other ops` | parse error | accepted | parser-level check not ported |
+| invalid regex pattern | compile error | no match | MoonBit core regex is literal-only |
+| `1..2` (Jexl corpus) | n/a | range | mbel superset; moved to tools/divergence.txt |
+| time objects / timezones | Go time.Time | unix-ms numbers | stage 4.5 cut item |
+
+## 5. 已决策与待决策
 
 - 已决策:目标 = "expr 语言定义 + 官方测试"为验收基线(而非 Go API 面);E 类裁剪项显式记录。
 - 待 4.4 gate:Jexl legacy 保留期、$env/方法调用宿主扩展方式、time/regexp 实现路线(FFI vs 自实现)。

@@ -7,4 +7,5 @@
 
 import {
   "dimon-83/mbel/ast",
+  "moonbitlang/core/string",
 }

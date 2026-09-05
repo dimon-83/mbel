@@ -94,8 +94,14 @@ pub fn element_def(
 /// the Lexer handles it as its own negate/subtract token.
 pub fn default_elements() -> Array[ElementDef] {
   [
-    // Two-character elements first (length-descending order)
+    // Longest first (length-descending order). `matches` (expr-style
+    // regex match) and the mbel extensions `..` (range) and `??`
+    // (nil coalescing) are operator elements like the rest.
+    element_def("matches", BinaryOp, 20),
+    // Two-character elements
     element_def("//", BinaryOp, 40),
+    element_def("..", BinaryOp, 25),
+    element_def("??", BinaryOp, 500),
     element_def("==", BinaryOp, 20),
     element_def("!=", BinaryOp, 20),
     element_def(">=", BinaryOp, 20),

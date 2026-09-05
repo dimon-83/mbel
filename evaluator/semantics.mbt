@@ -276,7 +276,7 @@ fn str_like(v : @ast.Value) -> Bool {
 ///|
 /// Lexicographic comparison by code unit (JS String relational
 /// semantics). Returns negative/zero/positive.
-fn lex_compare(x : String, y : String) -> Int {
+pub fn lex_compare(x : String, y : String) -> Int {
   let a = x.to_array()
   let b = y.to_array()
   let n = if a.length() < b.length() { a.length() } else { b.length() }

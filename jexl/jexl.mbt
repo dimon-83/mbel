@@ -39,9 +39,15 @@ pub struct Jexl {
 ///|
 /// Creates a new Jexl instance with the default grammar.
 pub fn new_jexl() -> Jexl {
+  let g = @evaluator.default_grammar()
+  // Seed the function pool with the expr-style builtin library.
+  for pair in @builtin.functions() {
+    let (name, f) = pair
+    upsert_fn(g.functions, name, f)
+  }
   {
     elements: @grammar.default_elements(),
-    grammar: @evaluator.default_grammar(),
+    grammar: g,
     max_nodes: @parser.default_max_nodes(),
     max_depth: @evaluator.default_max_depth(),
     max_steps: @evaluator.default_max_steps(),
@@ -182,7 +188,17 @@ pub fn Jexl::add_binary_op(
   // Jexl's addBinaryOp sets `eval`, dropping any evalOnDemand entry.
   remove_pair(self.grammar.on_demand_ops, operator)
   remove_pair(self.grammar.binary_ops, operator)
-  self.grammar.binary_ops.push((operator, f))
+  self.grammar.binary_ops.push(
+    (
+      operator,
+      fn(
+        a : @ast.Value,
+        b : @ast.Value,
+      ) -> @ast.Value raise @evaluator.EvalError {
+        f(a, b)
+      },
+    ),
+  )
 }
 
 ///|
@@ -212,7 +228,12 @@ pub fn Jexl::add_unary_op(
 ) -> Unit {
   self.upsert_element(@grammar.element_def(operator, @grammar.UnaryOp, 1000000))
   remove_pair(self.grammar.unary_ops, operator)
-  self.grammar.unary_ops.push((operator, f))
+  self.grammar.unary_ops.push(
+    (
+      operator,
+      fn(v : @ast.Value) -> @ast.Value raise @evaluator.EvalError { f(v) },
+    ),
+  )
 }
 
 ///|

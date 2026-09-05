@@ -82,8 +82,10 @@ test "eval rejects expressions deeper than the depth limit" {
 test "eval rejects expressions past the step budget" {
   let inst = @jexl.new_jexl()
   @jexl.Jexl::set_limits(inst, 0, 0, 20)
-  // 20 terms + 19 additions = 39 eval visits > 20.
-  let expr = repeat_str("1+", 20) + "1"
+  // 20 identifier terms + 19 additions = 39 eval visits > 20
+  // (identifiers keep the expression un-foldable, so eval really
+  // visits each node).
+  let expr = repeat_str("a+", 20) + "a"
   expect_jexl_err(inst, expr, "budget", "step budget 20")
 }
 

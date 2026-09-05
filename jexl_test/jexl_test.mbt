@@ -517,16 +517,17 @@ test "Expression compiles '2 % 2' and evaluates to 0" {
 ///|
 test "Expression re-compiles after grammar changes" {
   let inst = @jexl.new_jexl()
-  let expr_obj = @jexl.Jexl::create_expression(inst, "2/2")
-  // compile before the '+' removal, then remove '+' and re-compile —
-  // recompilation picks up the changed element registry
-  let before = @jexl.Expression::eval(expr_obj, v_obj([])) catch {
+  // 'a/a' cannot be constant-folded (identifier), so removing '/'
+  // surfaces at re-compile time; a foldable '2/2' would legitimately
+  // keep its compiled value (that is what the optimizer is for).
+  let expr_obj = @jexl.Jexl::create_expression(inst, "a/a")
+  let before = @jexl.Expression::eval(expr_obj, v_obj([("a", v_num(2.0))])) catch {
     @jexl.JexlErr(msg) => abort(msg)
   }
-  expect_eq(before, v_num(1.0), "2/2 before")
+  expect_eq(before, v_num(1.0), "a/a before")
   @jexl.Jexl::remove_op(inst, "/")
   try {
-    ignore(@jexl.Expression::eval(expr_obj, v_obj([])))
+    ignore(@jexl.Expression::eval(expr_obj, v_obj([("a", v_num(2.0))])))
     abort("expected error after removing '/'")
   } catch {
     @jexl.JexlErr(_) => ()

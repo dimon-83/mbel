@@ -32,7 +32,12 @@ pub fn Expression::compile(self : Expression) -> Unit raise JexlError {
   ) catch {
     @parser.ParseErr(msg) => raise JexlError::JexlErr(msg)
   }
-  self.compiled = ast
+  // Constant-folding pass (expr-style fold): pure literal subtrees
+  // are computed at compile time.
+  self.compiled = match ast {
+    Some(node) => Some(@evaluator.constant_fold(node))
+    None => None
+  }
 }
 
 ///|

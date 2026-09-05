@@ -31,12 +31,13 @@ pub type Lazy = () -> @ast.Value raise EvalError
 pub type FnL = (Lazy, Lazy) -> @ast.Value raise EvalError
 
 ///|
-/// A binary operator implementation.
-pub type FnB = (@ast.Value, @ast.Value) -> @ast.Value
+/// A binary operator implementation. May raise (custom operators can
+/// fail like user transforms).
+pub type FnB = (@ast.Value, @ast.Value) -> @ast.Value raise EvalError
 
 ///|
-/// A unary operator implementation.
-pub type FnU = (@ast.Value) -> @ast.Value
+/// A unary operator implementation. May raise.
+pub type FnU = (@ast.Value) -> @ast.Value raise EvalError
 
 ///|
 /// The operator/function registry, mirroring Jexl's grammar object:
@@ -49,6 +50,10 @@ pub(all) struct Grammar {
   binary_ops : Array[(String, FnB)]
   on_demand_ops : Array[(String, FnL)]
   unary_ops : Array[(String, FnU)]
+  // Compiled-regex cache for the `matches` operator (expr compiles
+  // string literals at check time; we cache at eval time).
+  mut regex_cache : Array[(String, @string.Regex)]
+  mut regex_failed : Array[String]
 }
 
 ///|
@@ -82,8 +87,22 @@ pub fn default_grammar() -> Grammar {
           }
         },
       ),
+      // expr's ?? — take the right side only when the left is nil
+      // (mbel also treats Jexl's undefined as nil here).
+      (
+        "??",
+        fn(l : Lazy, r : Lazy) -> @ast.Value raise EvalError {
+          let lv = l()
+          match lv {
+            @ast.NullVal | @ast.UndefVal => r()
+            _ => lv
+          }
+        },
+      ),
     ],
     unary_ops: [("!", fn(v) { @ast.BoolVal(!truthy(v)) })],
+    regex_cache: [],
+    regex_failed: [],
   }
 }
 
@@ -149,7 +168,60 @@ fn default_binary_ops() -> Array[(String, FnB)] {
     ("<", fn(a, b) { @ast.BoolVal(compare("<", a, b)) }),
     ("<=", fn(a, b) { @ast.BoolVal(compare("<=", a, b)) }),
     ("in", in_op),
+    ("..", range_op),
   ]
+}
+
+///|
+/// expr's `..` range: both bounds must be integers; the element count
+/// is charged against the step budget so `1..100000000` fails fast.
+fn range_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  let x = to_number(a)
+  let y = to_number(b)
+  if x != x.floor() || y != y.floor() || x != x || y != y {
+    raise EvalError::EvalErr("range bounds must be integers")
+  }
+  let lo = x.to_int()
+  let hi = y.to_int()
+  if hi - lo > 1000000 {
+    // Mirrors expr's DefaultMemoryBudget (1e6 elements).
+    raise EvalError::EvalErr("memory budget exceeded")
+  }
+  let out : Array[@ast.Value] = []
+  let mut i = lo
+  while i <= hi {
+    out.push(@ast.NumVal(i.to_double()))
+    i += 1
+  }
+  @ast.ArrayVal(out)
+}
+
+///|
+/// Cached regex match against a grammar's cache.
+fn grammar_regex_match(
+  g : Grammar,
+  s : String,
+  pattern : String,
+) -> Bool raise EvalError {
+  for pair in g.regex_cache {
+    let (p, re) = pair
+    if p == pattern {
+      return re.execute(s) is Some(_)
+    }
+  }
+  for p in g.regex_failed {
+    if p == pattern {
+      raise EvalError::EvalErr("invalid regex: " + pattern)
+    }
+  }
+  let re = @string.Regex::string(pattern) catch {
+    _ => {
+      g.regex_failed.push(pattern)
+      raise EvalError::EvalErr("invalid regex: " + pattern)
+    }
+  }
+  g.regex_cache.push((pattern, re))
+  re.execute(s) is Some(_)
 }
 
 ///|
@@ -161,7 +233,7 @@ fn default_binary_ops() -> Array[(String, FnB)] {
 /// coerces operands via ToPrimitive, and arrays/objects become
 /// strings ("1,2", "[object Object]"), so any array/object/string
 /// operand makes `+` a concatenation. Otherwise numeric addition.
-pub fn plus(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+pub fn plus(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   if concat_like(a) || concat_like(b) {
     @ast.StrVal(to_string(a) + to_string(b))
   } else {
@@ -178,53 +250,53 @@ fn concat_like(v : @ast.Value) -> Bool {
 }
 
 ///|
-fn minus(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn minus(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   @ast.NumVal(to_number(a) - to_number(b))
 }
 
 ///|
-fn times(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn times(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   @ast.NumVal(to_number(a) * to_number(b))
 }
 
 ///|
-fn divide(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn divide(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   @ast.NumVal(to_number(a) / to_number(b))
 }
 
 ///|
 /// JS `//` — Math.floor division.
-fn int_divide(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn int_divide(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   @ast.NumVal((to_number(a) / to_number(b)).floor())
 }
 
 ///|
 /// JS `%` — remainder with the sign of the dividend.
-fn rem(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn rem(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   @ast.NumVal(remainder(to_number(a), to_number(b)))
 }
 
 ///|
 /// JS `^` — Math.pow.
-fn power(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn power(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   @ast.NumVal(to_number(a).pow(to_number(b)))
 }
 
 ///|
 /// JS `==` / `!=` — loose equality.
-fn eq(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn eq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   @ast.BoolVal(loose_eq(a, b))
 }
 
 ///|
-fn neq(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn neq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   @ast.BoolVal(!loose_eq(a, b))
 }
 
 ///|
 /// JS `in`: substring check on strings, strict element match on arrays,
 /// false for anything else.
-fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value {
+fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   match b {
     @ast.StrVal(s) => @ast.BoolVal(index_of(s, to_string(a)) != -1)
     @ast.ArrayVal(xs) => {
@@ -540,6 +612,15 @@ fn Evaluator::eval_binary(
     None => {
       let l = self.eval(left)
       let r = self.eval(right)
+      if op == "matches" {
+        let pattern = match r {
+          @ast.StrVal(p) => p
+          _ => raise EvalError::EvalErr("matches: pattern must be a string")
+        }
+        return @ast.BoolVal(
+          grammar_regex_match(self.grammar, to_string(l), pattern),
+        )
+      }
       match find_bin(self.grammar.binary_ops, op) {
         Some(f) => f(l, r)
         None =>

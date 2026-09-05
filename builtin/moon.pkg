@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0
+// mbel builtin library — expr-style pure-computation builtins.
+// Predicate aggregates (all/filter/map/...) require the expr-language
+// front-end and are NOT included here.
+
+import {
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/evaluator",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}

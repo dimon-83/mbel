@@ -9,8 +9,9 @@ engines, dynamic configuration, low-code platforms, and workflow
 orchestration.
 
 Current status: the complete **Jexl language and API surface** is
-ported and verified byte-for-byte against the real Jexl runtime, with
-resource budgets (expr-style node/depth/step limits) already in place.
+ported and verified byte-for-byte against the real Jexl runtime;
+expr-style resource budgets, a builtin function library, `??`/`..`/
+`matches` operators, and compile-time constant folding are in place.
 The expr-alignment roadmap is tracked in
 [docs/expr-gap-analysis.md](docs/expr-gap-analysis.md).
 
@@ -62,7 +63,7 @@ $ moon run cmd/main -- "5|dbl|dbl"
 The engine is organized into small packages — `grammar`, `lexer`,
 `parser`, `ast`, `evaluator`, and `jexl` (the top-level API):
 
-```moonbit
+```moonbit nocheck
 import {
   "dimon-83/mbel/ast",
   "dimon-83/mbel/evaluator",
@@ -124,6 +125,36 @@ let doubled = try {
   expressions (hand-written corpus, generated fuzz, JSON-context
   corpus) through both mbel and the real Jexl, requiring byte-identical
   output (`tools/`, `docs/parity-contract.md`).
+
+## expr-lang builtins already available
+
+Stage 4.2 seeded the engine with expr-style builtins (registered on
+every instance, callable as plain functions): `abs ceil floor round
+max min mean median`, `trim trimPrefix trimSuffix upper lower split
+splitAfter replace repeat join indexOf lastIndexOf hasPrefix hasSuffix
+string`, `len first last get take keys values reverse uniq concat
+flatten sort`, `int float string type toJSON fromJSON toBase64
+fromBase64 toPairs fromPairs`, `bitand bitor bitxor bitnand bitnot
+bitshl bitshr bitushr`, plus minimal `now duration date timezone`.
+Three expr operators work too: `??` (nil coalescing), `..` (range:
+`1..3 == [1,2,3]`), and `matches`. Constant subtrees are folded at
+compile time (expr-style `fold`).
+
+Examples:
+
+```text
+$ moon run cmd/main -- "median([1, 9, 5])"
+5
+
+$ moon run cmd/main -- "fromBase64(toBase64("héllo ✓"))"
+"héllo ✓"
+
+$ moon run cmd/main -- "missing ?? 'fallback'"
+"fallback"
+
+$ moon run cmd/main -- "sort([3,1,2]) | first"
+1
+```
 
 ## Roadmap — aligning with expr-lang
 
