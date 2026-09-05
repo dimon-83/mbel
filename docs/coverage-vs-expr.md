@@ -57,7 +57,7 @@ Jexl API 26 / 预算 7 / builtin+运算符 16 / bench 8 / 稳定性 7)+ 与
 | 三元 ?: / Elvis ?: | ✅ | evaluator_test, corpus |
 | if/else 块 | ❌ | 4.4.2 |
 | let 声明 + ; 序列 | ❌ | 4.4.2 |
-| 谓词 lambda {#…} + #/#acc/#index/省略 # | ❌ | 4.4.2(谓词聚合前置) |
+| 谓词 {#…} + #/#acc/#index/省略 # | 🟡 | 省略花括号形式 `filter(xs, # > 2)` 与 `.field` 相对访问已实现(expr 兼容);`{...}` 花括号包裹形式待 parser 重写 |
 | 方法调用 foo.bar() | ❌ | 4.4.2(注册式宿主函数) |
 | $env | ❌ | 4.4.4 |
 | 成员/索引/动态键 | ✅ | parser_test, corpus |
@@ -73,7 +73,7 @@ Jexl API 26 / 预算 7 / builtin+运算符 16 / bench 8 / 稳定性 7)+ 与
 | 转换 9 | 🟡 9/9 实现 | type() 返回 "number"(无 int/float);toJSON NaN→null(expr 报错) |
 | 位运算 8 | ✅ 8/8 | Int64 语义 |
 | 时间 4 | 🟡 最小集 | now/duration/date(ISO)/timezone=UTC;无 time.Time 对象/方法/多 layout/时区库 |
-| 谓词聚合 15 | ❌ | all/none/any/one/filter/map/count/sum/find*/groupBy/sortBy/reduce — 依赖 4.4.2 谓词语法 |
+| 谓词聚合 15 | ✅ 15/15 | all/none/any/one/filter/map/count/sum/find*/groupBy/sortBy/reduce — 4.4.2 已交付(2026-09-06):# /#index/#acc 谓词指针、省略 # 的相对字段访问、谓词编译为子 Program+类型化槽位(双引擎对拍) |
 
 ## 5. 工程能力
 
