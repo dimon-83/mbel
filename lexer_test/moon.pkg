@@ -1,4 +1,4 @@
 import {
-  "mbel/lexer",
-  "mbel/grammar",
+  "dimon-83/mbel/lexer",
+  "dimon-83/mbel/grammar",
 }

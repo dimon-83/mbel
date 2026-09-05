@@ -6,5 +6,5 @@
 // collapses into plain direct evaluation.
 
 import {
-  "mbel/ast",
+  "dimon-83/mbel/ast",
 }

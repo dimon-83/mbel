@@ -7,7 +7,7 @@
 // and builds an AST using cursor-based tree construction.
 
 import {
-  "mbel/ast",
-  "mbel/grammar",
-  "mbel/lexer",
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/grammar",
+  "dimon-83/mbel/lexer",
 }

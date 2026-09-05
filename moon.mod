@@ -9,7 +9,7 @@
 //   "moonbitlang/x@0.4.6",
 // }
 
-name = "mbel"
+name = "dimon-83/mbel"
 
 version = "0.1.0"
 

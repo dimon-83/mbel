@@ -64,9 +64,9 @@ The engine is organized into small packages — `grammar`, `lexer`,
 
 ```moonbit
 import {
-  "mbel/ast",
-  "mbel/evaluator",
-  "mbel/jexl",
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/evaluator",
+  "dimon-83/mbel/jexl",
 }
 
 let inst = @jexl.new_jexl()
