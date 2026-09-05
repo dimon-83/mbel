@@ -6,5 +6,5 @@
 // collapses into plain direct evaluation.
 
 import {
-  "dexter/mbel/ast",
+  "mbel/ast",
 }

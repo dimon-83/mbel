@@ -1,7 +1,7 @@
 import {
-  "dexter/mbel/ast",
-  "dexter/mbel/evaluator",
-  "dexter/mbel/jexl",
+  "mbel/ast",
+  "mbel/evaluator",
+  "mbel/jexl",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }

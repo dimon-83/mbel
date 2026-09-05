@@ -1,4 +1,4 @@
 import {
-  "dexter/mbel/lexer",
-  "dexter/mbel/grammar",
+  "mbel/lexer",
+  "mbel/grammar",
 }

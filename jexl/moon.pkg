@@ -6,9 +6,9 @@
 // function pools.
 
 import {
-  "dexter/mbel/ast",
-  "dexter/mbel/evaluator",
-  "dexter/mbel/grammar",
-  "dexter/mbel/lexer",
-  "dexter/mbel/parser",
+  "mbel/ast",
+  "mbel/evaluator",
+  "mbel/grammar",
+  "mbel/lexer",
+  "mbel/parser",
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Blackbox tests for the jexl package.
 import {
-  "dexter/mbel/ast",
-  "dexter/mbel/evaluator",
-  "dexter/mbel/jexl",
+  "mbel/ast",
+  "mbel/evaluator",
+  "mbel/jexl",
 }

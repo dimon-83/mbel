@@ -9,7 +9,7 @@
 //   "moonbitlang/x@0.4.6",
 // }
 
-name = "dexter/mbel"
+name = "mbel"
 
 version = "0.1.0"
 

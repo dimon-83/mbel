@@ -7,7 +7,7 @@
 // and builds an AST using cursor-based tree construction.
 
 import {
-  "dexter/mbel/ast",
-  "dexter/mbel/grammar",
-  "dexter/mbel/lexer",
+  "mbel/ast",
+  "mbel/grammar",
+  "mbel/lexer",
 }
