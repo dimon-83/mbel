@@ -1090,3 +1090,92 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
     false => @ast.UndefVal
   }
 }
+
+///|
+/// Disassembles a compiled program into readable text, one instruction
+/// per line: `idx NAME operand  ; note`. Constants referenced by an
+/// operand are decoded where possible (strings, call/aggregate names,
+/// jump targets); compiled function references print as `<fn>`.
+pub fn disassemble(program : Program) -> String {
+  let names = [
+    "CONST", "LOADCTX", "LOADREL", "FETCH", "CALLBINFN", "CALLUNFN",
+    "MATCHES", "ANDJUMP", "ORJUMP", "COALESCE", "JUMP", "JUMPIFFALSE",
+    "ARRAY", "OBJECT", "CALLFUNC", "FILTERBEGIN", "FILTEREND",
+    "FILTERSTATIC", "LAZYBIN", "LOADSLOT", "CALLAGG", "SLICE",
+    "LOADLOCAL", "ADDLOCAL", "POPLOCAL", "ENV",
+  ]
+  let jumps = [7, 8, 9, 10, 11, 15, 16] // operand is a pc target
+  let out = StringBuilder::new()
+  for i in 0..<program.opcodes.length() {
+    let op = program.opcodes[i]
+    let operand = program.operands[i]
+    let name = if op >= 0 && op < names.length() {
+      names[op]
+    } else {
+      "OP?" + op.to_string()
+    }
+    out.write_string(i.to_string())
+    out.write_string("  ")
+    out.write_string(name)
+    if op != 25 { // ENV has no operand
+      out.write_string(" ")
+      out.write_string(operand.to_string())
+    }
+    let note = disasm_note(program, op, operand, jumps)
+    if note != "" {
+      out.write_string("  ; ")
+      out.write_string(note)
+    }
+    out.write_string("\n")
+  }
+  out.to_string()
+}
+
+///|
+fn disasm_note(
+  program : Program,
+  op : Int,
+  operand : Int,
+  jumps : Array[Int],
+) -> String {
+  if contains_int(jumps, op) {
+    return "-> " + operand.to_string()
+  }
+  if operand < 0 || operand >= program.consts.length() {
+    return ""
+  }
+  match (op, program.consts[operand]) {
+    // LOADCTX/LOADREL/FETCH/ADDLOCAL carry a name constant
+    (1, CVal(@ast.StrVal(s)))
+    | (2, CVal(@ast.StrVal(s)))
+    | (3, CVal(@ast.StrVal(s)))
+    | (23, CVal(@ast.StrVal(s))) => "\"" + s + "\""
+    (4, _) | (5, _) => "<fn>" // CALLBINFN/CALLUNFN
+    (0, CVal(v)) => to_string(v) // CONST literal
+    (13, CKeys(keys)) => {
+      let b = StringBuilder::new()
+      for k in keys {
+        b.write_string(k)
+        b.write_string(",")
+      }
+      b.to_string()
+    }
+    (14, CFunc(n, p, argc)) =>
+      n + "[" + p + "] argc=" + argc.to_string()
+    (20, CAgg(n, argc, pred)) =>
+      n + " argc=" + argc.to_string() +
+      (if pred is Some(_) { " pred" } else { "" })
+    (18, CRaise(msg)) => "raise: " + msg
+    (_, _) => ""
+  }
+}
+
+///|
+fn contains_int(xs : Array[Int], x : Int) -> Bool {
+  for v in xs {
+    if v == x {
+      return true
+    }
+  }
+  false
+}
