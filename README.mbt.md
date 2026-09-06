@@ -138,7 +138,7 @@ let walk_inst = @engine.new()
 @engine.Engine::set_engine(walk_inst, Walk)
 
 // Vm — compiles the (constant-folded) AST to bytecode once per
-// Expression, caches the program, and runs a 16-opcode stack machine
+// Expression, caches the program, and runs a 26-opcode stack machine
 let vm_inst = @engine.new()
 @engine.Engine::set_engine(vm_inst, Vm)
 
@@ -157,6 +157,33 @@ each `Expression` (re-evaluations skip compilation entirely);
 `FilterExpression` subtrees and manual-eval (lazy) operators are
 executed by tree-walk callbacks that share the step budget, so
 budgets behave identically on both engines.
+
+### Dialects and evaluation modes (stage 4.4.5)
+
+The engine separates the legacy Jexl dialect from the expr-lang
+front-end, and expr's two execution modes:
+
+- `Engine::eval(inst, src, ctx)` — **Jexl legacy dialect**: the
+  original Jexl grammar, JS dynamic semantics (numbers are doubles,
+  loose `==`, substring `in`), locked by the Jexl differential corpus
+  and the legacy test suites.
+- `Engine::eval_expr(inst, src, ctx)` — **expr-lang front end, Eval
+  mode** (expr's `expr.Eval`): full expr syntax, typed runtime
+  semantics — integer literals and integer arithmetic are typed
+  `IntVal` (int64, Go wrap), `/` is always float division
+  (`7/2 = 3.5`, `1/0 = +Inf`), `%` is integer-only, cross-kind
+  comparisons/`+` raise `invalid operation: ...` at runtime. No
+  static checks, exactly like expr's Eval.
+- `Engine::eval_expr_checked(inst, src, ctx)` — **expr front end,
+  Compile mode** (expr's `expr.Compile`): runs the stage-4.4.4
+  phase-1 checker first; statically-known type violations surface
+  expr's compile-mode messages (`invalid operation: + (mismatched
+  types int and string)`, `non-bool expression (type int) used as
+  condition`).
+
+All three entries run on either engine (Walk or Vm) with identical
+results, and all honor `set_limits` budgets (the expr front end
+applies `max_nodes` at parse time).
 
 ## Current capabilities (Jexl parity)
 

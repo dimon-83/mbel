@@ -176,9 +176,13 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    与 eval_expr 的 Eval 模式对齐 expr 的 Eval/Compile 双模式)。剩余
    (阶段 2):数组/Map 元素类型与内置泛型特判(含 let 作用域类型)、env
    白名单/严格-宽松、带 `行:列` 位置的错误(需 AST 位置化重构)。
-5. **4.4.5 语义切换(4-6d)**:新顶层 `mbel::expr` API(Compile/Run/Eval + Options
-   对齐:expr.Env→数据 Value、Optimize、MaxNodes、AsBool…);Jexl+JS 语义层降级
-   为 legacy 包(104 测试锁定)。
+5. **🟡 4.4.5 语义切换——API 已定型并锁定(2026-09-06)**:三入口文档化——
+   `Engine::eval`(Jexl legacy 方言,JS 动态语义,差分 corpus+legacy 套件锁定)、
+   `Engine::eval_expr`(expr 前端 **Eval 模式**:类型化运行时,无静态检查)、
+   `Engine::eval_expr_checked`(expr 前端 **Compile 模式**:4.4.4 阶段 1 checker
+   先行);均可在 Walk/Vm 上执行且受预算约束;README「Dialects and evaluation
+   modes」+ 本表 §3/§4/§5 行同步。剩余:legacy 包物理拆分(独立 moon.pkg,104
+   测试随迁)、Options 对齐(env 白名单、AsBool 等,checker 阶段 2 后)。
 6. **✅ 已交付(4.4.2,2026-09-06)**:谓词聚合 15——filter/map/all/… 与
    groupBy/sortBy/reduce 已以共享驱动+注入 runner 交付(tree-walk 每元素
    求值器 / VM 子 Program+单子 VM 复用),见 §4 行与 §7 实测。
