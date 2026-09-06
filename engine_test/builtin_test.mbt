@@ -65,9 +65,9 @@ test "string builtins follow expr semantics" {
   expect_v("replace(\"aXbXc\", \"X\", \"-\")", @ast.StrVal("a-b-c"), "replace")
   expect_v("repeat(\"ab\", 3)", @ast.StrVal("ababab"), "repeat")
   expect_v("join([\"a\",\"b\",\"c\"], \"-\")", @ast.StrVal("a-b-c"), "join")
-  expect_v("indexOf(\"hello\", \"ll\")", @ast.NumVal(2.0), "indexOf")
-  expect_v("indexOf(\"hello\", \"z\")", @ast.NumVal(-1.0), "indexOf miss")
-  expect_v("lastIndexOf(\"aXbX\", \"X\")", @ast.NumVal(3.0), "lastIndexOf")
+  expect_v("indexOf(\"hello\", \"ll\")", @ast.IntVal(2L), "indexOf")
+  expect_v("indexOf(\"hello\", \"z\")", @ast.IntVal(-1L), "indexOf miss")
+  expect_v("lastIndexOf(\"aXbX\", \"X\")", @ast.IntVal(3L), "lastIndexOf")
   expect_v("hasPrefix(\"foobar\", \"foo\")", @ast.BoolVal(true), "hasPrefix")
   expect_v("hasSuffix(\"foobar\", \"baz\")", @ast.BoolVal(false), "hasSuffix")
   expect_v("string(42)", @ast.StrVal("42"), "string")
@@ -82,9 +82,9 @@ test "repeat rejects oversized counts" {
 
 ///|
 test "collection builtins follow expr semantics" {
-  expect_v("len(\"hello\")", @ast.NumVal(5.0), "len str")
-  expect_v("len([1,2,3])", @ast.NumVal(3.0), "len arr")
-  expect_v("len({a:1,b:2})", @ast.NumVal(2.0), "len map")
+  expect_v("len(\"hello\")", @ast.IntVal(5L), "len str")
+  expect_v("len([1,2,3])", @ast.IntVal(3L), "len arr")
+  expect_v("len({a:1,b:2})", @ast.IntVal(2L), "len map")
   expect_v("first([7,8])", @ast.NumVal(7.0), "first")
   expect_v("first([])", @ast.NullVal, "first empty")
   expect_v("last([7,8])", @ast.NumVal(8.0), "last")
@@ -147,9 +147,9 @@ test "collection builtins follow expr semantics" {
 
 ///|
 test "conversion builtins follow expr semantics" {
-  expect_v("int(3.9)", @ast.NumVal(3.0), "int trunc")
-  expect_v("int(-3.9)", @ast.NumVal(-3.0), "int trunc neg")
-  expect_v("int(\"42\")", @ast.NumVal(42.0), "int str")
+  expect_v("int(3.9)", @ast.IntVal(3L), "int trunc")
+  expect_v("int(-3.9)", @ast.IntVal(-3L), "int trunc neg")
+  expect_v("int(\"42\")", @ast.IntVal(42L), "int str")
   expect_v("float(2)", @ast.NumVal(2.0), "float")
   expect_v("type(\"x\")", @ast.StrVal("string"), "type str")
   expect_v("type(1)", @ast.StrVal("number"), "type num")
@@ -249,7 +249,7 @@ test "nil coalescing operator" {
 ///|
 test "range operator" {
   expect_v("1..3 == [1,2,3]", @ast.BoolVal(true), "range equals")
-  expect_v("len(1..10)", @ast.NumVal(10.0), "range len")
+  expect_v("len(1..10)", @ast.IntVal(10L), "range len")
   expect_v("5..5", @ast.ArrayVal([@ast.NumVal(5.0)]), "single range")
   expect_err("1.5..3", "integers", "range must be ints")
 }

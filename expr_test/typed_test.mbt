@@ -91,7 +91,7 @@ test "typed: type() and ranges report integers" {
   expect_typed("type(5)", "str:int", "type of int")
   expect_typed("type(5.0)", "str:number", "float still number (legacy name)")
   expect_typed("type(5 + 2)", "str:int", "type of int sum")
-  expect_typed("len(1..5)", "float:5", "range len")
+  expect_typed("len(1..5)", "int:5", "range len")
   let i = @engine.new()
   let r = @engine.Engine::eval_expr(i, "1..3", @ast.ObjectVal([])) catch {
     @engine.EngineErr(m) => abort("range: " + m)
@@ -108,4 +108,31 @@ test "typed: type() and ranges report integers" {
     }
     _ => inspect("bad", content="array")
   }
+}
+
+///|
+test "typed: builtin returns follow expr (len/int/index/count/sum/abs/min/max)" {
+  expect_typed("abs(-5)", "int:5", "abs int")
+  expect_typed("min(3, 1, 2)", "int:1", "min ints")
+  expect_typed("max([1, 5, 3])", "int:5", "max int array")
+  expect_typed("sum(1..5)", "int:15", "sum int range")
+  expect_typed("count(1..5)", "int:5", "count")
+  expect_typed("len(\"hello\")", "int:5", "len")
+  expect_typed("indexOf(\"hello\", \"ll\")", "int:2", "indexOf")
+  expect_typed("int(3.9)", "int:3", "int truncates")
+  expect_typed("int(-3.9)", "int:-3", "int truncates neg")
+  expect_typed("min(3, 1.5)", "float:1.5", "min mixed promotes float")
+  // legacy lock: builtin_test still covers NumVal inputs (sum over a
+  // float ctx stays float there)
+}
+
+///|
+test "typed: toJSON emits exact int64 digits" {
+  expect_typed(
+    "toJSON(9223372036854775807)", "str:9223372036854775807", "exact max int64",
+  )
+  expect_typed(
+    "toJSON([1, 9223372036854775807])", "str:[1,9223372036854775807]", "nested exact int64",
+  )
+  expect_typed("toJSON(1.5 + 1)", "str:2.5", "float json ok")
 }

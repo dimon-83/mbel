@@ -77,7 +77,159 @@ pub fn Engine::eval_expr_checked(
     @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
   }
   match node {
-    Some(n) => self.eval_ast(n, ctx)
+    Some(n) => {
+      // Compile-mode env check: identifiers must resolve (ctx keys,
+      // registered pools, or let bindings) — expr "unknown name".
+      strict_names(n, ctx, self.grammar, [])
+      self.eval_ast(n, ctx)
+    }
     None => raise EngineError::EngineErr("Cannot evaluate an empty expression")
   }
+}
+
+///|
+/// expr's compile-mode "unknown name" check for data environments:
+/// every top-level identifier must resolve to a context key, a
+/// registered function/transform/aggregate, or a lexical let binding.
+/// Member names (drill-downs) and relative identifiers are exempt.
+fn strict_names(
+  node : @ast.AstNode,
+  ctx : @ast.Value,
+  g : @evaluator.Grammar,
+  scope : Array[String],
+) -> Unit raise EngineError {
+  // let bindings: validate the value, then the name is in scope
+  if node.node_type is @ast.VariableDeclaratorNode {
+    if node.args.length() > 0 {
+      strict_names(node.args[0], ctx, g, scope)
+    }
+    return
+  }
+  // sequences thread the scope through their items
+  if node.node_type is @ast.SequenceNode {
+    let s2 = scope.copy()
+    for item in node.args {
+      if item.node_type is @ast.VariableDeclaratorNode {
+        if item.args.length() > 0 {
+          strict_names(item.args[0], ctx, g, s2)
+        }
+        s2.push(item.ident_name)
+      } else {
+        strict_names(item, ctx, g, s2)
+      }
+    }
+    return
+  }
+  if node.node_type is @ast.IdentifierNode {
+    if node.from is None && !node.relative && node.ident_name != "$env" {
+      let name = node.ident_name
+      if !in_array(scope, name) && !ctx_has_key(ctx, name) && !pool_has(g, name) {
+        raise EngineError::EngineErr("unknown name " + name)
+      }
+    }
+    return
+  }
+  walk_children(node, ctx, g, scope)
+}
+
+///|
+fn walk_children(
+  node : @ast.AstNode,
+  ctx : @ast.Value,
+  g : @evaluator.Grammar,
+  scope : Array[String],
+) -> Unit raise EngineError {
+  match node.left {
+    Some(l) => strict_names(l, ctx, g, scope)
+    None => ()
+  }
+  match node.right {
+    Some(r) => strict_names(r, ctx, g, scope)
+    None => ()
+  }
+  match node.cond_test {
+    Some(t) => strict_names(t, ctx, g, scope)
+    None => ()
+  }
+  match node.consequent {
+    Some(c) => strict_names(c, ctx, g, scope)
+    None => ()
+  }
+  match node.alternate {
+    Some(a) => strict_names(a, ctx, g, scope)
+    None => ()
+  }
+  match node.subject {
+    Some(x) => strict_names(x, ctx, g, scope)
+    None => ()
+  }
+  match node.filter_expr {
+    Some(x) => strict_names(x, ctx, g, scope)
+    None => ()
+  }
+  match node.from {
+    Some(x) => strict_names(x, ctx, g, scope)
+    None => ()
+  }
+  match node.slice_from {
+    Some(x) => strict_names(x, ctx, g, scope)
+    None => ()
+  }
+  match node.slice_to {
+    Some(x) => strict_names(x, ctx, g, scope)
+    None => ()
+  }
+  for x in node.array_value {
+    strict_names(x, ctx, g, scope)
+  }
+  for kv in node.obj_value {
+    let (_, v) = kv
+    strict_names(v, ctx, g, scope)
+  }
+  for x in node.args {
+    strict_names(x, ctx, g, scope)
+  }
+}
+
+///|
+fn in_array(xs : Array[String], x : String) -> Bool {
+  for v in xs {
+    if v == x {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn ctx_has_key(ctx : @ast.Value, name : String) -> Bool {
+  match ctx {
+    @ast.ObjectVal(pairs) => {
+      for kv in pairs {
+        let (k, _) = kv
+        if k == name {
+          return true
+        }
+      }
+      false
+    }
+    _ => false
+  }
+}
+
+///|
+fn pool_has(g : @evaluator.Grammar, name : String) -> Bool {
+  for entry in g.functions {
+    let (n, _) = entry
+    if n == name {
+      return true
+    }
+  }
+  for entry in g.transforms {
+    let (n, _) = entry
+    if n == name {
+      return true
+    }
+  }
+  @grammar.is_aggregate(name)
 }

@@ -167,10 +167,10 @@ test "expr eval: predicates through braces and bare form" {
     ]),
     "relative field",
   )
-  expect_eval("count(nums, # > 2)", @ast.NumVal(3.0), "count")
+  expect_eval("count(nums, # > 2)", @ast.IntVal(3L), "count")
   expect_eval("sum(nums, # * #)", @ast.NumVal(55.0), "sum squares")
   expect_eval("reduce(nums, #acc + #)", @ast.NumVal(15.0), "reduce")
-  expect_eval("findIndex(nums, # == 4)", @ast.NumVal(3.0), "findIndex")
+  expect_eval("findIndex(nums, # == 4)", @ast.IntVal(3L), "findIndex")
 }
 
 ///|
@@ -185,7 +185,7 @@ test "expr eval: unknown pointer suffix is a compile error" {
 ///|
 test "expr eval: aggregates inside range and nested" {
   expect_eval("sum(1..100)", @ast.NumVal(5050.0), "sum range")
-  expect_eval("count(filter(nums, # > 2))", @ast.NumVal(3.0), "count filter")
+  expect_eval("count(filter(nums, # > 2))", @ast.IntVal(3L), "count filter")
 }
 
 // --- stage 4.4.1/4.4.2 evaluation: sequences, let, slices, $env ---
@@ -313,7 +313,7 @@ test "expr eval: $env and member/index on it" {
     @ast.BoolVal(true),
     "key in $env via keys",
   )
-  expect_eval("len($env)", @ast.NumVal(5.0), "len of $env")
+  expect_eval("len($env)", @ast.IntVal(5L), "len of $env")
 }
 
 ///|

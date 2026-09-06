@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
-// mbel expr package — static checker (stage 4.4.4, phase 1).
+// mbel expr package — static checker (stage 4.4.4).
 //
 // expr-lang has two execution modes: `Eval` (parser + compiler only,
 // no type checking — runtime panics on kind mismatches) and `Compile`
 // (checker runs first, type errors surface as compile errors). mbel's
 // `eval_expr` mirrors the Eval mode and stays untouched; this checker
 // mirrors the Compile mode and is wired into the strict entry points
-// (`check_expr`, `compile_expr_checked_*`, `Engine::eval_expr_checked`).
+// (`compile_expr_checked_*`, `Engine::eval_expr_checked`).
 //
-// Phase 1 scope (per the review roadmap): basic operator type rules on
-// statically-known operand natures (literals and their propagation),
-// with expr's compile-mode error messages. Full Nature inference over
-// containers/functions and env whitelists is phase 2.
+// Scope: operator type rules on statically-known operand natures
+// (literals, their propagation, let bindings, homogeneous container
+// elements), plus static argument checks for the core builtins. Error
+// messages follow expr's compile-mode wording. Env values, dynamic
+// members and heterogeneous containers stay unknown/legal.
 
 ///|
 pub(all) suberror CheckError {
@@ -27,6 +28,9 @@ pub(all) enum Nature {
   StringN
   BoolN
   NilN
+  // homogeneous containers: element nature known
+  ArrN(Nature)
+  MapN(Nature)
   UnknownN
 } derive(Eq, Debug)
 
@@ -39,82 +43,131 @@ pub fn nature_name(n : Nature) -> String {
     StringN => "string"
     BoolN => "bool"
     NilN => "nil"
+    ArrN(t) => "[]" + nature_name(t)
+    MapN(t) => "map[" + nature_name(t) + "]"
     UnknownN => "dynamic"
   }
 }
 
 ///|
-fn is_number(n : Nature) -> Bool {
-  n is IntN || n is FloatN
+fn known(n : Nature) -> Bool {
+  match n {
+    UnknownN => false
+    ArrN(UnknownN) | MapN(UnknownN) => false
+    _ => true
+  }
 }
+
+///|
+type Scope = Array[(String, Nature)]
 
 ///|
 /// Type-checks a parsed expr AST. Raises CheckError on the first
 /// violation with expr's compile-mode message wording.
 pub fn check(n : ENode) -> Unit raise CheckError {
-  ignore(infer(n))
+  ignore(infer(n, []))
 }
 
 ///|
-/// Infers the static nature of a node, checking its children.
-fn infer(n : ENode) -> Nature raise CheckError {
+fn scope_get(scope : Scope, name : String) -> Nature? {
+  let mut i = scope.length() - 1
+  while i >= 0 {
+    let (n, t) = scope[i]
+    if n == name {
+      return Some(t)
+    }
+    i -= 1
+  }
+  None
+}
+
+///|
+/// Infers the static nature of a node under a let scope.
+fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
   match n {
     ENil => NilN
     EBool(_) => BoolN
     EInt(_) => IntN
     EFloat(_) => FloatN
     EStr(_) | EBytes(_) => StringN
-    EIdent(_) => UnknownN
+    EIdent(name) =>
+      match scope_get(scope, name) {
+        Some(t) => t
+        None => UnknownN
+      }
     EPointer(_) => UnknownN
     EMember(base, _, _) => {
-      ignore(infer(base))
+      ignore(infer(base, scope))
       UnknownN
     }
     EIndex(base, idx) => {
-      ignore(infer(base))
-      ignore(infer(idx))
+      ignore(infer(base, scope))
+      ignore(infer(idx, scope))
       UnknownN
     }
     ESlice(base, f, t) => {
-      ignore(infer(base))
+      ignore(infer(base, scope))
       match f {
-        Some(x) => ignore(infer(x))
+        Some(x) => ignore(infer(x, scope))
         None => ()
       }
       match t {
-        Some(x) => ignore(infer(x))
+        Some(x) => ignore(infer(x, scope))
         None => ()
       }
       UnknownN
     }
     EArray(items) => {
+      let mut elem = UnknownN
+      let mut first = true
       for x in items {
-        ignore(infer(x))
+        let t = infer(x, scope)
+        if first {
+          elem = t
+          first = false
+        } else if elem != t {
+          elem = UnknownN
+        }
       }
-      UnknownN
+      ArrN(elem)
     }
     EMap(pairs) => {
+      let mut vt = UnknownN
+      let mut first = true
       for kv in pairs {
-        let (k, v) = kv
-        ignore(infer(k))
-        ignore(infer(v))
+        let (_, v) = kv
+        let t = infer(v, scope)
+        if first {
+          vt = t
+          first = false
+        } else if vt != t {
+          vt = UnknownN
+        }
       }
-      UnknownN
+      MapN(vt)
     }
     ECall(callee, args) => {
-      ignore(infer(callee))
+      let callee_name = match callee {
+        EIdent(f) => f
+        _ => ""
+      }
+      // static argument checks for the core builtins (expr messages)
+      if callee_name != "" && args.length() > 0 {
+        let arg0 = infer(args[0], scope)
+        check_builtin_arg(callee_name, arg0)
+      }
+      ignore(infer(callee, scope))
       for a in args {
-        ignore(infer(a))
+        ignore(infer(a, scope))
       }
       UnknownN
     }
-    EPred(inner) => infer(inner)
+    EPred(inner) => infer(inner, scope)
     EUnary(op, x) => {
-      let t = infer(x)
+      let t = infer(x, scope)
       match op {
         "not" | "!" =>
           match t {
-            // expr requires boolean operands for !/not when known
             BoolN | UnknownN => BoolN
             other =>
               raise CheckError::CheckErr(
@@ -137,9 +190,9 @@ fn infer(n : ENode) -> Nature raise CheckError {
         _ => UnknownN
       }
     }
-    EBinary(op, l, r) => check_binary(op, l, r)
+    EBinary(op, l, r) => check_binary(op, l, r, scope)
     ECond(t, c, a) => {
-      let tt = infer(t)
+      let tt = infer(t, scope)
       match tt {
         BoolN | UnknownN => ()
         other =>
@@ -150,27 +203,37 @@ fn infer(n : ENode) -> Nature raise CheckError {
           )
       }
       match c {
-        Some(x) => ignore(infer(x))
+        Some(x) => ignore(infer(x, scope))
         None => ()
       }
       match a {
-        Some(x) => ignore(infer(x))
+        Some(x) => ignore(infer(x, scope))
         None => ()
       }
       UnknownN
     }
     ELet(name, v, rest) => {
-      ignore(infer(v))
-      // let bindings get the inferred nature of their initializer
-      // (phase 2 adds a scope; phase 1 re-infers identifiers as
-      // dynamic, so name uses are not statically typed yet)
-      ignore(name)
-      infer(rest)
+      let vt = infer(v, scope)
+      // shadowing replaces the binding (Eval-mode lets redeclare)
+      let scope2 = scope.copy()
+      let mut replaced = false
+      for i in 0..<scope2.length() {
+        let (n, _) = scope2[i]
+        if n == name {
+          scope2[i] = (name, vt)
+          replaced = true
+        }
+      }
+      if !replaced {
+        scope2.push((name, vt))
+      }
+      infer(rest, scope2)
     }
     ESeq(items) => {
       let mut last = UnknownN
       for x in items {
-        last = infer(x)
+        // each item is self-contained: parse_let wraps its whole rest
+        last = infer(x, scope)
       }
       last
     }
@@ -178,103 +241,167 @@ fn infer(n : ENode) -> Nature raise CheckError {
 }
 
 ///|
-fn check_binary(op : String, l : ENode, r : ENode) -> Nature raise CheckError {
-  let lt = infer(l)
-  let rt = infer(r)
+/// Static argument checks for the core builtins (expr compile-mode
+/// messages).
+fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
+  match name {
+    "len" =>
+      match t {
+        StringN | ArrN(_) | MapN(_) | UnknownN => ()
+        other =>
+          raise CheckError::CheckErr(
+            "invalid argument for len (type " + nature_name(other) + ")",
+          )
+      }
+    "int" =>
+      match t {
+        IntN | FloatN | StringN | UnknownN => ()
+        other =>
+          raise CheckError::CheckErr(
+            "invalid argument for int (type " + nature_name(other) + ")",
+          )
+      }
+    "float" =>
+      match t {
+        IntN | FloatN | StringN | UnknownN => ()
+        other =>
+          raise CheckError::CheckErr(
+            "invalid argument for float (type " + nature_name(other) + ")",
+          )
+      }
+    "abs" | "ceil" | "floor" | "round" =>
+      match t {
+        IntN | FloatN | UnknownN => ()
+        other =>
+          raise CheckError::CheckErr(
+            "invalid argument for " +
+            name +
+            " (type " +
+            nature_name(other) +
+            ")",
+          )
+      }
+    "upper" | "lower" | "trim" | "repeat" | "indexOf" | "lastIndexOf" =>
+      match t {
+        StringN | UnknownN => ()
+        other =>
+          raise CheckError::CheckErr(
+            "invalid argument for " +
+            name +
+            " (type " +
+            nature_name(other) +
+            ")",
+          )
+      }
+    "filter"
+    | "map"
+    | "all"
+    | "any"
+    | "none"
+    | "one"
+    | "count"
+    | "sum"
+    | "find"
+    | "findIndex"
+    | "findLast"
+    | "findLastIndex"
+    | "groupBy"
+    | "sortBy"
+    | "reduce" =>
+      match t {
+        ArrN(_) | UnknownN => ()
+        other =>
+          raise CheckError::CheckErr(
+            "invalid argument for " +
+            name +
+            " (type " +
+            nature_name(other) +
+            ")",
+          )
+      }
+    _ => ()
+  }
+}
+
+///|
+fn check_binary(
+  op : String,
+  l : ENode,
+  r : ENode,
+  scope : Scope,
+) -> Nature raise CheckError {
+  let lt = infer(l, scope)
+  let rt = infer(r, scope)
   let lname = nature_name(lt)
   let rname = nature_name(rt)
+  fn mismatch() -> CheckError {
+    CheckError::CheckErr(
+      "invalid operation: " +
+      op +
+      " (mismatched types " +
+      lname +
+      " and " +
+      rname +
+      ")",
+    )
+  }
   match op {
     "+" =>
       match (lt, rt) {
         (IntN, IntN) => IntN
         (IntN, FloatN) | (FloatN, IntN) | (FloatN, FloatN) => FloatN
         (StringN, StringN) => StringN
-        // dynamic sides may resolve at runtime; known mismatches error
-        (UnknownN, _) | (_, UnknownN) => UnknownN
         (NilN, NilN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: + (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        (UnknownN, _) | (_, UnknownN) => UnknownN
+        _ => raise mismatch()
       }
     "-" | "*" =>
       match (lt, rt) {
         (IntN, IntN) => IntN
         (IntN, FloatN) | (FloatN, IntN) | (FloatN, FloatN) => FloatN
         (UnknownN, _) | (_, UnknownN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: " +
-            op +
-            " (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        _ => raise mismatch()
       }
     "/" =>
       match (lt, rt) {
         (IntN, IntN) | (IntN, FloatN) | (FloatN, IntN) | (FloatN, FloatN) =>
           FloatN
         (UnknownN, _) | (_, UnknownN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: / (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        _ => raise mismatch()
       }
     "%" =>
       match (lt, rt) {
         (IntN, IntN) => IntN
         (UnknownN, _) | (_, UnknownN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: % (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        _ => raise mismatch()
       }
     ".." =>
       match (lt, rt) {
         (IntN, IntN) => UnknownN
         (UnknownN, _) | (_, UnknownN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: .. (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        _ => raise mismatch()
       }
     "==" | "!=" =>
       match (lt, rt) {
-        // numerics mix; nil compares with anything; strings with strings
         (IntN, IntN) | (IntN, FloatN) | (FloatN, IntN) | (FloatN, FloatN) =>
           BoolN
         (StringN, StringN) | (BoolN, BoolN) | (NilN, NilN) => BoolN
         (NilN, _) | (_, NilN) => BoolN
+        // arrays are value-comparable when their element natures match
+        (ArrN(a), ArrN(b)) =>
+          if a == b || !known(a) || !known(b) {
+            BoolN
+          } else {
+            raise mismatch()
+          }
+        (MapN(a), MapN(b)) =>
+          if a == b || !known(a) || !known(b) {
+            BoolN
+          } else {
+            raise mismatch()
+          }
         (UnknownN, _) | (_, UnknownN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: " +
-            op +
-            " (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        _ => raise mismatch()
       }
     "<" | ">" | "<=" | ">=" =>
       match (lt, rt) {
@@ -282,47 +409,20 @@ fn check_binary(op : String, l : ENode, r : ENode) -> Nature raise CheckError {
           BoolN
         (StringN, StringN) => BoolN
         (UnknownN, _) | (_, UnknownN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: " +
-            op +
-            " (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        _ => raise mismatch()
       }
     "&&" | "||" | "and" | "or" =>
       match (lt, rt) {
         (BoolN, BoolN) => BoolN
         (UnknownN, _) | (_, UnknownN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: " +
-            op +
-            " (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        _ => raise mismatch()
       }
     "**" | "^" =>
       match (lt, rt) {
         (IntN, IntN) | (IntN, FloatN) | (FloatN, IntN) | (FloatN, FloatN) =>
           FloatN
         (UnknownN, _) | (_, UnknownN) => UnknownN
-        _ =>
-          raise CheckError::CheckErr(
-            "invalid operation: " +
-            op +
-            " (mismatched types " +
-            lname +
-            " and " +
-            rname +
-            ")",
-          )
+        _ => raise mismatch()
       }
     "in" | "matches" | "contains" | "startsWith" | "endsWith" => UnknownN
     "??" => UnknownN

@@ -154,9 +154,9 @@ test "predicate: all/any/none/one" {
 
 ///|
 test "predicate: count and sum" {
-  expect_agg("count(nums)", @ast.NumVal(5.0), "count no pred")
-  expect_agg("count(nums, # > 2)", @ast.NumVal(3.0), "count pred")
-  expect_agg("count(users, .age >= 18)", @ast.NumVal(3.0), "count users")
+  expect_agg("count(nums)", @ast.IntVal(5L), "count no pred")
+  expect_agg("count(nums, # > 2)", @ast.IntVal(3L), "count pred")
+  expect_agg("count(users, .age >= 18)", @ast.IntVal(3L), "count users")
   expect_agg("sum(nums)", @ast.NumVal(15.0), "sum no pred")
   expect_agg("sum(nums, # * 2)", @ast.NumVal(30.0), "sum pred")
 }
@@ -167,9 +167,9 @@ test "predicate: count and sum" {
 test "predicate: find/findIndex/findLast/findLastIndex" {
   expect_agg("find(nums, # > 2)", @ast.NumVal(3.0), "find")
   expect_agg("find(nums, # > 9)", @ast.NullVal, "find miss")
-  expect_agg("findIndex(nums, # > 2)", @ast.NumVal(2.0), "findIndex")
+  expect_agg("findIndex(nums, # > 2)", @ast.IntVal(2L), "findIndex")
   expect_agg("findLast(nums, # > 2)", @ast.NumVal(5.0), "findLast")
-  expect_agg("findLastIndex(nums, # > 2)", @ast.NumVal(4.0), "findLastIndex")
+  expect_agg("findLastIndex(nums, # > 2)", @ast.IntVal(4L), "findLastIndex")
 }
 
 // --- groupBy / sortBy ---
@@ -218,7 +218,7 @@ test "predicate: nested aggregates and ranges" {
     @ast.ArrayVal([@ast.NumVal(3.0), @ast.NumVal(6.0), @ast.NumVal(9.0)]),
     "filter range",
   )
-  expect_agg("count(filter(nums, # > 2))", @ast.NumVal(3.0), "count of filter")
+  expect_agg("count(filter(nums, # > 2))", @ast.IntVal(3L), "count of filter")
   expect_agg("sum(map(nums, # * #))", @ast.NumVal(55.0), "sum of squares")
   expect_agg(
     "all(users, any([], # > 0))",

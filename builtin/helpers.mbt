@@ -29,6 +29,7 @@ fn to_number_checked(
 ) -> Double raise @evaluator.EvalError {
   match v {
     @ast.NumVal(d) => d
+    @ast.IntVal(i) => i.to_double()
     @ast.BoolVal(b) => if b { 1.0 } else { 0.0 }
     @ast.StrVal(s) =>
       match str_to_number_opt(s) {
@@ -355,4 +356,120 @@ pub fn parse_iso_date(s : String) -> Int64? {
     ms = ms + (hh * 3600000 + mm * 60000 + ss * 1000).to_int64()
   }
   Some(ms)
+}
+
+///|
+/// Args as values, flattening a single array argument (max/min forms).
+pub fn flat_values(args : Array[@ast.Value]) -> Array[@ast.Value] {
+  if args.length() == 1 {
+    match args[0] {
+      @ast.ArrayVal(xs) => xs
+      _ => args
+    }
+  } else {
+    args
+  }
+}
+
+///|
+/// Whether every value is a typed integer.
+pub fn all_ints(vs : Array[@ast.Value]) -> Bool {
+  if vs.length() == 0 {
+    return false
+  }
+  for v in vs {
+    match v {
+      @ast.IntVal(_) => ()
+      _ => return false
+    }
+  }
+  true
+}
+
+///|
+/// JSON text writer used by the toJSON builtin. Replaces the Json-tree
+/// path so typed integers serialize with EXACT int64 digits (expr uses
+/// Go's json.Marshal; Json::number would round beyond 2^53). Object
+/// keys keep insertion order; strings escape `"` `\` and control
+/// chars; NaN/Infinity become null (Jexl parity, per the review).
+pub fn to_json_string(v : @ast.Value) -> String {
+  let b = StringBuilder::new()
+  write_json(b, v)
+  b.to_string()
+}
+
+///|
+fn write_json(b : StringBuilder, v : @ast.Value) -> Unit {
+  match v {
+    @ast.BoolVal(x) => b.write_string(if x { "true" } else { "false" })
+    @ast.NullVal | @ast.UndefVal => b.write_string("null")
+    @ast.NumVal(d) =>
+      if d != d || d == 1.0 / 0.0 || d == -1.0 / 0.0 {
+        b.write_string("null")
+      } else {
+        b.write_string(d.to_string())
+      }
+    @ast.IntVal(i) => b.write_string(i.to_string())
+    @ast.StrVal(s) => {
+      b.write_string("\"")
+      write_json_string(b, s)
+      b.write_string("\"")
+    }
+    @ast.ArrayVal(xs) => {
+      b.write_string("[")
+      for i in 0..<xs.length() {
+        if i > 0 {
+          b.write_string(",")
+        }
+        write_json(b, xs[i])
+      }
+      b.write_string("]")
+    }
+    @ast.ObjectVal(pairs) => {
+      b.write_string("{")
+      for i in 0..<pairs.length() {
+        let (k, val) = pairs[i]
+        if i > 0 {
+          b.write_string(",")
+        }
+        b.write_string("\"")
+        write_json_string(b, k)
+        b.write_string("\":")
+        write_json(b, val)
+      }
+      b.write_string("}")
+    }
+  }
+}
+
+///|
+fn write_json_string(b : StringBuilder, s : String) -> Unit {
+  for c in s {
+    let u = c.to_int()
+    match c {
+      '"' => b.write_string("\\\"")
+      '\\' => b.write_string("\\\\")
+      '\n' => b.write_string("\\n")
+      '\r' => b.write_string("\\r")
+      '\t' => b.write_string("\\t")
+      _ =>
+        if u < 0x20 {
+          b.write_string("\\u00" + hex2(u))
+        } else {
+          b.write_char(c)
+        }
+    }
+  }
+}
+
+///|
+fn hex2(u : Int) -> String {
+  let hex_c = fn(x : Int) -> Char {
+    if x < 10 {
+      ('0'.to_int() + x).unsafe_to_char()
+    } else {
+      ('a'.to_int() + x - 10).unsafe_to_char()
+    }
+  }
+  String::from_array([hex_c((u >> 4) & 0xF), hex_c(u & 0xF)])
 }

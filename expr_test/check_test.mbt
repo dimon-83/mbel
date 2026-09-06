@@ -104,3 +104,51 @@ test "checker: dynamic sides stay legal (Eval-mode flexibility)" {
   expect_checked("x + 1", "4", "env int + literal")
   expect_checked("x == \"3\"", "true", "loose env comparison remains")
 }
+
+///|
+test "checker: let bindings are statically typed in scope" {
+  expect_checked(
+    "let x = 1; x + \"a\"", "ERR:invalid operation: + (mismatched types int and string)",
+    "let int then string",
+  )
+  expect_checked("let x = 1; x * 3", "3", "let int arithmetic")
+  expect_checked(
+    "let s = \"a\"; s + 1", "ERR:invalid operation: + (mismatched types string and int)",
+    "let string then int",
+  )
+  // shadowing replaces the binding's type
+  expect_checked("let x = 1; let x = \"s\"; x + \"!\"", "s!", "shadow retypes")
+}
+
+///|
+test "checker: homogeneous container element natures" {
+  expect_checked(
+    "[1, 2] == [\"a\"]", "ERR:invalid operation: == (mismatched types []int and []string)",
+    "array element mismatch",
+  )
+  expect_checked("[1, 2] == [1, 2]", "true", "same element arrays ok")
+  expect_checked(
+    "len(5)", "ERR:invalid argument for len (type int)", "len on int",
+  )
+  expect_checked(
+    "int(true)", "ERR:invalid argument for int (type bool)", "int on bool",
+  )
+  expect_checked(
+    "filter(5, # > 0)", "ERR:invalid argument for filter (type int)", "filter on int",
+  )
+  expect_checked("upper(\"x\")", "X", "string builtin ok")
+}
+
+///|
+test "strict mode: unknown top-level names error; Eval mode stays lenient" {
+  expect_checked("zz + 1", "ERR:unknown name zz", "unknown name in strict mode")
+  // a missing name under eval_expr (Eval mode) is just nil — dynamic
+  let inst = @engine.new()
+  let r = @engine.Engine::eval_expr(inst, "zz", @ast.ObjectVal([])) catch {
+    @engine.EngineErr(m) => abort("eval lenient failed: " + m)
+  }
+  match r {
+    @ast.UndefVal | @ast.NullVal => ()
+    other => inspect(@evaluator.to_string(other), content="nil-ish")
+  }
+}

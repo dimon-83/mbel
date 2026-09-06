@@ -26,8 +26,14 @@ fn math_functions() -> Array[(String, @evaluator.FnA)] {
     (
       "abs",
       fn(args) {
-        let x = num(arg(args, 0, "abs"), "abs")
-        @ast.NumVal(if x < 0.0 { -x } else { x })
+        // expr: abs of an int stays int (MinInt wraps like Go)
+        match arg(args, 0, "abs") {
+          @ast.IntVal(i) => @ast.IntVal(if i < 0L { -i } else { i })
+          other => {
+            let x = num(other, "abs")
+            @ast.NumVal(if x < 0.0 { -x } else { x })
+          }
+        }
       },
     ),
     ("ceil", fn(args) { @ast.NumVal(num(arg(args, 0, "ceil"), "ceil").ceil()) }),
@@ -42,33 +48,64 @@ fn math_functions() -> Array[(String, @evaluator.FnA)] {
     (
       "max",
       fn(args) {
-        let xs = collect_numbers(args, "max")
-        if xs.length() == 0 {
+        // expr: max of ints stays int
+        let vs = flat_values(args)
+        if vs.length() == 0 {
           raise @evaluator.EvalErr("max: no arguments")
         }
-        let mut best = xs[0]
-        for x in xs {
-          if x > best {
-            best = x
+        if all_ints(vs) {
+          let mut best = match vs[0] {
+            @ast.IntVal(i) => i
+            _ => 0L
           }
+          for v in vs {
+            match v {
+              @ast.IntVal(i) => if i > best { best = i }
+              _ => ()
+            }
+          }
+          @ast.IntVal(best)
+        } else {
+          let xs = collect_numbers(args, "max")
+          let mut best = xs[0]
+          for x in xs {
+            if x > best {
+              best = x
+            }
+          }
+          @ast.NumVal(best)
         }
-        @ast.NumVal(best)
       },
     ),
     (
       "min",
       fn(args) {
-        let xs = collect_numbers(args, "min")
-        if xs.length() == 0 {
+        let vs = flat_values(args)
+        if vs.length() == 0 {
           raise @evaluator.EvalErr("min: no arguments")
         }
-        let mut best = xs[0]
-        for x in xs {
-          if x < best {
-            best = x
+        if all_ints(vs) {
+          let mut best = match vs[0] {
+            @ast.IntVal(i) => i
+            _ => 0L
           }
+          for v in vs {
+            match v {
+              @ast.IntVal(i) => if i < best { best = i }
+              _ => ()
+            }
+          }
+          @ast.IntVal(best)
+        } else {
+          let xs = collect_numbers(args, "min")
+          let mut best = xs[0]
+          for x in xs {
+            if x < best {
+              best = x
+            }
+          }
+          @ast.NumVal(best)
         }
-        @ast.NumVal(best)
       },
     ),
     (
@@ -237,7 +274,7 @@ fn string_functions() -> Array[(String, @evaluator.FnA)] {
       fn(args) {
         let s = to_str(arg(args, 0, "indexOf"), "indexOf")
         let sub = to_str(arg(args, 1, "indexOf"), "indexOf")
-        @ast.NumVal(@evaluator.index_of(s, sub).to_double())
+        @ast.IntVal(@evaluator.index_of(s, sub).to_int64())
       },
     ),
     (
@@ -245,7 +282,7 @@ fn string_functions() -> Array[(String, @evaluator.FnA)] {
       fn(args) {
         let s = to_str(arg(args, 0, "lastIndexOf"), "lastIndexOf")
         let sub = to_str(arg(args, 1, "lastIndexOf"), "lastIndexOf")
-        @ast.NumVal(last_index_of(s, sub).to_double())
+        @ast.IntVal(last_index_of(s, sub).to_int64())
       },
     ),
     (
@@ -276,7 +313,8 @@ fn collection_functions() -> Array[(String, @evaluator.FnA)] {
   [
     (
       "len",
-      fn(args) { @ast.NumVal(value_len(arg(args, 0, "len")).to_double()) },
+      // expr: len always returns an int
+      fn(args) { @ast.IntVal(value_len(arg(args, 0, "len")).to_int64()) },
     ),
     (
       "first",
@@ -509,10 +547,15 @@ fn conversion_functions() -> Array[(String, @evaluator.FnA)] {
     (
       "int",
       fn(args) {
-        // expr int() truncates toward zero.
-        let x = num(arg(args, 0, "int"), "int")
-        let t = if x < 0.0 { -(-x).floor() } else { x.floor() }
-        @ast.NumVal(t)
+        // expr int() truncates toward zero and returns an int.
+        match arg(args, 0, "int") {
+          @ast.IntVal(i) => @ast.IntVal(i)
+          other => {
+            let x = num(other, "int")
+            let t = if x < 0.0 { -(-x).floor() } else { x.floor() }
+            @ast.IntVal(t.to_int64())
+          }
+        }
       },
     ),
     ("float", fn(args) { @ast.NumVal(num(arg(args, 0, "float"), "float")) }),
@@ -540,7 +583,10 @@ fn conversion_functions() -> Array[(String, @evaluator.FnA)] {
     (
       "toJSON",
       fn(args) {
-        @ast.StrVal(value_to_json(arg(args, 0, "toJSON")).stringify())
+        @ast.StrVal(
+          // exact int64 digits (expr/Go json); NaN/Inf -> null
+          to_json_string(arg(args, 0, "toJSON")),
+        )
       },
     ),
     (

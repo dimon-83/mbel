@@ -78,8 +78,9 @@ pub fn aggregate_call(
       @ast.ArrayVal(out)
     }
     "count" =>
+      // expr: count always returns an int
       if !has_pred {
-        @ast.NumVal(n.to_double())
+        @ast.IntVal(n.to_int64())
       } else {
         let mut c = 0
         for i in 0..<n {
@@ -87,15 +88,31 @@ pub fn aggregate_call(
             c += 1
           }
         }
-        @ast.NumVal(c.to_double())
+        @ast.IntVal(c.to_int64())
       }
     "sum" => {
-      let mut total = 0.0
+      // expr: sum of ints stays int (wrap like Go); any float flips
+      let mut ti = 0L
+      let mut tf = 0.0
+      let mut is_int = true
       for i in 0..<n {
         let v = if has_pred { run(i, list[i], @ast.UndefVal) } else { list[i] }
-        total += to_number(v)
+        match v {
+          @ast.IntVal(x) => if is_int { ti += x } else { tf += x.to_double() }
+          _ => {
+            if is_int {
+              tf = ti.to_double()
+              is_int = false
+            }
+            tf += to_number(v)
+          }
+        }
       }
-      @ast.NumVal(total)
+      if is_int {
+        @ast.IntVal(ti)
+      } else {
+        @ast.NumVal(tf)
+      }
     }
     "find" => {
       for i in 0..<n {
@@ -108,7 +125,7 @@ pub fn aggregate_call(
     "findIndex" => {
       for i in 0..<n {
         if truthy(run(i, list[i], @ast.UndefVal)) {
-          return @ast.NumVal(i.to_double())
+          return @ast.IntVal(i.to_int64())
         }
       }
       @ast.NullVal
@@ -127,7 +144,7 @@ pub fn aggregate_call(
       let mut i = n - 1
       while i >= 0 {
         if truthy(run(i, list[i], @ast.UndefVal)) {
-          return @ast.NumVal(i.to_double())
+          return @ast.IntVal(i.to_int64())
         }
         i -= 1
       }
