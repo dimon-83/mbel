@@ -73,7 +73,7 @@ Jexl API 26 / 预算 7 / builtin+运算符 16 / bench 8 / 稳定性 7)+ 与
 | 转换 9 | 🟡 9/9 实现 | type() 返回 "number"(无 int/float);toJSON NaN→null(expr 报错) |
 | 位运算 8 | ✅ 8/8 | Int64 语义 |
 | 时间 4 | 🟡 最小集 | now/duration/date(ISO)/timezone=UTC;无 time.Time 对象/方法/多 layout/时区库 |
-| 谓词聚合 15 | ✅ 15/15 | all/none/any/one/filter/map/count/sum/find*/groupBy/sortBy/reduce — 4.4.2 已交付(2026-09-06):# /#index/#acc 谓词指针、省略 # 的相对字段访问、谓词编译为子 Program+类型化槽位(双引擎对拍) |
+| 谓词聚合 15 | 🟡 15/15 函数式 | 函数式调用形式已交付(2026-09-06,如 `count(list, # > 2)`):# /#index/#acc 指针、省略 # 的相对访问、子 Program+类型化槽位;`{expr}` 花括号谓词与 `list[?pred]` 语法待 Parser 重写(§6.2) |
 
 ## 5. 工程能力
 
@@ -120,26 +120,39 @@ memGrow)、native 基准对照。
 1. **4.4.1 lexer(3-4d)**:数字家族(hex/oct/bin/_/exp/`x.y`)、字符串家族
    (原始/字节/\u{}/八进制)、注释、关键字词法(in/and/or/not/matches/contains/
    startsWith/endsWith/let/if/else)、Token 增加 offset/line/col(file.Source)。
+   评审补充:`.5` 仅在数字起始上下文词法化为浮点(与成员 `.` 由 parser 状态
+   区分);`and/or/not/matches` 等采用上下文相关关键字策略(词法统一出
+   Ident,parser 按位置判定运算符/标识符,保障 `a and b` 与变量名 `and`
+   共存);八进制转义降级范围与错误文案文档化。
 2. **4.4.2 parser 重写(10-14d)**:Pratt/递归下降替换状态机(状态机无法自然表达
    块/序列/谓词)。AST 新节点:MemberNode(method?)/ChainNode/OptionalChain/
    SliceNode/RangeNode/PredicateNode/PointerNode(#/#acc/#index)/IfNode/
    VariableDeclaratorNode/SequenceNode/IntegerNode/FloatNode。要点:比较链合取、
    ?? 混用报错、not 后缀否定表、`-2^2`=-(2^2)(一元 90 < 幂 100)、谓词作用域
    深度计数(与 Jexl corpus 的回归通过 jexl-legacy 包双轨保证)。
-3. **4.4.3 值模型类型化(5-8d)**:Value 增 IntVal(Int64)/保留 NumVal(float)、
-   BytesVal;AST 节点 Nature 标注(type/setType);`/` 恒 float、`%`/`..` 仅整数、
-   数字提升。Jexl legacy 引擎继续用现 Value。
-4. **4.4.4 checker(12-18d)**:Nature 推断(运算符规则表、内置泛型特判、env
-   白名单严格/宽松)、错误 `行:列 | expr | ....^`、AsBool/AsInt 期望检查。
+3. **4.4.3 值模型类型化(8-12d,评审上调)**:类型**定义与 Parser 并行先行**
+   (IntVal(Int64)/FloatVal 分离、全部运算符与内置函数签名修订清单),
+   实现在 Parser 完成 ~70% 时启动并逐步替换 NumVal;涉及算术/比较/位运算/
+   转换全部行为调整。Int64 溢出行为文档化(Go 语义:回绕)。评审意见:
+   "保留统一 NumVal"的降级方案不作为首选(后拆成本更高)。Jexl legacy
+   引擎继续用现 Value。
+4. **4.4.4 checker(12-18d,拆两阶段降险)**:
+   第一阶段(4-6d):env 白名单(严格/宽松)、错误 `行:列 | expr | ....^`、
+   基本运算符类型检查(如 string+int 报错)——尽早交付可用错误反馈;
+   第二阶段(8-12d):完整 Nature 推断(运算符规则表、数组/Map 元素类型、
+   内置泛型特判)、AsBool/AsInt 期望检查。
 5. **4.4.5 语义切换(4-6d)**:新顶层 `mbel::expr` API(Compile/Run/Eval + Options
    对齐:expr.Env→数据 Value、Optimize、MaxNodes、AsBool…);Jexl+JS 语义层降级
    为 legacy 包(104 测试锁定)。
 6. **谓词聚合 15(4-6d,依赖 4.4.2)**:filter/map/all/… 以 PredicateNode 特化
    (tree-walk 先行,VM 循环指令随后);groupBy/sortBy/reduce 同批。
-7. **4.5 依赖(5-10d)**:完整正则——自实现 RE2 子集(字面量/字符类/量词/锚点/
-   分组+捕获/alternation,~800-1200 行,expr builtin_test 正则用例为验收)或
-   wasm/js FFI 注入宿主 RegExp;时间——自实现 civil 日历(已有 days_from_civil
-   基础)+ 固定偏移时区表,完整 tzdata 列为裁剪项。
+7. **4.5 依赖(P2/P3,评审修订)**:正则——"RE2 全特性"措辞修正(RE2 本身
+   不支持反向引用;应为"正则全特性"裁剪):范围缩至**字面量/字符类/量词/
+   锚点/非捕获分组**,明确不支持捕获替换、反向引用、Unicode 属性、环视;
+   自实现估计上调至 2000+ 行(含解析/编译/NFA 执行,16-20d);FFI 注入宿主
+   RegExp(js/wasm)为快速路径但牺牲可移植性,API 边界显式化。时间——civil
+   日历(已有 days_from_civil 基础)+ 固定偏移;完整 tzdata 预留外部文件
+   加载接口,可永不内置。两项均延后至核心稳定。
 
 ### 6.3 覆盖率目标
 4.4 完成后:expr 官方 TestExpr 167 行 want 表全量转写 + parser/checker/optimizer
