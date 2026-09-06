@@ -20,6 +20,7 @@ pub fn truthy(v : @ast.Value) -> Bool {
   match v {
     @ast.BoolVal(b) => b
     @ast.NumVal(d) => d != 0.0 && d == d
+    @ast.IntVal(i) => i != 0L
     @ast.StrVal(s) => s != ""
     @ast.NullVal | @ast.UndefVal => false
     @ast.ArrayVal(_) | @ast.ObjectVal(_) => true
@@ -81,6 +82,7 @@ pub fn to_number(v : @ast.Value) -> Double {
   match v {
     @ast.BoolVal(b) => if b { 1.0 } else { 0.0 }
     @ast.NumVal(d) => d
+    @ast.IntVal(i) => i.to_double()
     @ast.StrVal(s) => str_to_number(s)
     @ast.NullVal => 0.0
     @ast.UndefVal => nan()
@@ -178,6 +180,7 @@ pub fn to_string(v : @ast.Value) -> String {
   match v {
     @ast.BoolVal(b) => if b { "true" } else { "false" }
     @ast.NumVal(d) => d.to_string()
+    @ast.IntVal(i) => i.to_string()
     @ast.StrVal(s) => s
     @ast.NullVal => "null"
     @ast.UndefVal => "undefined"

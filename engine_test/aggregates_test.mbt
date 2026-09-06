@@ -64,6 +64,7 @@ fn expect_agg(expr : String, expected : @ast.Value, label : String) -> Unit {
 fn debug_repr(v : @ast.Value) -> String {
   match v {
     @ast.NumVal(d) => d.to_string()
+    @ast.IntVal(i) => i.to_string()
     @ast.StrVal(s) => "\"" + s + "\""
     @ast.BoolVal(b) => if b { "true" } else { "false" }
     @ast.NullVal => "null"

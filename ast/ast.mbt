@@ -28,6 +28,13 @@ pub(all) enum NodeType {
 pub(all) enum Value {
   BoolVal(Bool)
   NumVal(Double)
+  // Typed integer (stage 4.4.3): produced by the expr front-end's
+  // integer literals and integer arithmetic. The legacy Jexl path
+  // never creates IntVal (its lexer parses numbers as doubles), so an
+  // IntVal operand is a reliable signal that expr runtime typing
+  // applies. Arithmetic wraps Int64 (Go semantics); literals beyond
+  // int64 range are parse errors.
+  IntVal(Int64)
   StrVal(String)
   ArrayVal(Array[Value])
   ObjectVal(Array[(String, Value)])

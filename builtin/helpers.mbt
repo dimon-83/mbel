@@ -156,6 +156,9 @@ fn value_to_json(v : @ast.Value) -> Json {
       } else {
         Json::number(d)
       }
+    // note: int64 beyond 2^53 loses precision in JSON (expr emits the
+    // exact digits) — documented divergence until a typed JSON writer
+    @ast.IntVal(i) => Json::number(i.to_double())
     @ast.StrVal(s) => Json::string(s)
     @ast.NullVal | @ast.UndefVal => Json::null()
     @ast.ArrayVal(xs) => Json::array(xs.map(value_to_json))

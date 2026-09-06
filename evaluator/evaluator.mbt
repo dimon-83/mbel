@@ -476,6 +476,7 @@ pub fn value_kind(v : @ast.Value) -> String {
   match v {
     @ast.BoolVal(_) => "boolean"
     @ast.NumVal(_) => "number"
+    @ast.IntVal(_) => "int"
     @ast.StrVal(_) => "string"
     @ast.ArrayVal(_) => "array"
     @ast.ObjectVal(_) => "map"

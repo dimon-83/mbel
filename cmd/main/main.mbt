@@ -130,6 +130,7 @@ fn canon(v : @ast.Value) -> String {
   match v {
     @ast.BoolVal(b) => if b { "true" } else { "false" }
     @ast.NumVal(d) => canon_num(d)
+    @ast.IntVal(i) => i.to_string()
     @ast.StrVal(s) => canon_str(s)
     @ast.NullVal => "null"
     @ast.UndefVal => "{\"$undef\":true}"

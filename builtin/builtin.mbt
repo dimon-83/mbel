@@ -520,11 +520,14 @@ fn conversion_functions() -> Array[(String, @evaluator.FnA)] {
       "type",
       fn(args) {
         @ast.StrVal(
-          // mbel's value model has no int/float split yet (stage 4.4.3);
-          // all numbers report "number" where expr reports int/float.
+          // expr parity (4.4.3): typed integers report "int". Floats
+          // report "number" on the legacy path (locked by legacy
+          // tests) where expr would say "float" — documented
+          // divergence until the strict-engine split (4.4.5).
           match arg(args, 0, "type") {
             @ast.BoolVal(_) => "bool"
             @ast.NumVal(_) => "number"
+            @ast.IntVal(_) => "int"
             @ast.StrVal(_) => "string"
             @ast.NullVal => "nil"
             @ast.UndefVal => "unknown"
