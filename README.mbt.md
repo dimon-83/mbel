@@ -52,9 +52,9 @@ expr-style predicate aggregates work on both engines:
 $ moon run cmd/main -- "map(nums, # * 2)" '{"nums": [1, 2, 3, 4, 5]}'
 [2,4,6,8,10]
 
-$ moon run cmd/main -- "filter(users, .age >= 18) | map(.name)" \
+$ moon run cmd/main -- "filter(users, .age >= 18)[0].name" \
   '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 15}]}'
-["Alice"]
+"Alice"
 
 $ moon run cmd/main -- "sum(1..100)"
 5050

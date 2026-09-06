@@ -42,40 +42,38 @@ fn parity_value_eq(a : @ast.Value, b : @ast.Value) -> Bool {
 }
 
 ///|
-fn expect_parity(expr : String, ctx_json : String, label : String) -> Unit {
+fn expect_parity(
+  expr : String,
+  ctx_json : String,
+  label : String,
+) -> Unit raise {
   let ctx = ctx_from_json(ctx_json)
   let rw = parity_eval(Walk, expr, ctx)
   let rv = parity_eval(Vm, expr, ctx)
   match (rw, rv) {
     (Ok(a), Ok(b)) =>
       if !parity_value_eq(a, b) {
-        abort(label + " parity mismatch on '" + expr + "': walk/vm differ")
+        inspect(
+          "walk=" + @evaluator.to_string(a) + " vm=" + @evaluator.to_string(b),
+          content="parity (" + label + "): '" + expr + "'",
+        )
       }
     (Err(m1), Err(m2)) =>
       if m1 != m2 {
-        abort(
-          label +
-          " parity mismatch on '" +
-          expr +
-          "': errors differ ('" +
-          m1 +
-          "' vs '" +
-          m2 +
-          "')",
+        inspect(
+          "walk-err=" + m1 + " vm-err=" + m2,
+          content="parity-err (" + label + "): '" + expr + "'",
         )
       }
     (Ok(_), Err(m)) =>
-      abort(
-        label + " parity mismatch on '" + expr + "': walk ok, vm error: " + m,
+      inspect(
+        "walk ok, vm error: " + m,
+        content="parity (" + label + "): '" + expr + "'",
       )
     (Err(m), Ok(_)) =>
-      abort(
-        label +
-        " parity mismatch on '" +
-        expr +
-        "': walk error: " +
-        m +
-        ", vm ok",
+      inspect(
+        "walk error: " + m + ", vm ok",
+        content="parity (" + label + "): '" + expr + "'",
       )
   }
 }

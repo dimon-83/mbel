@@ -100,7 +100,11 @@ pub fn default_grammar() -> Grammar {
         },
       ),
     ],
-    unary_ops: [("!", fn(v) { @ast.BoolVal(!truthy(v)) })],
+    unary_ops: [
+      ("!", fn(v) { @ast.BoolVal(!truthy(v)) }),
+      // expr keyword `not` lowers to a unary op as well.
+      ("not", fn(v) { @ast.BoolVal(!truthy(v)) }),
+    ],
     regex_cache: [],
     regex_failed: [],
   }

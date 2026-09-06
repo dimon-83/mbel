@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+// mbel expr package — the expr-lang language front-end (stage 4.4).
+// New lexer + Pratt parser produce the expr AST (ENode); lowering to
+// the legacy AstNode reuses the dual-engine evaluator until dedicated
+// evaluation lands.
+
+import {
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/grammar",
+  "dimon-83/mbel/evaluator",
+}

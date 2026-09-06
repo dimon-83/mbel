@@ -1,0 +1,87 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "dimon-83/mbel/expr"
+
+import {
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/evaluator",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn binary_prec(String) -> Int
+
+pub fn compile_expr(String) -> @ast.AstNode? raise @evaluator.EvalError
+
+pub fn dump(ENode) -> String
+
+pub fn lower(ENode) -> @ast.AstNode raise LowerError
+
+pub fn parse(String) -> ENode raise ParseErrorExpr
+
+pub fn right_assoc(String) -> Bool
+
+pub fn tokenize(String) -> Array[Token] raise LexError
+
+// Errors
+pub(all) suberror LexError {
+  LexErr(String, Int, Int)
+}
+
+pub(all) suberror LowerError {
+  LowerErr(String)
+}
+
+pub(all) suberror ParseErrorExpr {
+  ParseErrExpr(String, Int, Int)
+}
+
+// Types and methods
+pub(all) enum ENode {
+  ENil
+  EBool(Bool)
+  EInt(Int64)
+  EFloat(Double)
+  EStr(String)
+  EBytes(Bytes)
+  EIdent(String)
+  EMember(ENode, String, Bool)
+  EIndex(ENode, ENode)
+  ESlice(ENode, ENode?, ENode?)
+  ECall(ENode, Array[ENode])
+  EPred(ENode)
+  EArray(Array[ENode])
+  EMap(Array[(ENode, ENode)])
+  EUnary(String, ENode)
+  EBinary(String, ENode, ENode)
+  ECond(ENode, ENode?, ENode?)
+  ELet(String, ENode, ENode)
+  ESeq(Array[ENode])
+  EPointer(String)
+}
+
+type Parser
+
+pub struct Token {
+  kind : TokenKind
+  text : String
+  pos : Int
+  line : Int
+  col : Int
+} derive(Eq, @debug.Debug)
+
+pub(all) enum TokenKind {
+  TkIdent
+  TkKeyword
+  TkInt
+  TkFloat
+  TkStr
+  TkBytes
+  TkOperator
+  TkPointer
+  TkEOF
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits
+

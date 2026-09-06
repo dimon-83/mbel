@@ -59,13 +59,35 @@ pub fn Expression::eval(
     Some(n) => n
     None => raise EngineError::EngineErr("Cannot evaluate an empty expression")
   }
-  let evaluator = @evaluator.new_evaluator_limited(
-    self.engine.grammar,
-    ctx,
-    self.engine.max_depth,
-    self.engine.max_steps,
-  )
-  let result = evaluator.eval(node) catch {
+  // Engine dispatch: Walk = tree-walk; Vm = compiled program (cached
+  // on this Expression across evaluations).
+  let result = try {
+    match self.engine.engine {
+      Walk => {
+        let evaluator = @evaluator.new_evaluator_limited(
+          self.engine.grammar,
+          ctx,
+          self.engine.max_depth,
+          self.engine.max_steps,
+        )
+        evaluator.eval(node)
+      }
+      Vm => {
+        if self.program is None {
+          self.program = Some(
+            @evaluator.compile_program(node, self.engine.grammar),
+          )
+        }
+        @evaluator.run_program(
+          self.program.unwrap(),
+          self.engine.grammar,
+          ctx,
+          self.engine.max_depth,
+          self.engine.max_steps,
+        )
+      }
+    }
+  } catch {
     @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
   }
   result

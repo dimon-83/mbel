@@ -24,6 +24,7 @@
 pub(all) enum Const {
   CVal(@ast.Value)
   CAst(@ast.AstNode)
+  CRaise(String) // unconditional runtime error (reached branch)
   CKeys(Array[String])
   CFunc(String, String, Int) // name, pool, argc
   CFn((@ast.Value, @ast.Value) -> @ast.Value raise EvalError)
@@ -229,31 +230,37 @@ fn Compiler::compile_node(
         }
       }
     }
-    @ast.ConditionalExpressionNode => {
-      match node.cond_test {
-        Some(t) => self.compile_node(t)
-        None => ()
-      }
-      let jf = self.emit(OP_JUMPIFFALSE, 0)
-      self.track(1, 0)
+    @ast.ConditionalExpressionNode =>
       match node.consequent {
-        Some(c) => self.compile_node(c)
+        // Elvis form `a ?: b`: a truthy test IS the result, so jump
+        // over the alternate keeping the test value (OP_ORJUMP path).
         None => {
-          ignore(self.emit(OP_CONST, self.const_idx(CVal(@ast.UndefVal))))
-          self.track(0, 1)
+          match node.cond_test {
+            Some(t) => self.compile_node(t)
+            None => ()
+          }
+          let j = self.emit(OP_ORJUMP, 0)
+          self.track(1, 0)
+          self.compile_alt_or_raise(node)
+          self.patch(j, self.opcodes.length())
+        }
+        Some(_) => {
+          match node.cond_test {
+            Some(t) => self.compile_node(t)
+            None => ()
+          }
+          let jf = self.emit(OP_JUMPIFFALSE, 0)
+          self.track(1, 0)
+          match node.consequent {
+            Some(c) => self.compile_node(c)
+            None => () // unreachable: guarded by the outer match
+          }
+          let jend = self.emit(OP_JUMP, 0)
+          self.patch(jf, self.opcodes.length())
+          self.compile_alt_or_raise(node)
+          self.patch(jend, self.opcodes.length())
         }
       }
-      let jend = self.emit(OP_JUMP, 0)
-      self.patch(jf, self.opcodes.length())
-      match node.alternate {
-        Some(a) => self.compile_node(a)
-        None => {
-          ignore(self.emit(OP_CONST, self.const_idx(CVal(@ast.UndefVal))))
-          self.track(0, 1)
-        }
-      }
-      self.patch(jend, self.opcodes.length())
-    }
     @ast.ArrayLiteralNode => {
       let n = node.array_value.length()
       for x in node.array_value {
@@ -332,6 +339,28 @@ fn Compiler::compile_binary(
     self.track(0, 1)
     return
   }
+  // &&/||/?? are lazy: the jump must sit BETWEEN the operands so the
+  // right side is genuinely skipped when short-circuited (the dispatch
+  // arms pop the left value in the fall-through path and keep it in
+  // the jump path).
+  if op == "&&" || op == "||" || op == "??" {
+    match node.left {
+      Some(l) => self.compile_node(l)
+      None => ()
+    }
+    let j = match op {
+      "&&" => self.emit(OP_ANDJUMP, 0)
+      "||" => self.emit(OP_ORJUMP, 0)
+      _ => self.emit(OP_COALESCE, 0)
+    }
+    self.track(1, 0)
+    match node.right {
+      Some(r) => self.compile_node(r)
+      None => ()
+    }
+    self.patch(j, self.opcodes.length())
+    return
+  }
   match node.left {
     Some(l) => self.compile_node(l)
     None => ()
@@ -341,21 +370,6 @@ fn Compiler::compile_binary(
     None => ()
   }
   match op {
-    "&&" => {
-      let j = self.emit(OP_ANDJUMP, 0)
-      self.track(1, 0)
-      self.patch(j, self.opcodes.length())
-    }
-    "||" => {
-      let j = self.emit(OP_ORJUMP, 0)
-      self.track(1, 0)
-      self.patch(j, self.opcodes.length())
-    }
-    "??" => {
-      let j = self.emit(OP_COALESCE, 0)
-      self.track(1, 0)
-      self.patch(j, self.opcodes.length())
-    }
     "matches" => {
       ignore(self.emit(OP_MATCHES, 0))
       self.track(2, 1)
@@ -372,6 +386,26 @@ fn Compiler::compile_binary(
           self.track(0, 1)
         }
       }
+  }
+}
+
+///|
+/// Compiles a conditional's alternate, or — when the parser produced a
+/// conditional without one — an unconditional raise matching the
+/// tree-walk engine's error. The raise only fires when the missing
+/// branch is actually reached.
+fn Compiler::compile_alt_or_raise(
+  self : Compiler,
+  node : @ast.AstNode,
+) -> Unit raise EvalError {
+  match node.alternate {
+    Some(a) => self.compile_node(a)
+    None => {
+      let idx = self.const_idx(
+        CRaise("Conditional expression has no alternate"),
+      )
+      ignore(self.emit(OP_LAZYBIN, idx))
+    }
   }
 }
 
@@ -426,18 +460,16 @@ priv struct LoopFrame {
   mut idx : Int
   results : Array[@ast.Value]
   saved_rel : @ast.Value
-  return_pc : Int
-  pred_start : Int
 }
 
 ///|
 #warnings("-unused_mut")
 priv struct VmState {
-  opcodes : Array[Int]
-  operands : Array[Int]
-  consts : Array[Const]
+  mut opcodes : Array[Int]
+  mut operands : Array[Int]
+  mut consts : Array[Const]
   mut pc : Int
-  stack : Array[@ast.Value]
+  mut stack : Array[@ast.Value]
   mut sp : Int
   frames : Array[LoopFrame]
   grammar : Grammar
@@ -673,6 +705,15 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
           }
           _ => raise EvalError::EvalErr("VM: bad function constant")
         }
+      OP_LOADSLOT => {
+        let v = match operand {
+          1 => @ast.NumVal(self.slot_idx.to_double())
+          2 => self.slot_acc
+          _ => self.slot_elem
+        }
+        self.push(v)
+        self.pc += 1
+      }
       OP_FILTERBEGIN => {
         let subject = self.pop()
         let list : Array[@ast.Value] = match subject {
@@ -683,19 +724,22 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
         // Allocation grows with the subject size (expr memGrow).
         self.charge(list.length())
         if list.length() == 0 {
+          // Empty subject: result is the empty array; skip the whole
+          // predicate block (operand = end of the filter construct).
           self.push(@ast.ArrayVal([]))
           self.pc = operand
         } else {
+          // Non-empty: push a frame and fall through into the
+          // predicate (pc += 1 lands on pred_start), which runs with
+          // the rel-context slot set to the first element.
           self.frames.push({
             list,
             idx: 0,
             results: [],
             saved_rel: self.rel_context,
-            return_pc: self.pc + 1,
-            pred_start: 0,
           })
           self.rel_context = list[0]
-          self.pc = operand
+          self.pc += 1
         }
       }
       OP_FILTEREND => {
@@ -708,12 +752,15 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
             frame.idx += 1
             if frame.idx < frame.list.length() {
               self.rel_context = frame.list[frame.idx]
+              // Loop back to the predicate start.
               self.pc = operand
             } else {
               self.push(@ast.ArrayVal(frame.results.copy()))
               self.rel_context = frame.saved_rel
-              self.pc = frame.return_pc
               ignore(self.frames.pop())
+              // Fall through past FILTEREND: pc is the end of the
+              // filter construct.
+              self.pc += 1
             }
           }
         }
@@ -727,15 +774,76 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
         }
         self.pc += 1
       }
+      OP_CALLAGG =>
+        match self.consts[operand] {
+          CAgg(name, argc, pred_prog) => {
+            let values = self.popn(argc)
+            let list : Array[@ast.Value] = match values.get(0) {
+              Some(@ast.ArrayVal(xs)) => xs
+              Some(@ast.UndefVal) | None => []
+              Some(_) =>
+                raise EvalError::EvalErr(
+                  name + ": first argument must be an array",
+                )
+            }
+            let extra = values[1:].to_array()
+            let has_pred = pred_prog is Some(_)
+            // Reuse ONE sub-VM across elements (typed slots).
+            let blank = {
+              opcodes: [],
+              operands: [],
+              consts: [],
+              pc: 0,
+              stack: Array::make(2, @ast.UndefVal),
+              sp: 0,
+              frames: [],
+              grammar: self.grammar,
+              context: self.context,
+              rel_context: self.rel_context,
+              budget: self.budget,
+              max_steps: self.max_steps,
+              max_depth: self.max_depth,
+              slot_elem: @ast.UndefVal,
+              slot_idx: 0,
+              slot_acc: @ast.UndefVal,
+            }
+            let sub = match pred_prog {
+              Some(prog) => {
+                blank.opcodes = prog.opcodes
+                blank.operands = prog.operands
+                blank.consts = prog.consts
+                blank.stack = Array::make(prog.max_stack, @ast.UndefVal)
+                blank
+              }
+              None => blank
+            }
+            let runner : PredRunner = fn(i, elem, acc) {
+              sub.pc = 0
+              sub.sp = 0
+              sub.rel_context = elem
+              sub.slot_elem = elem
+              sub.slot_idx = i
+              sub.slot_acc = acc
+              sub.run()
+            }
+            self.push(aggregate_call(name, list, has_pred, extra, runner))
+            self.pc += 1
+          }
+          _ => raise EvalError::EvalErr("VM: bad aggregate constant")
+        }
       OP_LAZYBIN =>
         match self.consts[operand] {
           CAst(node) => {
             self.push(self.walk_eval(node))
             self.pc += 1
           }
+          CRaise(msg) => raise EvalError::EvalErr(msg)
           _ => raise EvalError::EvalErr("VM: bad ast constant")
         }
-      _ => raise EvalError::EvalErr("VM: unknown opcode")
+      _ =>
+        raise EvalError::EvalErr(
+          "VM: unknown opcode op=" + operand.to_string() + "/" + op.to_string(),
+        )
     }
   }
   match self.sp > 0 {
