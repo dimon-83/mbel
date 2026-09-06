@@ -51,3 +51,33 @@ You can browse and install extra skills here:
   scientific computations), prefer assertion tests. You can use
   `moon coverage analyze > uncovered.log` to see which parts of your code are
   not covered by tests.
+
+## Version management and releases
+
+- Semantic versioning (SemVer). Before 1.0: a MINOR bump delivers a milestone
+  (each stage-4.x landing, a new API surface); a PATCH bump ships fixes and
+  documentation or behavior corrections. 1.0 is the first stable release,
+  decided at the strict-engine gate (stage 4.4.5).
+
+- `version` in `moon.mod` is the single source of truth. Release tags are
+  annotated and named exactly `v<version>`; never create ad-hoc tags (the
+  historical `v0.2.0-stable` at cc288c8 is drift — move it to the matching
+  release commit or delete it at the next release).
+
+- `main` is always releasable. Functional work lands on `main` only through a
+  feature branch merged fast-forward after the full safety net passes
+  (`moon test` on native, wasm-gc and js, parity suites included). Direct
+  commits on `main` are limited to docs/metadata.
+
+- Release checklist (run on `main`):
+  1. `moon test` green on native, wasm-gc and js.
+  2. Bump `version` in `moon.mod` and add a `CHANGELOG.md` entry in the same
+     commit.
+  3. `moon package` and inspect the publish zip.
+  4. Annotated tag `v<version>` on the bump commit.
+  5. `moon publish` — before the first registry publish, fill `repository`
+     and `description` in `moon.mod`.
+
+- Agent rule: never bump `version`, add a tag, or publish unless the user
+  asks; when asked, keep `moon.mod`, `CHANGELOG.md` and the tag consistent in
+  one commit.
