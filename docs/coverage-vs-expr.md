@@ -168,14 +168,21 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    int/float 提升、`/` 恒 float 无除零错、`%` 仅整数+integer divide by
    zero、一元负号保型、跨类相等 false/排序与混合 `+` 报 invalid
    operation、int 边界 range 出 IntVal 数组);判别器=操作数含 IntVal
-   (legacy 词法只产 NumVal → legacy 190 测试零改动)。剩余:内置/
-   聚合返回类型化(需 dialect 感知,随 4.4.5)、toJSON int64 精确输出。
+   (legacy 词法只产 NumVal → legacy 测试零改动)。内置/聚合返回类型化
+   已完成(2026-09-06):len/count/indexOf/lastIndexOf/findIndex/
+   findLastIndex/int() 恒返 int;abs/min/max 输入驱动(int 入 int 出);
+   sum 整数列表保型;toJSON 改用精确 JSON writer(int64 全精度输出,
+   NaN/Inf→null)。4.4.3 完成。
 4. **🟡 4.4.4 checker——阶段 1 已交付(2026-09-06)**:expr/check.mbt
    Nature 推断(字面量及传播)+ 运算符类型规则,按 expr **Compile 模式**
    文案报错;接入严格入口 `Engine::eval_expr_checked`(内部委托双引擎,
    与 eval_expr 的 Eval 模式对齐 expr 的 Eval/Compile 双模式)。剩余
-   (阶段 2):数组/Map 元素类型与内置泛型特判(含 let 作用域类型)、env
-   白名单/严格-宽松、带 `行:列` 位置的错误(需 AST 位置化重构)。
+   阶段 2 已完成(2026-09-06):let 绑定进入作用域静态定型(遮蔽重定
+   型)、同质容器元素 Nature(`[]int` vs `[]string` 相等报错)、核心内置
+   静态参数检查(len/int/float/abs/字符串/聚合首参,expr 文案)、严格
+   模式 env 白名单(`eval_expr_checked` 未知顶层名报 "unknown name
+   x";Eval 模式保持宽松缺失→nil)。4.4.4 阶段 1+2 完成。剩余:带
+   `行:列` 位置的错误(需 AST 位置化重构)。
 5. **🟡 4.4.5 语义切换——API 已定型并锁定(2026-09-06)**:三入口文档化——
    `Engine::eval`(Jexl legacy 方言,JS 动态语义,差分 corpus+legacy 套件锁定)、
    `Engine::eval_expr`(expr 前端 **Eval 模式**:类型化运行时,无静态检查)、
