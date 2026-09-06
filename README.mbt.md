@@ -262,31 +262,39 @@ dependencies) are tracked as explicit cut items in the gap document.
 Full three-target report in [docs/perf-report.md](docs/perf-report.md).
 Both engines share one semantic layer (instructions only dispatch), so
 results and error messages are identical by construction and by test.
-Latest paired benchmarks (wasm-gc / moonrun, 2026-09-06; native in
-parentheses):
+> ⚠️ The Vm columns of earlier reports (2026-09-06, incl. the tables in
+> docs/perf-report.md) are invalid: the end-to-end `Expression::eval`
+> never dispatched to the Vm engine until f37f10d, so those "Vm"
+> measurements were the tree-walk engine. The tables below and
+> docs/coverage-vs-expr.md §7 are the first genuine dual-engine data.
+
+Latest paired benchmarks, same batch (wasm-gc / moonrun; native in
+parentheses), 10×N runs, mean:
 
 | Scenario | Walk | Vm |
 |---|---|---|
-| Precompiled eval (constant-folded) | 12.5 ns (17.9) | 12.5 ns (18.7) |
-| Ternary + logic + `??` chain | 93 ns (108) | 95 ns (110) |
-| 50-term un-foldable chain | 1.24 µs (1.28) | 1.27 µs (1.32) |
-| End-to-end compile + eval | 6.21 µs (13.3) | 6.06 µs (13.3) |
-| 100-item relative filter | 4.01 µs (4.87) | 4.10 µs (4.91) |
-| 100-item long-predicate filter | 15.17 µs (18.03) | 15.30 µs (17.85) |
-| Aggregate `map` over 100 items | 3.57 µs (4.05) | 3.47 µs (4.04) |
-| Aggregate `filter`+`sum` over 100 items | 6.07 µs (6.55) | 6.08 µs (6.63) |
-| String builtin chain | 443 ns (452) | 445 ns (449) |
-| `toJSON`/`fromJSON` roundtrip | 588 ns (810) | 589 ns (801) |
-| Tokenize only (engine-independent) | 3.03 µs | — |
+| Precompiled eval (constant-folded) | 13.2 ns (22.9) | 23.2 ns (50.0) |
+| Ternary + logic + `??` chain | 107 ns (112) | 76.1 ns (85.8) |
+| 50-term un-foldable chain | 1.60 µs (1.35) | 846 ns (615) |
+| End-to-end compile + eval | 6.33 µs (13.8) | 6.37 µs (14.4) |
+| 100-item relative filter | 4.48 µs (5.50) | 3.72 µs (3.10) |
+| 100-item long-predicate filter | 16.3 µs (24.6) | 10.0 µs (7.60) |
+| Aggregate `map` over 100 items | 3.57 µs (4.31) | 3.33 µs (3.03) |
+| Aggregate `filter`+`sum` over 100 items | 6.09 µs (7.02) | 4.76 µs (4.17) |
+| String builtin chain | 527 ns (520) | 472 ns (540) |
+| `toJSON`/`fromJSON` roundtrip | 639 ns (839) | 619 ns (932) |
+| Tokenize only (engine-independent) | 3.10 µs (5.88) | — |
 
-Reading the numbers: the engines are at parity on every target — the
-shared semantic functions dominate, and the Vm's relative-filter loop
-plus typed-slot aggregate loop (one reused sub-VM per aggregate) have
-removed the per-element allocation that classic tree-walks pay. On the
-native backend the Vm leads by 1–5% on long-predicate filters, with
-the advantage growing with predicate complexity; remaining gains are
-tied to the expr-syntax predicate front-end
-([docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) §6.1).
+Reading the numbers: on **iteration-shaped loads** (filters, aggregate
+loops, long chains) the Vm leads on every target — the native-backend
+gap is the widest (long-predicate filter −69%, aggregates −30% to
+−41%, 50-term chain −55%), because the Vm's native relative-filter
+loop and typed-slot aggregate loop (one reused sub-VM per aggregate)
+remove the per-element allocation tree-walks pay; js (V8 JIT) narrows
+the gap by JIT-compiling the recursive walk. On **micro loads**
+(folded-constant eval, JSON round-trips) the Vm trails by a fixed
+per-eval setup cost. Choose by workload profile — full data and
+analysis: [docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) §7.
 
 Stability invariants are asserted **per engine** with one shared
 suite (`engine_test/stability_test.mbt`): instance isolation, 500×
@@ -294,15 +302,16 @@ deterministic re-evaluation, budget non-bypass against 100k-element
 contexts, recovery after parse/transform/budget failures, interleaved
 multi-instance evaluation, nesting/wide-structure limits, and
 1000-record JSON contexts — all green on both engines. Three
-independent safety nets guard behavior: 149 unit/parity tests (green
-on wasm-gc AND native), the internal Walk-vs-Vm parity corpus (207
-expressions, results and error messages byte-equal), and the external
+independent safety nets guard behavior: 168 unit/parity tests (green
+on native, wasm-gc and js), the internal Walk-vs-Vm parity corpus (207
+expressions, results and error messages byte-equal — genuinely green
+since f37f10d restored the Vm dispatch), and the external
 Jexl differential harness (3,360+ expressions, byte-identical).
 
 ## Development
 
 ```text
-moon test                       # 111 unit/parity tests
+moon test                       # 168 unit/parity tests (add --target native|js)
 moon run cmd/main -- "2+2"      # expression runner
 ./tools/run_diff.sh tools/corpus.txt      # differential check vs Jexl
 ./tools/run_diff.sh tools/corpus_ctx.txt  # JSON-context corpus

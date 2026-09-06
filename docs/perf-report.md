@@ -1,5 +1,13 @@
 # 性能测试报告:native / JS(V8 JIT)/ wasm-gc(解释)三口径,Walk vs Vm
 
+> ⚠️ **勘误(2026-09-06,f37f10d):本报告的 Vm 列无效。** 采集期间
+> 端到端入口 `Expression::eval` 未分发到 Vm(自 0010ef3 引入 VM 起
+> 缺失,2026-09-06 f37f10d 才恢复),所有"Vm"测量实际为 tree-walk
+> 引擎,两列几乎相等(±4%)即由此而来,非真实 Vm 行为。真实双引擎
+> 测量(修复后同批采集,含修正后的过滤器/聚合结论)见
+> [docs/coverage-vs-expr.md](coverage-vs-expr.md) §7。下表仅保留
+> 口径间(Walk)对比参考价值。
+
 日期:2026-09-06,同批次采集。构建:139/139 测试在 wasm-gc 与 native 两个
 后端全绿。方法:`moon bench -p engine_test`(10×N runs,mean ± σ)。
 

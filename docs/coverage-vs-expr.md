@@ -2,9 +2,13 @@
 
 对照基准:https://expr-lang.org/docs/language-definition 与
 expr 仓库 docs/language-definition.md(commit 4b31df3, v1.17.8)。
-测试证据:mbel 136 个测试(lexer 21 / parser 29 / evaluator 28 /
-Jexl API 26 / 预算 7 / builtin+运算符 16 / bench 8 / 稳定性 7)+ 与
-真实 Jexl 的差分 corpus(3360+ 表达式,byte-identical)。
+测试证据:mbel 189 个 test 函数(`moon test` 常规计数 168 + 21 个
+bench 经 `moon bench` 运行)——lexer_test 21 / parser_test 29 /
+evaluator_test 28 / expr_test 19(parser 9 · eval 9 · opcode 1)/
+engine_test 92(API 26 · 预算 7 · builtin 16 · 聚合 10 · Walk-vs-Vm
+对拍 9 · 稳定性 3(7 场景套件×双引擎+引擎间一致性)· bench 21);
+三目标(native / wasm-gc / js)均 168/168;另与真实 Jexl 的差分
+corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7。
 
 图例:✅ 已实现且有测试 | 🟡 部分/语义受限 | ❌ 未实现
 
@@ -85,36 +89,41 @@ Jexl API 26 / 预算 7 / builtin+运算符 16 / bench 8 / 稳定性 7)+ 与
 | env 白名单 / Strict | ❌ | 4.4.4(Jexl 缺失键→undefined) |
 | 常量折叠 | ✅ | builtin_test fold 套件 |
 | 12-pass optimizer 其余 | ❌ | 4.3 剩余(需 VM 落点) |
-| 字节码 VM | ✅ v1(混合) | 16 opcode + 编译器 + 栈机(evaluator/vm.mbt);FilterExpression 与手动求值运算符回调 tree-walk(共享预算);`Engine::set_engine(Walk \| Vm)` 开关,默认 Walk;207 条 corpus + 手写用例 Walk vs Vm 对拍全绿(值+错误消息严格相等,NaN-aware);bench:常量路径 13ns 持平,filter 回调路径持平(谓词循环指令化是 v2) |
+| 字节码 VM | ✅ v2(指令化) | 21 opcode(0-20)平行 Int 数组 + 编译期预解析 + 栈预分配 + 原生过滤器/聚合循环帧(消除每元素 Evaluator 分配);`Engine::set_engine(Walk \| Vm)`,默认 Walk;207 corpus + 手写用例 Walk vs Vm **真绿**(值+错误消息严格相等,NaN-aware;f37f10d 恢复端到端分发后首次为真,此前"假绿"见 §7 勘误);实测:迭代型负载 Vm 领先(过滤器 native −69% / wasm −39%,聚合 native −30~41%),微负载 Vm 落后(常量求值 +38~118%)——同批数据见 §7 |
 | 编译错误 行:列\|…^ | ❌ | 4.4.1 位置信息 |
 | 差分验证 harness | ✅ | tools/(expr 侧待 go 差分) |
 | 并发模型 | ✅ 文档化 | wasm 单线程原子 eval;实例隔离测试 7 项 |
 
 ## 6. 剩余功能实现方案(阶段 4.3 剩余 + 4.4/4.5)
 
-### 6.1 字节码 VM(4.3)——v1 已交付,剩余 v2
-**已交付(2026-09-05)**:双引擎架构。`evaluator/vm.mbt`:16 opcode
-(OpConst/LoadCtx/LoadRel/Fetch/Binary/Matches/AndJump/OrJump/CoalesceJump/
-Jump/JumpIfFalse/Unary/Array/Object/CallFunc/Filter+LazyBinary)、常量池去重、
-patch 式跳转编译;语义函数单源(apply_binary_op/call_pool_function/fetch_from
-由两引擎共享,指令只做调度);FilterExpression 与手动求值运算符回调 tree-walk
-(共享 BudgetCell);CLI `argv[3]=vm` 可选。对拍:207 corpus + 全节点手写用例
-Walk vs Vm 全绿。
-
-**v2 已交付(2026-09-06,VM 调度优化六项)**:平行数组指令编码
-(opcode+operand Int 对)、编译期运算符预解析(CFn/CUFn 直接函数引用,
-运行时零查找)、栈预分配+sp 指针(编译期 max_stack 模拟)、**相对过滤器
-原生循环帧**(OP_FILTERBEGIN/END + OP_FILTERSTATIC,消除每元素 Evaluator
-分配;手动求值运算符保留回调)、分配点记账(双引擎同语义,对齐 expr
-memGrow)、native 基准对照。
+### 6.1 字节码 VM(4.3)——v1 + v2 已交付
+**双引擎架构(2026-09-05/06,0010ef3/fce4d69)**:`evaluator/vm.mbt`。
+21 opcode(0-20:CONST/LOADCTX/LOADREL/FETCH/CALLBINFN/CALLUNFN/
+MATCHES/ANDJUMP/ORJUMP/COALESCE/JUMP/JUMPIFFALSE/ARRAY/OBJECT/
+CALLFUNC/FILTERBEGIN/FILTEREND/FILTERSTATIC/LAZYBIN/LOADSLOT/
+CALLAGG)编码为平行 Int 数组(opcode+operand),常量池去重
+(CVal/CAst/CKeys/CFn/CUFn/CAgg;2026-09-06 增 CRaise 承载"抵达即
+raise"的缺省分支);编译期运算符预解析为直接函数引用(运行时零
+查找)、栈预分配+sp 指针(编译期 max_stack 模拟)、patch 式跳转;
+语义函数单源(apply_binary_op/call_pool_function/fetch_from/
+aggregate_call 由两引擎共享,指令只做调度);相对过滤器/静态索引
+指令化(FILTERBEGIN/END、FILTERSTATIC),谓词聚合编译为 CALLAGG
+子 Program + 单子 VM 跨元素复用(LOADSLOT 类型化槽位 #/#index/#acc);
+手动求值运算符(LAZYBIN)按需回调 tree-walk(共享预算);CLI
+`argv[3]=vm` 可选。
 剩余:let 变量槽、切片/可选链指令(依赖 4.4.2)、Disassemble 输出。
 
-**性能结论(实测,wasm-gc moonrun + native 双口径)**:
-- moonrun(wasm 解释器)上两引擎全场景持平(±2%)——解释器套娃抵消
-  指令循环优势,属平台特性而非实现缺陷
-- native 编译下,长谓词过滤器 VM 反超 ~5%(18.05 vs 18.99µs),且优势
-  随谓词复杂度增长;短谓词/常量/字符串场景由共享语义函数成本封顶
-- 进一步收益依赖 4.4.2 谓词语法落地后的原生聚合循环(遍历+类型化槽)
+**端到端分发补遗(f37f10d,2026-09-06)**:`Expression::eval` 自 4.3
+引入 VM 起(0010ef3)到 f37f10d 前一直没有分发到 Vm——所有经
+`Engine::eval`/`Expression::eval` 的"Vm"场景实际都在跑 Walk:
+vm_parity"全绿"是假绿,fa21fe9 性能报告与 README 性能表的 Vm 列
+(全部 ≈Walk±4%)因此失效。f37f10d 恢复分发,并修复该分发暴露的
+调度缺陷:LOADSLOT 缺执行分支(谓词聚合报 unknown opcode)、
+`&&`/`||`/`??` 急切编译两侧(短路失效)、elvis `?:` 真值分支结果
+丢失、`?:`/`a ?:` 缺省分支静默 Undef 而非报错、FILTERBEGIN/END 的
+pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
+手写用例的 Walk vs Vm 对拍**首次真正执行**且全绿(值+错误消息
+严格相等,NaN-aware);性能与稳定性实测见 §7。
 
 ### 6.2 语言层(4.4,~35-50d,gate 后启动)
 1. **4.4.1 lexer(3-4d)**:数字家族(hex/oct/bin/_/exp/`x.y`)、字符串家族
@@ -157,3 +166,95 @@ memGrow)、native 基准对照。
 ### 6.3 覆盖率目标
 4.4 完成后:expr 官方 TestExpr 167 行 want 表全量转写 + parser/checker/optimizer
 表抽样 ≥60%;4.5 后 builtin_test 904 行对齐。
+
+## 7. 双引擎实测:性能与稳定性对比(2026-09-06,f37f10d 后)
+
+同批采集,`moon bench -p engine_test`(wasm-gc)/`--target js`/
+`--target native`,每项 10×N runs,mean(σ 0.5-5%,见日志)。
+**本表为 Vm 首次真正端到端执行的数据**(勘误见 §6.1):此前
+fa21fe9/README 报告的两引擎"±4% 持平"是分发缺失的产物(两列实为
+Walk),已失效。Δ 为 Vm 相对 Walk(Vm 慢为 +)。
+
+| 场景(除注明均为预编译后求值) | 口径 | Walk | Vm | Δ |
+|---|---|---|---|---|
+| 端到端编译+求值(parse+fold[+codegen]) | native | 13.8 µs | 14.4 µs | +4.7% |
+| | js (V8) | 5.45 µs | 7.05 µs | +29% |
+| | wasm-gc | 6.33 µs | 6.37 µs | ≈0 |
+| 短谓词过滤器 `items[.qty>2].price`(100 项) | native | 5.50 µs | 3.10 µs | **−44%** |
+| | js | 4.68 µs | 4.64 µs | ≈0 |
+| | wasm-gc | 4.48 µs | 3.72 µs | −17% |
+| 长谓词过滤器(~12 指令/元素,100 项) | native | 24.6 µs | 7.60 µs | **−69%** |
+| | js | 17.7 µs | 13.5 µs | −23% |
+| | wasm-gc | 16.3 µs | 10.0 µs | −39% |
+| 聚合 map(100 项) | native | 4.31 µs | 3.03 µs | **−30%** |
+| | js | 4.42 µs | 4.50 µs | +2% |
+| | wasm-gc | 3.57 µs | 3.33 µs | −7% |
+| 聚合 filter+sum(100 项) | native | 7.02 µs | 4.17 µs | **−41%** |
+| | js | 6.20 µs | 6.36 µs | +3% |
+| | wasm-gc | 6.09 µs | 4.76 µs | −22% |
+| 50 项链式(不可折叠) | native | 1.35 µs | 615 ns | **−55%** |
+| | js | 1.33 µs | 1.02 µs | −23% |
+| | wasm-gc | 1.60 µs | 846 ns | −47% |
+| 三元+逻辑+`??` 链 | native | 112 ns | 85.8 ns | −23% |
+| | js | 115 ns | 111 ns | −4% |
+| | wasm-gc | 107 ns | 76.1 ns | −29% |
+| 常量求值(折叠为单指令) | native | 22.9 ns | 50.0 ns | **+118%** |
+| | js | 17.8 ns | 24.5 ns | +38% |
+| | wasm-gc | 13.2 ns | 23.2 ns | +76% |
+| 字符串内置链 | native | 520 ns | 540 ns | +3.7% |
+| | js | 410 ns | 441 ns | +7.5% |
+| | wasm-gc | 527 ns | 472 ns | −11% |
+| toJSON/fromJSON 往返 | native | 839 ns | 932 ns | +11% |
+| | js | 791 ns | 827 ns | +4.6% |
+| | wasm-gc | 639 ns | 619 ns | −3% |
+
+### 7.1 性能结论
+
+1. **迭代型负载 Vm 显著领先,方向三口径一致**:过滤器(native −44%/
+   −69%,wasm −17%/−39%,js ≈0/−23%)、聚合 map/filter+sum(native
+   −30%/−41%)、50 项链(−55%/−47%/−23%)。来源是 v2 的原生过滤器/
+   聚合循环帧与 CALLAGG 子 Program 复用——消除每元素 Evaluator
+   分配,谓词越长、每元素指令越多,优势越大。此前"VM 与 Walk 持平"
+   的结论是分发缺失造成的假象。
+2. **微负载 Vm 落后(固定装配开销)**:常量求值 +38%(js)~+118%
+   (native)、JSON 往返 +3~11%、字符串 +4~8%——每次 eval 的
+   run_program 装配(VmState+栈预分配)按次计费;负载越"胖",摊销
+   越充分。选型应按负载画像,而非假定 VM 恒快。
+3. **宿主画像:收益 native ≥ wasm-gc > js(V8 JIT)**:JIT 把递归
+   walk 优化掉大半,同时把 Vm 指令循环优势收窄(长谓词仅 −23%);
+   wasm 解释器与 native 同序(−17~−47%)。与旧报告"wasm 上两引擎
+   持平"的结论不同——那同样是假数据。
+4. **编译端到端**:bytecode codegen 增量 js +29%(5.45→7.05µs)、
+   native +4.7%、wasm ≈0;预编译后(热路径)不存在该成本。
+
+### 7.2 稳定性对比(同一 7 场景套件,Walk 与 Vm 各自完整执行)
+
+套件:engine_test/stability_test.mbt——`stability_suite(vm)` 把
+同一组断言(引擎无关,任何引擎特有失稳表现为不对称失败)分别跑在
+两引擎上,外加引擎间一致性测试(4 个代表性表达式,要求值与错误
+消息逐字一致)。
+
+| 场景 | 内容 | Walk | Vm |
+|---|---|---|---|
+| 1 实例隔离 | 实例 A 的 transform/运算符修改不泄漏到 B | ✅ | ✅ |
+| 2 确定性 | 编译后表达式连续 500 次求值结果一致 | ✅ | ✅ |
+| 3 预算不可绕过 | 100k 元素数组 filter 被共享步数预算截断 | ✅(报错一致) | ✅(报错一致) |
+| 4 失败后恢复 | parse/transform/预算错误后实例仍可用 | ✅ | ✅ |
+| 5 交错执行 | 200 次双实例交错 eval,无串扰 | ✅ | ✅ |
+| 6 嵌套预算 | 1500 层括号优雅拒绝;199 项宽表达式正确 | ✅ | ✅ |
+| 7 真实上下文 | 1000 条 JSON 记录安全求值 | ✅ | ✅ |
+| 一致性 | `items[.qty>2].name ?? 'none'` 等 4 式:值/错误消息相同 | ✅(基准) | ✅ |
+
+结论:两引擎在稳定性套件下无不对称失败;确定性、预算强制、失败
+恢复、实例隔离能力均等;错误消息逐字一致由 vm_parity(207 corpus,
+Err 分支比对)与稳定性场景 3/4 双重锁定。三目标(native/wasm-gc/js)
+全量 168/168 含本套件。注:此前的"Vm 稳定性"运行同样受分发缺失
+影响(f37f10d 前 Vm 列未真正执行),本表为修复后首次真实双引擎
+结果。
+
+复现:
+
+    moon bench --target native -p engine_test   # native(C toolchain)
+    moon bench --target js -p engine_test       # js(V8 JIT via node)
+    moon bench -p engine_test                   # wasm-gc(moonrun)
+    moon test --target native                   # 全量 168 回归(默认 wasm-gc)
