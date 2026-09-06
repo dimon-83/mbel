@@ -95,6 +95,40 @@ fn fold_node(node : @ast.AstNode) -> @ast.AstNode {
       }
       node
     }
+    @ast.SequenceNode => {
+      for i in 0..<node.args.length() {
+        let item = node.args[i]
+        if item.node_type is @ast.VariableDeclaratorNode {
+          if item.args.length() > 0 {
+            item.args[0] = fold_node(item.args[0])
+          }
+        } else {
+          node.args[i] = fold_node(item)
+        }
+      }
+      node
+    }
+    @ast.SliceNode => {
+      match node.subject {
+        Some(s) => node.subject = Some(fold_node(s))
+        None => ()
+      }
+      match node.slice_from {
+        Some(f) => node.slice_from = Some(fold_node(f))
+        None => ()
+      }
+      match node.slice_to {
+        Some(t) => node.slice_to = Some(fold_node(t))
+        None => ()
+      }
+      node
+    }
+    @ast.VariableDeclaratorNode => {
+      if node.args.length() > 0 {
+        node.args[0] = fold_node(node.args[0])
+      }
+      node
+    }
     @ast.LiteralNode | @ast.PointerNode => node
   }
 }

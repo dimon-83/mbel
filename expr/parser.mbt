@@ -21,6 +21,10 @@ struct Parser {
   toks : Array[Token]
   mut pos : Int
   mut in_predicate : Bool
+  // Whether the expression being parsed began at precedence 0 (a
+  // top-level/program site): expr only accepts `if`/`let` at those
+  // sites, never as a binary operand (`1 + if …` is a parse error).
+  mut at_expr0 : Bool
 }
 
 ///|
@@ -29,7 +33,7 @@ pub fn parse(source : String) -> ENode raise ParseErrorExpr {
   let toks = tokenize(source) catch {
     LexErr(msg, line, col) => raise ParseErrorExpr::ParseErrExpr(msg, line, col)
   }
-  let p : Parser = { toks, pos: 0, in_predicate: false }
+  let p : Parser = { toks, pos: 0, in_predicate: false, at_expr0: false }
   let e = p.parse_program()
   p.expect_eof()
   e
@@ -116,13 +120,14 @@ fn Parser::expect_op(self : Parser, op : String) -> Unit raise ParseErrorExpr {
 ///|
 // program := let-chain | expr (';' expr)*
 fn Parser::parse_program(self : Parser) -> ENode raise ParseErrorExpr {
+  self.at_expr0 = true
   if self.at_kw("let") {
     return self.parse_let()
   }
   let first = self.parse_expr()
   if self.eat_op(";") {
     let items : Array[ENode] = [first]
-    while !(self.cur().kind is TkEOF) {
+    while !(self.cur().kind is TkEOF || self.at_op("}")) {
       if self.at_kw("let") {
         items.push(self.parse_let())
       } else {
@@ -143,26 +148,33 @@ fn Parser::parse_let(self : Parser) -> ENode raise ParseErrorExpr {
   self.pos += 1 // consume `let`
   if self.cur().kind is TkIdent {
     let name = self.cur().text
-    self.pos += 1
-    self.expect_op("=")
-    let value = self.parse_expr()
-    self.expect_op(";")
-    let rest = self.parse_program_rest()
-    return ELet(name, value, rest)
+    if name == "$env" {
+      let e = self.err("cannot declare '$env'")
+      e
+    } else {
+      self.pos += 1
+      self.expect_op("=")
+      let value = self.parse_expr()
+      self.expect_op(";")
+      let rest = self.parse_program_rest()
+      ELet(name, value, rest)
+    }
+  } else {
+    self.err("expected identifier after 'let'")
   }
-  self.err("expected identifier after 'let'")
 }
 
 ///|
 // rest of a program after a `let` declaration.
 fn Parser::parse_program_rest(self : Parser) -> ENode raise ParseErrorExpr {
+  self.at_expr0 = true
   if self.at_kw("let") {
     return self.parse_let()
   }
   let first = self.parse_expr()
   if self.eat_op(";") {
     let items : Array[ENode] = [first]
-    while !(self.cur().kind is TkEOF) {
+    while !(self.cur().kind is TkEOF || self.at_op("}")) {
       if self.at_kw("let") {
         items.push(self.parse_let())
       } else {
@@ -179,8 +191,13 @@ fn Parser::parse_program_rest(self : Parser) -> ENode raise ParseErrorExpr {
 
 ///|
 /// Pratt expression parsing: starts at the lowest precedence (pipe),
-/// if/else and ternary handled above/below the binary loop.
+/// if/else and ternary handled above/below the binary loop. A `let`
+/// declaration may begin any precedence-0 expression site.
 fn Parser::parse_expr(self : Parser) -> ENode raise ParseErrorExpr {
+  self.at_expr0 = true
+  if self.at_kw("let") {
+    return self.parse_let()
+  }
   let e = self.parse_binary(0)
   self.parse_ternary(e)
 }
@@ -251,6 +268,9 @@ fn Parser::parse_binary(
   self : Parser,
   min_prec : Int,
 ) -> ENode raise ParseErrorExpr {
+  // Only precedence-0 sites accept `if` at expression start; deeper
+  // operand parses clear the flag so `1 + if …` errors.
+  self.at_expr0 = min_prec == 0
   let mut left = self.parse_unary()
   while true {
     // not-prefixed suffix operators: `not in`, `not matches`, …
@@ -286,10 +306,16 @@ fn Parser::parse_binary(
     }
     self.pos += 1
     if op == "|" {
-      // pipe: right side must be a call whose first arg becomes left
+      // pipe: right side must be a call (or bare name) whose first
+      // arg becomes left; expr rejects other right sides (`1 | 2`).
       let right = self.parse_binary(prec + 1)
-      left = rewrite_pipe(left, right)
-      continue
+      match right {
+        ECall(_, _) | EIdent(_) => {
+          left = rewrite_pipe(left, right)
+          continue
+        }
+        _ => return self.err("unexpected token after '|' (expected a call)")
+      }
     }
     let right = if right_assoc(op) {
       self.parse_binary(prec)
@@ -297,6 +323,19 @@ fn Parser::parse_binary(
       self.parse_binary(prec + 1)
     }
     left = EBinary(op, left, right)
+    // expr forbids mixing `??` with any other binary operator at the
+    // same level (`1 ?? 2 + 3`); parentheses or chained `??` are fine.
+    if op == "??" {
+      match op_of(self.cur()) {
+        Some(next) if next != "??" =>
+          return self.err(
+            "Operator (" +
+            next +
+            ") and coalesce expressions (??) cannot be mixed. Wrap either by parentheses.",
+          )
+        _ => ()
+      }
+    }
     // chained comparisons: a < b < c  ->  (a<b) && (b<c)
     if is_comparison(op) {
       while true {
@@ -351,15 +390,17 @@ fn rewrite_pipe(left : ENode, right : ENode) -> ENode {
 fn Parser::parse_unary(self : Parser) -> ENode raise ParseErrorExpr {
   if self.at_op("!") {
     self.pos += 1
-    return EUnary("!", self.parse_unary())
+    // expr unary precedence: `not`/`!` 50, `-`/`+` 90 — below `**`/`^`
+    // (100), so `-2**2` = -(2**2) and `2**-2` is legal.
+    return EUnary("!", self.parse_binary(50))
   }
   if self.at_op("-") {
     self.pos += 1
-    return EUnary("-", self.parse_unary())
+    return EUnary("-", self.parse_binary(90))
   }
   if self.at_op("+") {
     self.pos += 1
-    return self.parse_unary()
+    return self.parse_binary(90)
   }
   if self.at_kw("not") {
     // not is a unary operator only when not followed by an infix
@@ -378,7 +419,7 @@ fn Parser::parse_unary(self : Parser) -> ENode raise ParseErrorExpr {
           // e.g. `not )` — treat as identifier below
         } else {
           self.pos += 1
-          return EUnary("not", self.parse_unary())
+          return EUnary("not", self.parse_binary(50))
         }
       }
     }
@@ -674,7 +715,14 @@ fn Parser::parse_primary(self : Parser) -> ENode raise ParseErrorExpr {
           self.pos += 1
           ENil
         }
-        "if" => self.parse_if()
+        "if" =>
+          if self.at_expr0 {
+            self.parse_if()
+          } else {
+            // `if` is only accepted at precedence-0 expression starts
+            let e = self.err("unexpected keyword 'if'")
+            e
+          }
         other_kw => {
           let _ = self.err("unexpected keyword '" + other_kw + "'")
           ENil
@@ -749,24 +797,58 @@ fn Parser::parse_array_literal(self : Parser) -> ENode raise ParseErrorExpr {
 }
 
 ///|
-/// if cond { a } else { b } — else-if chains nest naturally.
+/// if cond { seq } else { seq } — both braces and `else` are required
+/// (expr parity); else-if chains nest naturally. Each brace body is a
+/// full sequence expression: lets and `;`-separated exprs allowed.
 fn Parser::parse_if(self : Parser) -> ENode raise ParseErrorExpr {
   self.pos += 1 // consume `if`
   let cond = self.parse_expr()
   self.expect_op("{")
-  let then = self.parse_expr()
+  let then = self.parse_block_body()
   self.expect_op("}")
-  if self.eat_kw("else") {
+  if !self.at_kw("else") {
+    let e = self.err("expected 'else'")
+    e
+  } else {
+    self.pos += 1
     if self.at_kw("if") {
       let nested = self.parse_if()
       return ECond(cond, Some(then), Some(nested))
     }
     self.expect_op("{")
-    let alt = self.parse_expr()
+    let alt = self.parse_block_body()
     self.expect_op("}")
-    return ECond(cond, Some(then), Some(alt))
+    ECond(cond, Some(then), Some(alt))
   }
-  ECond(cond, Some(then), None)
+}
+
+///|
+/// Parses a braced block body: expr (';' expr)* (or a leading `let`),
+/// stopping at the closing brace; a trailing `;` is tolerated.
+fn Parser::parse_block_body(self : Parser) -> ENode raise ParseErrorExpr {
+  self.at_expr0 = true
+  let items : Array[ENode] = []
+  if self.at_kw("let") {
+    items.push(self.parse_let())
+  } else {
+    items.push(self.parse_expr())
+  }
+  while self.at_op(";") {
+    self.pos += 1
+    if self.at_op("}") {
+      break
+    }
+    if self.at_kw("let") {
+      items.push(self.parse_let())
+    } else {
+      items.push(self.parse_expr())
+    }
+  }
+  if items.length() == 1 {
+    items[0]
+  } else {
+    ESeq(items)
+  }
 }
 
 ///|

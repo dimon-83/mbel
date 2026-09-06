@@ -104,6 +104,10 @@ pub fn default_grammar() -> Grammar {
       ("!", fn(v) { @ast.BoolVal(!truthy(v)) }),
       // expr keyword `not` lowers to a unary op as well.
       ("not", fn(v) { @ast.BoolVal(!truthy(v)) }),
+      // expr unary minus (JS ToNumber semantics — Jexl folded negatives
+      // at the lexer, so this op is only reachable from the expr front
+      // end with non-literal operands).
+      ("-", fn(v) { @ast.NumVal(-to_number(v)) }),
     ],
     regex_cache: [],
     regex_failed: [],
@@ -173,7 +177,51 @@ fn default_binary_ops() -> Array[(String, FnB)] {
     ("<=", fn(a, b) { @ast.BoolVal(compare("<=", a, b)) }),
     ("in", in_op),
     ("..", range_op),
+    // expr string operators (infix `contains`/`startsWith`/`endsWith`):
+    // nil-safe — a nil operand yields false, not an error.
+    ("contains", contains_op),
+    ("startsWith", starts_with_op),
+    ("endsWith", ends_with_op),
   ]
+}
+
+///|
+fn contains_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  str_bin_op("contains", a, b)
+}
+
+///|
+fn starts_with_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  str_bin_op("startsWith", a, b)
+}
+
+///|
+fn ends_with_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  str_bin_op("endsWith", a, b)
+}
+
+///|
+fn str_bin_op(
+  op : String,
+  a : @ast.Value,
+  b : @ast.Value,
+) -> @ast.Value raise EvalError {
+  match (a, b) {
+    (@ast.StrVal(s), @ast.StrVal(sub)) => {
+      let idx = index_of(s, sub)
+      let slen = s.to_array().length()
+      let sublen = sub.to_array().length()
+      match op {
+        "contains" => @ast.BoolVal(idx >= 0)
+        "startsWith" => @ast.BoolVal(idx == 0)
+        _ => @ast.BoolVal(idx >= 0 && idx + sublen == slen)
+      }
+    }
+    (@ast.NullVal | @ast.UndefVal, _) | (_, @ast.NullVal | @ast.UndefVal) =>
+      @ast.BoolVal(false)
+    _ =>
+      raise EvalError::EvalErr("operator '" + op + "' requires string operands")
+  }
 }
 
 ///|
@@ -320,6 +368,123 @@ fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 // --- Value access helpers ---
 
 ///|
+/// expr `subject[from:to]` slicing — shared by both engines. Bounds
+/// follow expr's runtime: negative values normalize to `len + x`, both
+/// clamp into [0, len], and `from > to` collapses to empty. Omitted
+/// bounds slice to the ends; arrays and strings are supported (string
+/// slicing is character-based in mbel; expr slices bytes — ASCII
+/// results coincide, non-ASCII divergence documented).
+pub fn slice_value(
+  subject : @ast.Value,
+  from : @ast.Value?,
+  to : @ast.Value?,
+) -> @ast.Value raise EvalError {
+  let f = match from {
+    None | Some(@ast.UndefVal) | Some(@ast.NullVal) => None
+    Some(v) => Some(bound_int(v))
+  }
+  let t = match to {
+    None | Some(@ast.UndefVal) | Some(@ast.NullVal) => None
+    Some(v) => Some(bound_int(v))
+  }
+  match subject {
+    @ast.ArrayVal(xs) => {
+      let n = xs.length()
+      let f0 = clamp_bound(
+        match f {
+          Some(x) => x
+          None => 0
+        },
+        n,
+      )
+      let t0 = clamp_bound(
+        match t {
+          Some(x) => x
+          None => n
+        },
+        n,
+      )
+      let start = if f0 > t0 { t0 } else { f0 }
+      let out : Array[@ast.Value] = []
+      let mut i = start
+      while i < t0 {
+        out.push(xs[i])
+        i += 1
+      }
+      @ast.ArrayVal(out)
+    }
+    @ast.StrVal(s) => {
+      let chars = s.to_array()
+      let n = chars.length()
+      let f0 = clamp_bound(
+        match f {
+          Some(x) => x
+          None => 0
+        },
+        n,
+      )
+      let t0 = clamp_bound(
+        match t {
+          Some(x) => x
+          None => n
+        },
+        n,
+      )
+      let start = if f0 > t0 { t0 } else { f0 }
+      let out : Array[Char] = []
+      let mut i = start
+      while i < t0 {
+        out.push(chars[i])
+        i += 1
+      }
+      @ast.StrVal(String::from_array(out))
+    }
+    _ => raise EvalError::EvalErr("cannot slice " + value_kind(subject))
+  }
+}
+
+///|
+/// A slice bound must be an integral number.
+fn bound_int(v : @ast.Value) -> Int raise EvalError {
+  match v {
+    @ast.NumVal(d) =>
+      if d != d.floor() || d != d {
+        raise EvalError::EvalErr("slice bounds must be integers")
+      } else {
+        d.to_int()
+      }
+    _ => raise EvalError::EvalErr("slice bounds must be integers")
+  }
+}
+
+///|
+/// Clamps a slice bound into [0, n] after negative normalization.
+fn clamp_bound(x : Int, n : Int) -> Int {
+  let mut v = if x < 0 { n + x } else { x }
+  if v < 0 {
+    v = 0
+  }
+  if v > n {
+    v = n
+  }
+  v
+}
+
+///|
+/// Short value-kind name for error messages.
+pub fn value_kind(v : @ast.Value) -> String {
+  match v {
+    @ast.BoolVal(_) => "boolean"
+    @ast.NumVal(_) => "number"
+    @ast.StrVal(_) => "string"
+    @ast.ArrayVal(_) => "array"
+    @ast.ObjectVal(_) => "map"
+    @ast.NullVal => "nil"
+    @ast.UndefVal => "undefined"
+  }
+}
+
+///|
 /// JS property access: `subject[key]` for objects, arrays (length,
 /// numeric string keys), and strings (length).
 pub fn index_value(subject : @ast.Value, res : @ast.Value) -> @ast.Value {
@@ -434,6 +599,9 @@ pub struct Evaluator {
   mut slot_elem : @ast.Value
   mut slot_idx : Int
   mut slot_acc : @ast.Value
+  // Lexical let-bindings (expr `let`/sequences): innermost last. Empty
+  // for every legacy (Jexl) evaluation, so legacy behavior is unchanged.
+  mut locals : Array[(String, @ast.Value)]
 }
 
 ///|
@@ -464,6 +632,7 @@ pub fn new_evaluator_limited(
     slot_elem: @ast.UndefVal,
     slot_idx: 0,
     slot_acc: @ast.UndefVal,
+    locals: [],
   }
 }
 
@@ -484,6 +653,7 @@ pub fn new_relative_evaluator(
     slot_elem: @ast.UndefVal,
     slot_idx: 0,
     slot_acc: @ast.UndefVal,
+    locals: [],
   }
 }
 
@@ -555,7 +725,76 @@ fn Evaluator::dispatch(
         "#acc" => self.slot_acc
         _ => @ast.UndefVal
       }
+    @ast.SequenceNode => self.eval_sequence(ast)
+    @ast.VariableDeclaratorNode =>
+      raise EvalError::EvalErr("variable declarator outside a sequence")
+    @ast.SliceNode => self.eval_slice(ast)
   }
+}
+
+///|
+/// Evaluates a sequence `a; b; c`: items run left to right, `let`
+/// items bind into a fresh local scope for the rest of the sequence,
+/// and the last expression's value is the sequence's value.
+fn Evaluator::eval_sequence(
+  self : Evaluator,
+  ast : @ast.AstNode,
+) -> @ast.Value raise EvalError {
+  let base = self.locals.length()
+  let mut result = @ast.UndefVal
+  for item in ast.args {
+    if item.node_type is @ast.VariableDeclaratorNode {
+      let v = self.eval(item.args[0])
+      self.locals.push((item.ident_name, v))
+    } else {
+      result = self.eval(item)
+    }
+  }
+  while self.locals.length() > base {
+    ignore(self.locals.pop())
+  }
+  result
+}
+
+///|
+/// Evaluates a slice `subject[from:to]`; missing bounds slice to the
+/// ends. Result arrays charge the step budget by element count.
+fn Evaluator::eval_slice(
+  self : Evaluator,
+  ast : @ast.AstNode,
+) -> @ast.Value raise EvalError {
+  let subject = self.eval(ast.subject.unwrap())
+  let from_v = match ast.slice_from {
+    Some(f) => Some(self.eval(f))
+    None => None
+  }
+  let to_v = match ast.slice_to {
+    Some(t) => Some(self.eval(t))
+    None => None
+  }
+  let result = slice_value(subject, from_v, to_v)
+  match result {
+    @ast.ArrayVal(xs) => self.charge_alloc(xs.length())
+    _ => ()
+  }
+  result
+}
+
+///|
+/// Innermost-first lookup of a lexical let-binding.
+fn lookup_local(
+  locals : Array[(String, @ast.Value)],
+  name : String,
+) -> @ast.Value? {
+  let mut i = locals.length() - 1
+  while i >= 0 {
+    let (n, v) = locals[i]
+    if n == name {
+      return Some(v)
+    }
+    i -= 1
+  }
+  None
 }
 
 ///|
@@ -574,13 +813,25 @@ pub fn Evaluator::eval_array(
 // --- Node handlers (ported from evaluator/handlers.js) ---
 
 ///|
-/// Resolves an Identifier: either a plain context key, or a drill-down
-/// through the evaluated `from` expression (arrays unwrap to element 0).
+/// Resolves an Identifier: either a plain context key, a lexical
+/// let-binding, or a drill-down through the evaluated `from`
+/// expression (arrays unwrap to element 0).
 fn Evaluator::eval_identifier(
   self : Evaluator,
   ast : @ast.AstNode,
 ) -> @ast.Value raise EvalError {
   if ast.from is None {
+    if !ast.relative {
+      // `$env` is the whole context (expr: the environment value);
+      // let-bound names shadow context keys.
+      if ast.ident_name == "$env" {
+        return self.context
+      }
+      match lookup_local(self.locals, ast.ident_name) {
+        Some(v) => return v
+        None => ()
+      }
+    }
     let ctx = if ast.relative { self.rel_context } else { self.context }
     return key_of_value(ctx, ast.ident_name)
   }
@@ -774,7 +1025,8 @@ fn Evaluator::eval_filter(
     let results : Array[@ast.Value] = []
     for elem in list {
       // Element evaluators share the parent's step budget so a large
-      // filtered array cannot amplify work past the limit.
+      // filtered array cannot amplify work past the limit; they also
+      // inherit lexical let-bindings from the enclosing sequence.
       let e = {
         grammar: self.grammar,
         context: self.context,
@@ -786,6 +1038,7 @@ fn Evaluator::eval_filter(
         slot_elem: elem,
         slot_idx: 0,
         slot_acc: @ast.UndefVal,
+        locals: self.locals,
       }
       if truthy(e.eval(ast.filter_expr.unwrap())) {
         results.push(elem)
@@ -853,6 +1106,7 @@ fn Evaluator::eval_aggregate(
         slot_elem: elem,
         slot_idx: i,
         slot_acc: acc,
+        locals: self.locals,
       }
       e.eval(pred_ast)
     }

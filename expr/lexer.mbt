@@ -87,8 +87,12 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
       }
       continue
     }
-    // identifiers / keywords
-    if is_ident_start(c) {
+    // identifiers / keywords (b"…" byte strings are handled by the
+    // byte-string branch below — never treat `b` as an identifier here)
+    if is_ident_start(c) &&
+      !((c == 'b' || c == 'B') &&
+      i + 1 < n &&
+      (chars[i + 1] == '"' || chars[i + 1] == '\'')) {
       let start = i
       while i < n && is_ident_cont(chars[i]) {
         i += 1
@@ -107,7 +111,7 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
       out.push(tok(TkPointer, source[start:i].to_owned(), pos))
       continue
     }
-    // byte strings b"…" / b'…'
+    // byte strings b"…" / b'…' (value is a raw byte sequence)
     if (c == 'b' || c == 'B') &&
       i + 1 < n &&
       (chars[i + 1] == '"' || chars[i + 1] == '\'') {
@@ -118,20 +122,68 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
       while i < n {
         let ch = chars[i]
         if ch == '\\' && i + 1 < n {
-          // byte strings support \xNN and octal only
-          if chars[i + 1] == 'x' && i + 3 < n {
-            let hi = hex_val(chars[i + 2])
-            let lo = hex_val(chars[i + 3])
-            match (hi, lo) {
-              (Some(h), Some(l)) => {
-                buf.write_char((h * 16 + l).unsafe_to_char())
-                i += 4
-                continue
+          i += 1
+          let e = chars[i]
+          match e {
+            'n' => buf.write_char('\n')
+            'r' => buf.write_char('\r')
+            't' => buf.write_char('\t')
+            'a' => buf.write_char('\u{7}')
+            'b' => buf.write_char('\u{8}')
+            'f' => buf.write_char('\u{C}')
+            'v' => buf.write_char('\u{B}')
+            '\\' => buf.write_char('\\')
+            '\'' => buf.write_char('\'')
+            '"' => buf.write_char('"')
+            'x' =>
+              if i + 2 < n {
+                match (hex_val(chars[i + 1]), hex_val(chars[i + 2])) {
+                  (Some(h), Some(l)) => {
+                    buf.write_char(((h * 16 + l) & 0xFF).unsafe_to_char())
+                    i += 2
+                  }
+                  (_, _) =>
+                    raise LexError::LexErr(
+                      "invalid \\x escape",
+                      line,
+                      i - line_start + 1,
+                    )
+                }
+              } else {
+                raise LexError::LexErr(
+                  "invalid \\x escape",
+                  line,
+                  i - line_start + 1,
+                )
               }
-              (_, _) => ()
+            '0' | '1' | '2' | '3' => {
+              // octal escape \NNN, up to \377
+              let mut val = e.to_int() - '0'.to_int()
+              let mut k = 1
+              while k < 3 &&
+                    i + k < n &&
+                    chars[i + k] >= '0' &&
+                    chars[i + k] <= '7' {
+                val = val * 8 + (chars[i + k].to_int() - '0'.to_int())
+                k += 1
+              }
+              if val > 255 {
+                raise LexError::LexErr(
+                  "unable to unescape string",
+                  line,
+                  i - line_start + 1,
+                )
+              }
+              buf.write_char(val.unsafe_to_char())
+              i += k - 1
             }
+            _ =>
+              raise LexError::LexErr(
+                "invalid char escape",
+                line,
+                i - line_start + 1,
+              )
           }
-          buf.write_char(ch)
           i += 1
           continue
         }
@@ -141,10 +193,18 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
           break
         }
         if ch == '\n' {
-          line += 1
-          line_start = i + 1
+          raise LexError::LexErr(
+            "literal not terminated",
+            line,
+            i - line_start + 1,
+          )
         }
-        buf.write_char(ch)
+        // non-ASCII chars are UTF-8-encoded into the byte sequence
+        if ch.to_int() > 127 {
+          write_utf8_bytes(buf, ch.to_int())
+        } else {
+          buf.write_char(ch)
+        }
         i += 1
       }
       if !closed {
@@ -157,7 +217,7 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
       out.push(tok(TkBytes, buf.to_string(), pos))
       continue
     }
-    // strings
+    // strings (single or double quoted — one shared escape set)
     if c == '"' || c == '\'' {
       let quote = c
       i += 1
@@ -176,7 +236,6 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
             'b' => buf.write_char('\u{8}')
             'f' => buf.write_char('\u{C}')
             'v' => buf.write_char('\u{B}')
-            '0' => buf.write_char('\u{0}')
             '`' => buf.write_char('`')
             '\'' => buf.write_char('\'')
             '"' => buf.write_char('"')
@@ -195,10 +254,16 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
                       i - line_start + 1,
                     )
                 }
+              } else {
+                raise LexError::LexErr(
+                  "invalid \\x escape",
+                  line,
+                  i - line_start + 1,
+                )
               }
             'u' =>
               if i + 1 < n && chars[i + 1] == '{' {
-                // \u{XXXXXX}
+                // \u{1-6 hex digits}
                 let mut j = i + 2
                 let mut cp = 0
                 let mut digits = 0
@@ -213,6 +278,13 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
                   }
                 }
                 if j < n && chars[j] == '}' && digits > 0 {
+                  if cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF) {
+                    raise LexError::LexErr(
+                      "unable to unescape string",
+                      line,
+                      i - line_start + 1,
+                    )
+                  }
                   buf.write_char(cp.unsafe_to_char())
                   i = j
                 } else {
@@ -223,6 +295,7 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
                   )
                 }
               } else if i + 4 < n {
+                // \uXXXX (4 hex digits)
                 match
                   (
                     hex_val(chars[i + 1]),
@@ -231,9 +304,15 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
                     hex_val(chars[i + 4]),
                   ) {
                   (Some(a), Some(b), Some(cc), Some(d)) => {
-                    buf.write_char(
-                      (a * 4096 + b * 256 + cc * 16 + d).unsafe_to_char(),
-                    )
+                    let cp = a * 4096 + b * 256 + cc * 16 + d
+                    if cp >= 0xD800 && cp <= 0xDFFF {
+                      raise LexError::LexErr(
+                        "unable to unescape string",
+                        line,
+                        i - line_start + 1,
+                      )
+                    }
+                    buf.write_char(cp.unsafe_to_char())
                     i += 4
                   }
                   (_, _, _, _) =>
@@ -243,8 +322,68 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
                       i - line_start + 1,
                     )
                 }
+              } else {
+                raise LexError::LexErr(
+                  "invalid \\u escape",
+                  line,
+                  i - line_start + 1,
+                )
               }
-            _ => buf.write_char(e)
+            'U' =>
+              // \UXXXXXXXX (8 hex digits)
+              if i + 8 < n {
+                let mut cp = 0
+                let mut ok = true
+                for k in 1..<9 {
+                  match hex_val(chars[i + k]) {
+                    Some(h) => cp = cp * 16 + h
+                    None => ok = false
+                  }
+                }
+                if ok && cp <= 0x10FFFF && !(cp >= 0xD800 && cp <= 0xDFFF) {
+                  buf.write_char(cp.unsafe_to_char())
+                  i += 8
+                } else {
+                  raise LexError::LexErr(
+                    "invalid \\U escape",
+                    line,
+                    i - line_start + 1,
+                  )
+                }
+              } else {
+                raise LexError::LexErr(
+                  "invalid \\U escape",
+                  line,
+                  i - line_start + 1,
+                )
+              }
+            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' => {
+              // octal escape \NNN (up to 3 digits); \777+ is invalid
+              let mut val = e.to_int() - '0'.to_int()
+              let mut k = 1
+              while k < 3 &&
+                    i + k < n &&
+                    chars[i + k] >= '0' &&
+                    chars[i + k] <= '7' {
+                val = val * 8 + (chars[i + k].to_int() - '0'.to_int())
+                k += 1
+              }
+              if val > 255 {
+                raise LexError::LexErr(
+                  "unable to unescape string",
+                  line,
+                  i - line_start + 1,
+                )
+              }
+              buf.write_char(val.unsafe_to_char())
+              i += k - 1
+            }
+            _ =>
+              raise LexError::LexErr(
+                "invalid char escape",
+                line,
+                i - line_start + 1,
+              )
           }
           i += 1
           continue
@@ -255,8 +394,11 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
           break
         }
         if ch == '\n' {
-          line += 1
-          line_start = i + 1
+          raise LexError::LexErr(
+            "literal not terminated",
+            line,
+            i - line_start + 1,
+          )
         }
         buf.write_char(ch)
         i += 1
@@ -329,6 +471,27 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
   }
   out.push(tok(TkEOF, "", n))
   out
+}
+
+///|
+/// Encodes code point `cp` as UTF-8, appending each byte as a 0-255
+/// char so a byte string's text is one char per byte.
+fn write_utf8_bytes(buf : StringBuilder, cp : Int) -> Unit {
+  if cp <= 0x7F {
+    buf.write_char(cp.unsafe_to_char())
+  } else if cp <= 0x7FF {
+    buf.write_char(((0xC0 | (cp >> 6)) & 0xFF).unsafe_to_char())
+    buf.write_char(((0x80 | (cp & 0x3F)) & 0xFF).unsafe_to_char())
+  } else if cp <= 0xFFFF {
+    buf.write_char(((0xE0 | (cp >> 12)) & 0xFF).unsafe_to_char())
+    buf.write_char(((0x80 | ((cp >> 6) & 0x3F)) & 0xFF).unsafe_to_char())
+    buf.write_char(((0x80 | (cp & 0x3F)) & 0xFF).unsafe_to_char())
+  } else {
+    buf.write_char(((0xF0 | (cp >> 18)) & 0xFF).unsafe_to_char())
+    buf.write_char(((0x80 | ((cp >> 12) & 0x3F)) & 0xFF).unsafe_to_char())
+    buf.write_char(((0x80 | ((cp >> 6) & 0x3F)) & 0xFF).unsafe_to_char())
+    buf.write_char(((0x80 | (cp & 0x3F)) & 0xFF).unsafe_to_char())
+  }
 }
 
 ///|

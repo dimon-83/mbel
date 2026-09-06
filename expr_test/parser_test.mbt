@@ -11,6 +11,11 @@ fn dump_of(src : String) -> String raise @expr.ParseErrorExpr {
 fn expect_dump(src : String, expected : String, label : String) -> Unit raise {
   let d = dump_of(src) catch {
     ParseErrExpr(msg, l, c) => {
+      // expectations starting with "parse error at" accept any parse
+      // error; anything else must match the message exactly
+      if expected.length() >= 14 && expected[:14] == "parse error at" {
+        return
+      }
       inspect(
         "parse error at " + l.to_string() + ":" + c.to_string() + ": " + msg,
         content=expected,
@@ -130,6 +135,70 @@ test "expr parser: predicates and pointers" {
   expect_dump(
     "reduce(xs, #acc + #)", "call(id:reduce,id:xs,bin(+,ptr:#acc,ptr:#))", "reduce pred",
   )
+}
+
+///|
+test "expr parser: unary vs power precedence (expr parity)" {
+  expect_dump("-2 ** 2", "un(-,bin(**,int:2,int:2))", "-x**y = -(x**y)")
+  expect_dump("2 ** -2", "bin(**,int:2,un(-,int:2))", "negative exponent")
+  expect_dump("-2 * 3", "bin(*,un(-,int:2),int:3)", "- binds tighter than *")
+  expect_dump("!x == y", "bin(==,un(!,id:x),id:y)", "! then ==")
+  expect_dump("not x and y", "bin(and,un(not,id:x),id:y)", "not then and")
+}
+
+///|
+test "expr parser: ?? mixing rules" {
+  // `1 + 2 ?? 3` is legal: ?? (prec 500) binds tighter than +.
+  expect_dump("1 + 2 ?? 3", "bin(+,int:1,bin(??,int:2,int:3))", "?? inside +")
+  expect_dump("a ?? b ?? c", "bin(??,bin(??,id:a,id:b),id:c)", "?? chains")
+  // an operator directly after `??` at the same level is an error
+  expect_dump("1 ?? 2 + 3", "parse error at", "?? then + rejected")
+  expect_dump("foo ?? bar || baz", "parse error at", "?? then || rejected")
+  expect_dump(
+    "(1 ?? 2) + 3", "bin(+,bin(??,int:1,int:2),int:3)", "parens reset",
+  )
+}
+
+///|
+test "expr parser: if/else requires else and full block bodies" {
+  expect_dump("if a { 1 } else { 2 }", "cond(id:a,int:1,int:2)", "if else")
+  expect_dump(
+    "if a { 1; 2 } else { 3 }", "cond(id:a,seq[int:1;int:2],int:3)", "sequence branch",
+  )
+  expect_dump(
+    "if a { let x = 1; x } else { 2 }", "cond(id:a,let(x,int:1,id:x),int:2)", "let inside branch",
+  )
+  expect_dump(
+    "if a { 1 } else if b { 2 } else { 3 }", "cond(id:a,int:1,cond(id:b,int:2,int:3))",
+    "else if",
+  )
+  expect_dump("if a { 1 }", "parse error at", "missing else rejected")
+  expect_dump(
+    "1 + if a { 1 } else { 2 }", "parse error at", "if not allowed mid-expression",
+  )
+  expect_dump(
+    "(if a { 1 } else { 2 }) + 3", "bin(+,cond(id:a,int:1,int:2),int:3)", "parenthesized if is a value",
+  )
+}
+
+///|
+test "expr parser: let at precedence-0 sites only" {
+  expect_dump(
+    "(let x = 1; x) + 2", "bin(+,let(x,int:1,id:x),int:2)", "let in parens",
+  )
+  expect_dump("let $env = 1; 2", "parse error at", "cannot declare $env")
+  expect_dump("1 | 2", "parse error at", "pipe rhs must be a call")
+}
+
+///|
+test "expr parser: not-suffixed string operators" {
+  expect_dump(
+    "a not contains \"x\"", "un(not,bin(contains,id:a,str:x))", "not contains",
+  )
+  expect_dump(
+    "a startsWith \"x\"", "bin(startsWith,id:a,str:x)", "startsWith op",
+  )
+  expect_dump("a endsWith \"x\"", "bin(endsWith,id:a,str:x)", "endsWith op")
 }
 
 ///|

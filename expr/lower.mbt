@@ -19,13 +19,10 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
     EFloat(d) => @ast.literal(@ast.NumVal(d))
     EStr(s) => @ast.literal(@ast.StrVal(s))
     EBytes(_) =>
-      raise LowerError::LowerErr("byte-string values are not yet evaluable")
-    EIdent(name) =>
-      if name == "$env" {
-        raise LowerError::LowerErr("$env is not yet supported")
-      } else {
-        @ast.identifier(name)
-      }
+      raise LowerError::LowerErr(
+        "byte-string values need the typed value model (stage 4.4.3)",
+      )
+    EIdent(name) => @ast.identifier(name)
     EMember(base, name, _) => {
       // ?. lowers to plain member access: mbel's drill-down already
       // returns nil/undefined for nil bases (nil-safe by default).
@@ -39,8 +36,18 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       let i = lower(idx)
       @ast.filter_expression(i, false, b)
     }
-    ESlice(_, _, _) =>
-      raise LowerError::LowerErr("slices are not yet evaluable")
+    ESlice(base, from, to) => {
+      let b = lower(base)
+      let f = match from {
+        Some(x) => Some(lower(x))
+        None => None
+      }
+      let t = match to {
+        Some(x) => Some(lower(x))
+        None => None
+      }
+      @ast.slice_node(b, f, t)
+    }
     ECall(callee, args) => lower_call(callee, args)
     EPred(inner) => lower(inner)
     EArray(items) => {
@@ -102,13 +109,56 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       }
       cond
     }
-    ELet(_, _, _) =>
-      raise LowerError::LowerErr("let declarations are not yet evaluable")
-    ESeq(_) => raise LowerError::LowerErr("sequences are not yet evaluable")
+    ELet(name, v, rest) => {
+      let items : Array[@ast.AstNode] = [
+        @ast.variable_declarator(name, lower(v)),
+      ]
+      for x in seq_items(rest) {
+        items.push(x)
+      }
+      let s = @ast.sequence()
+      s.args = items
+      s
+    }
+    ESeq(items) => {
+      let s = @ast.sequence()
+      for item in items {
+        for x in seq_items(item) {
+          s.args.push(x)
+        }
+      }
+      s
+    }
     EPointer(kind) => {
       let p = @ast.pointer(kind)
       p
     }
+  }
+}
+
+///|
+/// Flattens a let-chain/sequence tail into sequence items, expanding
+/// nested ELet/ESeq (parse_let consumes its whole rest, so a `let`
+/// inside a sequence arrives with its body already attached).
+fn seq_items(n : ENode) -> Array[@ast.AstNode] raise LowerError {
+  match n {
+    ELet(name, v, rest) => {
+      let out : Array[@ast.AstNode] = [@ast.variable_declarator(name, lower(v))]
+      for x in seq_items(rest) {
+        out.push(x)
+      }
+      out
+    }
+    ESeq(items) => {
+      let out : Array[@ast.AstNode] = []
+      for item in items {
+        for x in seq_items(item) {
+          out.push(x)
+        }
+      }
+      out
+    }
+    other => [lower(other)]
   }
 }
 
@@ -121,7 +171,9 @@ fn lower_call(
     EIdent(f) => f
     EMember(_, m, _) =>
       raise LowerError::LowerErr(
-        "method calls are not yet evaluable (.'" + m + "(…))",
+        "method call '" +
+        m +
+        "' is not supported on data values (expr cut: Go-reflection methods)",
       )
     _ => raise LowerError::LowerErr("invalid call target")
   }

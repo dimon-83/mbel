@@ -188,15 +188,188 @@ test "expr eval: aggregates inside range and nested" {
   expect_eval("count(filter(nums, # > 2))", @ast.NumVal(3.0), "count filter")
 }
 
+// --- stage 4.4.1/4.4.2 evaluation: sequences, let, slices, $env ---
+
+///|
+test "expr eval: sequences and let" {
+  expect_eval("1; 2; 3", @ast.NumVal(3.0), "seq value is last")
+  expect_eval("let x = 2; x * 3", @ast.NumVal(6.0), "let basic")
+  expect_eval("let a = 1; let b = a + 1; a + b", @ast.NumVal(3.0), "let chain")
+  expect_eval(
+    "let x = 1; let x = x + 1; x",
+    @ast.NumVal(2.0),
+    "redeclaration shadows (Eval-mode expr semantics)",
+  )
+  expect_eval("1; let x = 5; x", @ast.NumVal(5.0), "let mid-sequence")
+  expect_eval(
+    "(let x = 1; x + 1) * 3",
+    @ast.NumVal(6.0),
+    "let in parens is an expression",
+  )
+  expect_eval("x + 1", @ast.NumVal(4.0), "ctx untouched by local x")
+  expect_eval(
+    "let n = 2; count(nums, # > n)",
+    @ast.NumVal(3.0),
+    "predicate reads outer let",
+  )
+  expect_eval(
+    "let k = 2; map(nums, # * k)",
+    @ast.ArrayVal([
+      @ast.NumVal(2.0),
+      @ast.NumVal(4.0),
+      @ast.NumVal(6.0),
+      @ast.NumVal(8.0),
+      @ast.NumVal(10.0),
+    ]),
+    "aggregate pred inherits locals on both engines",
+  )
+}
+
+///|
+test "expr eval: if/else is a value with sequence branches" {
+  expect_eval(
+    "if age > 20 { \"adult\" } else { \"minor\" }",
+    @ast.StrVal("adult"),
+    "if else",
+  )
+  expect_eval(
+    "if age > 100 { \"old\" } else if age > 20 { \"adult\" } else { \"minor\" }",
+    @ast.StrVal("adult"),
+    "else if",
+  )
+  expect_eval(
+    "if false { let y = 99; y } else { let x = 2; x * 10 }",
+    @ast.NumVal(20.0),
+    "let inside branch",
+  )
+  expect_eval(
+    "let y = 5; (if false { let y = 1; y } else { 0 }) + y",
+    @ast.NumVal(5.0),
+    "branch let does not leak",
+  )
+  expect_eval(
+    "(if age > 20 { 1; 2 } else { 3 }) * 10",
+    @ast.NumVal(20.0),
+    "sequence branch value",
+  )
+}
+
+///|
+test "expr eval: slices" {
+  expect_eval(
+    "nums[1:3]",
+    @ast.ArrayVal([@ast.NumVal(2.0), @ast.NumVal(3.0)]),
+    "slice",
+  )
+  expect_eval(
+    "nums[:2]",
+    @ast.ArrayVal([@ast.NumVal(1.0), @ast.NumVal(2.0)]),
+    "open from",
+  )
+  expect_eval(
+    "nums[2:]",
+    @ast.ArrayVal([@ast.NumVal(3.0), @ast.NumVal(4.0), @ast.NumVal(5.0)]),
+    "open to",
+  )
+  expect_eval(
+    "nums[-2:]",
+    @ast.ArrayVal([@ast.NumVal(4.0), @ast.NumVal(5.0)]),
+    "negative from",
+  )
+  expect_eval("nums[5:]", @ast.ArrayVal([]), "past end clamps to empty")
+  expect_eval(
+    "nums[:] ",
+    @ast.ArrayVal([
+      @ast.NumVal(1.0),
+      @ast.NumVal(2.0),
+      @ast.NumVal(3.0),
+      @ast.NumVal(4.0),
+      @ast.NumVal(5.0),
+    ]),
+    "full slice",
+  )
+  expect_eval("\"hello\"[1:3]", @ast.StrVal("el"), "string slice")
+  expect_eval("\"hello\"[-2:]", @ast.StrVal("lo"), "string negative")
+  expect_eval(
+    "let n = 4; nums[:n]",
+    @ast.ArrayVal([
+      @ast.NumVal(1.0),
+      @ast.NumVal(2.0),
+      @ast.NumVal(3.0),
+      @ast.NumVal(4.0),
+    ]),
+    "bound from a let",
+  )
+  expect_eval_err("nums[1.5:3]", "slice bounds must be integers", "float bound")
+  expect_eval_err("(age)[1:]", "cannot slice number", "slice number")
+}
+
+///|
+test "expr eval: $env and member/index on it" {
+  expect_eval("$env.age", @ast.NumVal(36.0), "$env member")
+  expect_eval("$env[\"name\"]", @ast.StrVal("Archer"), "$env index")
+  expect_eval(
+    "'nums' in keys($env)",
+    @ast.BoolVal(true),
+    "key in $env via keys",
+  )
+  expect_eval("len($env)", @ast.NumVal(5.0), "len of $env")
+}
+
+///|
+test "expr eval: string operators (contains family)" {
+  expect_eval("\"hello\" contains \"ell\"", @ast.BoolVal(true), "contains")
+  expect_eval(
+    "\"hello\" not contains \"xyz\"",
+    @ast.BoolVal(true),
+    "not contains",
+  )
+  expect_eval("\"hello\" startsWith \"he\"", @ast.BoolVal(true), "startsWith")
+  expect_eval("\"hello\" endsWith \"lo\"", @ast.BoolVal(true), "endsWith")
+  expect_eval("nil contains \"x\"", @ast.BoolVal(false), "nil-safe")
+}
+
+///|
+test "expr eval: unary precedence and unary minus on expressions" {
+  expect_eval("-2 ** 2", @ast.NumVal(-4.0), "-(2**2)")
+  expect_eval("2 ** -2", @ast.NumVal(0.25), "negative exponent")
+  expect_eval("-(1 + 2) * 3", @ast.NumVal(-9.0), "unary on expression")
+  expect_eval("-x + 1", @ast.NumVal(-2.0), "unary on identifier")
+  expect_eval("-2 * 3", @ast.NumVal(-6.0), "-2*3 = (-2)*3")
+}
+
+///|
+test "expr eval: escape family through string values" {
+  expect_eval("\"\\101\"", @ast.StrVal("A"), "octal escape")
+  expect_eval("\"\\u{1F600}\"", @ast.StrVal("\u{1F600}"), "u{} escape")
+  expect_eval("\"\\x41\"", @ast.StrVal("A"), "hex escape")
+}
+
 // --- unsupported-but-parsed syntax surfaces clean errors ---
 
 ///|
-test "expr eval: let/sequence/slice report not-yet-evaluable" {
-  expect_eval_err("let x = 1; x", "not yet evaluable", "let")
-  expect_eval_err("nums[1:3]", "not yet evaluable", "slice")
+test "expr eval: bytes and method calls surface clean errors" {
+  expect_eval_err(
+    "b\"hi\"", "byte-string values need the typed value model", "bytes",
+  )
+  expect_eval_err("name.upper()", "method call", "method on data")
 }
 
 ///|
 test "expr eval: parse errors surface with location" {
   expect_eval_err("1 +", "parse error at", "incomplete")
+}
+
+///|
+test "expr eval: ?? mixing with other operators errors" {
+  // expr: `??` (precedence 500) may not be followed by another binary
+  // operator at the same level; `1 + 2 ?? 3` is fine (?? binds inside).
+  expect_eval_err("1 ?? 2 + 3", "cannot be mixed", "?? then +")
+  expect_eval_err("foo ?? bar || baz", "cannot be mixed", "?? then ||")
+  expect_eval_err(
+    "1 + 2 ?? 3 + 4", "cannot be mixed", "?? then + after operand",
+  )
+  expect_eval("(1 ?? 2) + 3", @ast.NumVal(4.0), "parenthesized ?? ok")
+  expect_eval("1 + 2 ?? 3", @ast.NumVal(3.0), "?? binds tighter than +")
+  expect_eval("a ?? b ?? 7", @ast.NumVal(7.0), "chained ?? ok")
 }

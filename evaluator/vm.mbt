@@ -97,6 +97,21 @@ const OP_LOADSLOT = 19
 const OP_CALLAGG = 20
 
 ///|
+const OP_SLICE = 21
+
+///|
+const OP_LOADLOCAL = 22
+
+///|
+const OP_ADDLOCAL = 23
+
+///|
+const OP_POPLOCAL = 24
+
+///|
+const OP_ENV = 25
+
+///|
 /// A compiled program.
 pub struct Program {
   opcodes : Array[Int]
@@ -115,6 +130,9 @@ priv struct Compiler {
   mut cur_depth : Int
   mut max_depth_seen : Int
   filter_depths : Array[Int]
+  // statically known let-bindings in scope (name per local slot); the
+  // mirror of the runtime locals array order
+  local_names : Array[String]
 }
 
 ///|
@@ -125,6 +143,18 @@ pub fn compile_program(
   ast : @ast.AstNode,
   grammar : Grammar,
 ) -> Program raise EvalError {
+  compile_program_with_locals(ast, grammar, [])
+}
+
+///|
+/// Like compile_program, but starting with `outer` let-bindings already
+/// in scope (used for aggregate predicate sub-programs, which may read
+/// variables bound by the enclosing sequence).
+pub fn compile_program_with_locals(
+  ast : @ast.AstNode,
+  grammar : Grammar,
+  outer : Array[String],
+) -> Program raise EvalError {
   let c = {
     opcodes: [],
     operands: [],
@@ -133,6 +163,7 @@ pub fn compile_program(
     cur_depth: 0,
     max_depth_seen: 0,
     filter_depths: [],
+    local_names: outer.copy(),
   }
   c.compile_node(ast)
   {
@@ -201,6 +232,21 @@ fn Compiler::compile_node(
           self.track(1, 1)
         }
         None => {
+          // `$env` pushes the whole context; let-bound names resolve to
+          // local slots (innermost wins); otherwise context/rel lookup.
+          if !node.relative {
+            if node.ident_name == "$env" {
+              ignore(self.emit(OP_ENV, 0))
+              self.track(0, 1)
+              return
+            }
+            let slot = find_local_slot(self.local_names, node.ident_name)
+            if slot >= 0 {
+              ignore(self.emit(OP_LOADLOCAL, slot))
+              self.track(0, 1)
+              return
+            }
+          }
           let idx = self.const_idx(CVal(@ast.StrVal(node.ident_name)))
           if node.relative {
             ignore(self.emit(OP_LOADREL, idx))
@@ -210,6 +256,36 @@ fn Compiler::compile_node(
           self.track(0, 1)
         }
       }
+    @ast.SequenceNode => self.compile_sequence(node)
+    @ast.VariableDeclaratorNode =>
+      raise EvalError::EvalErr("variable declarator outside a sequence")
+    @ast.SliceNode => {
+      // subject; [from]; [to]; OP_SLICE(flags) with flag bits 1=from, 2=to
+      match node.subject {
+        Some(s) => self.compile_node(s)
+        None => ()
+      }
+      let mut flags = 0
+      let mut pushed = 1
+      match node.slice_from {
+        Some(f) => {
+          self.compile_node(f)
+          flags = flags | 1
+          pushed += 1
+        }
+        None => ()
+      }
+      match node.slice_to {
+        Some(t) => {
+          self.compile_node(t)
+          flags = flags | 2
+          pushed += 1
+        }
+        None => ()
+      }
+      ignore(self.emit(OP_SLICE, flags))
+      self.track(pushed, 1)
+    }
     @ast.BinaryExpressionNode => self.compile_binary(node)
     @ast.UnaryExpressionNode => {
       match node.right {
@@ -293,7 +369,9 @@ fn Compiler::compile_node(
         for i in 0..<argc {
           let a = node.args[i]
           if i == 1 && has_pred {
-            pred_prog = Some(compile_program(a, self.grammar))
+            pred_prog = Some(
+              compile_program_with_locals(a, self.grammar, self.local_names),
+            )
           } else {
             self.compile_node(a)
             non_pred += 1
@@ -410,6 +488,50 @@ fn Compiler::compile_alt_or_raise(
 }
 
 ///|
+/// Innermost-first index of a name in the compile-time local table, or
+/// -1 when not bound.
+fn find_local_slot(names : Array[String], name : String) -> Int {
+  let mut i = names.length() - 1
+  while i >= 0 {
+    if names[i] == name {
+      return i
+    }
+    i -= 1
+  }
+  -1
+}
+
+///|
+/// Compiles a sequence `a; b; c`: variable declarators bind a new
+/// local slot (OP_ADDLOCAL) that subsequent items resolve statically;
+/// the bindings are popped (OP_POPLOCAL) at the end of the sequence.
+fn Compiler::compile_sequence(
+  self : Compiler,
+  node : @ast.AstNode,
+) -> Unit raise EvalError {
+  let mark = self.local_names.length()
+  let mut binds = 0
+  for item in node.args {
+    if item.node_type is @ast.VariableDeclaratorNode {
+      self.compile_node(item.args[0])
+      let idx = self.const_idx(CVal(@ast.StrVal(item.ident_name)))
+      ignore(self.emit(OP_ADDLOCAL, idx))
+      self.track(1, 0)
+      self.local_names.push(item.ident_name)
+      binds += 1
+    } else {
+      self.compile_node(item)
+    }
+  }
+  if binds > 0 {
+    ignore(self.emit(OP_POPLOCAL, binds))
+    while self.local_names.length() > mark {
+      ignore(self.local_names.pop())
+    }
+  }
+}
+
+///|
 /// Compiles a FilterExpression:
 ///   relative -> subject; FILTERBEGIN(pred_start); <predicate>;
 ///   FILTEREND(pred_start)  — a native loop over the subject elements
@@ -481,6 +603,9 @@ priv struct VmState {
   mut slot_elem : @ast.Value
   mut slot_idx : Int
   mut slot_acc : @ast.Value
+  // lexical let-bindings (innermost last); names kept so tree-walk
+  // callbacks (LAZYBIN) can resolve them by name
+  mut locals : Array[(String, @ast.Value)]
 }
 
 ///|
@@ -511,6 +636,7 @@ pub fn run_program(
     slot_elem: @ast.UndefVal,
     slot_idx: 0,
     slot_acc: @ast.UndefVal,
+    locals: [],
   }
   vm.run()
 }
@@ -569,6 +695,7 @@ fn VmState::walk_eval(
     slot_elem: self.slot_elem,
     slot_idx: self.slot_idx,
     slot_acc: self.slot_acc,
+    locals: self.locals.copy(),
   }
   e.eval(ast)
 }
@@ -788,7 +915,9 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
             }
             let extra = values[1:].to_array()
             let has_pred = pred_prog is Some(_)
-            // Reuse ONE sub-VM across elements (typed slots).
+            // Reuse ONE sub-VM across elements (typed slots); it
+            // inherits a copy of the enclosing lexical bindings so
+            // predicates can read outer let-variables.
             let blank = {
               opcodes: [],
               operands: [],
@@ -806,6 +935,7 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
               slot_elem: @ast.UndefVal,
               slot_idx: 0,
               slot_acc: @ast.UndefVal,
+              locals: self.locals.copy(),
             }
             let sub = match pred_prog {
               Some(prog) => {
@@ -831,6 +961,44 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
           }
           _ => raise EvalError::EvalErr("VM: bad aggregate constant")
         }
+      OP_SLICE => {
+        let has_to = (operand & 2) != 0
+        let has_from = (operand & 1) != 0
+        let to_v = if has_to { Some(self.pop()) } else { None }
+        let from_v = if has_from { Some(self.pop()) } else { None }
+        let subject = self.pop()
+        let result = slice_value(subject, from_v, to_v)
+        match result {
+          @ast.ArrayVal(xs) => self.charge(xs.length())
+          _ => ()
+        }
+        self.push(result)
+        self.pc += 1
+      }
+      OP_LOADLOCAL => {
+        self.push(self.locals[operand].1)
+        self.pc += 1
+      }
+      OP_ADDLOCAL => {
+        let v = self.pop()
+        match self.consts[operand] {
+          CVal(@ast.StrVal(name)) => self.locals.push((name, v))
+          _ => raise EvalError::EvalErr("VM: bad local name constant")
+        }
+        self.pc += 1
+      }
+      OP_POPLOCAL => {
+        let mut k = operand
+        while k > 0 {
+          ignore(self.locals.pop())
+          k -= 1
+        }
+        self.pc += 1
+      }
+      OP_ENV => {
+        self.push(self.context)
+        self.pc += 1
+      }
       OP_LAZYBIN =>
         match self.consts[operand] {
           CAst(node) => {

@@ -2,13 +2,16 @@
 
 对照基准:https://expr-lang.org/docs/language-definition 与
 expr 仓库 docs/language-definition.md(commit 4b31df3, v1.17.8)。
-测试证据:mbel 189 个 test 函数(`moon test` 常规计数 168 + 21 个
+测试证据:mbel 205 个 test 函数(`moon test` 常规计数 184 + 21 个
 bench 经 `moon bench` 运行)——lexer_test 21 / parser_test 29 /
-evaluator_test 28 / expr_test 19(parser 9 · eval 9 · opcode 1)/
+evaluator_test 28 / expr_test 32(parser 14 · eval 17 · opcode 1)/
+expr 白盒 3(lexer_wbtest:字符串/字节串转义与注释词法)/
 engine_test 92(API 26 · 预算 7 · builtin 16 · 聚合 10 · Walk-vs-Vm
 对拍 9 · 稳定性 3(7 场景套件×双引擎+引擎间一致性)· bench 21);
-三目标(native / wasm-gc / js)均 168/168;另与真实 Jexl 的差分
+三目标(native / wasm-gc / js)均 184/184;另与真实 Jexl 的差分
 corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7。
+语法层覆盖更新:2026-09-06 4.4.1(lexer)+4.4.2(parser+求值)交付,
+本轮(§1-§3)❌ 行大量转 ✅;未标"4.4.x"的行已实现。
 
 图例:✅ 已实现且有测试 | 🟡 部分/语义受限 | ❌ 未实现
 
@@ -16,20 +19,20 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 
 | 特性 | 状态 | 测试证据 | 备注 |
 |---|---|---|---|
-| 整数(十进制) | ✅ | lexer_test (21), corpus | JS double 承载,±2^53 内精确 |
+| 整数(十进制) | ✅ | lexer_test (21), corpus | JS double 承载,±2^53 内精确;expr 前端另有 Int64 字面量 EInt(4.4.3 前折叠为 NumVal) |
 | 浮点 | ✅ | corpus `0.1+0.2` 等 | 正确舍入解析;最短格式输出 |
-| hex/oct/bin/`_` 分隔 | ❌ | — | 4.4.1 lexer |
-| 指数字面量 `1e9` | ❌ | — | 4.4.1 lexer |
-| `.5` 形式 | ❌(Jexl 把 `.` 当元素) | corpus `1..2` 类 | 4.4.1 |
-| 字符串 '…' / "…" | ✅ | lexer_test, corpus | 转义 `\"` `\\` |
-| 转义 `\xNN \uXXXX \u{…}` 八进制 | ❌ | — | 4.4.1 |
-| 原始字符串 `` `…` `` | ❌ | — | 4.4.1 |
-| 字节串 b"…" | ❌ | — | 4.4.1 + 值模型 Bytes |
+| hex/oct/bin/`_` 分隔 | ✅ | lexer_wbtest, parser_test, eval_test | 0x/0o/0b 与 `_`(expr 前端词法) |
+| 指数字面量 `1e9` | ✅ | parser_test `1.5e-3` | 含 `E`/`e`/符号指数 |
+| `.5` 形式 | ✅ | parser_test `.5` | 仅数字起始上下文词法化为浮点(与成员 `.` 区分) |
+| 字符串 '…' / "…" | ✅ | lexer_test, corpus | 单双引号同一转义集 |
+| 转义 `\xNN \uXXXX \u{…}` 八进制 | ✅ | lexer_wbtest, eval_test | 含 `\UXXXXXXXX`;非法转义/孤立代理/越界码点=词法错误(expr 语义) |
+| 原始字符串 `` `…` `` | ✅ | lexer_wbtest, parser_test | 反引号内无转义,`` 双写转义反引号,允许真实换行 |
+| 字节串 b"…" | 🟡 | lexer_wbtest | 词法/解析 ✅(`b"…"`/`B'…'`,转义=简单集+`\xNN`+八进制≤`\377`,`\u` 拒绝,非 ASCII 按 UTF-8 编码);求值待 4.4.3 值模型(Bytes) |
 | 布尔 true/false | ✅ | lexer_test | |
-| nil | 🟡 | ctx corpus `foo == null` | 无 nil 字面量(Jexl 无);NullVal 运行时存在 |
+| nil | ✅ | eval_test `nil contains…` | nil 字面量(expr 前端)+NullVal 运行时存在 |
 | 数组 [1,2,3] | ✅ | parser_test, corpus | |
-| map {a:1, 'b':2} | ✅ | parser_test, corpus | key: ident/string/number |
-| 注释 // /* */ | ❌ | — | 4.4.1 |
+| map {a:1, 'b':2} | ✅ | parser_test, corpus | key: ident/string/number/括号表达式 |
+| 注释 // /* */ | ✅ | parser_test(lexer 层) | 行注释与块注释(块注释跨行计数正确) |
 
 ## 2. 运算符
 
@@ -38,32 +41,32 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 算术 + - * / | ✅ | evaluator_test, corpus | JS 语义(`/` 不恒 float) |
 | 整除 // | ✅ | corpus `7//2`=3 | Math.floor |
 | 取模 % | ✅ | corpus | 精确 fmod(Dekker) |
-| 幂 ^ | 🟡 | corpus | Jexl:左结合优先级 50;expr:`^`/`**` 右结合 100 → 4.4.2 |
-| ** 幂 | ❌ | — | 4.4.2 |
+| 幂 ^ | 🟡 | corpus | Jexl legacy:左结合 50;expr 前端:`^`/`**` 右结合 100(下一行) |
+| ** 幂 | ✅ | parser_test, eval_test | 右结合;`-2**2`=-(2**2)(一元 90<100);负指数合法 |
 | 比较 == != < <= > >= | ✅ | evaluator_test, corpus | JS loose ==;expr 严格 → 4.4.5 |
 | 逻辑 && \|\| ! | ✅ | evaluator_test(短路) | 惰性求值 |
-| not / and / or 词形 | ❌ | — | 4.4.1 关键字词法 |
-| in / not in | ✅ / ❌ | corpus | not 后缀否定 → 4.4.2 |
-| ?? 空合并 | ✅ | builtin_test | 混用限制未移植(接受 1+2??3) |
-| .. 范围 | ✅ | builtin_test | 1e6 内存预算 |
-| 切片 [1:3] [:3] [3:] | ❌ | — | 4.4.2(filter 子解析扩展) |
-| 可选链 ?. /?.[ | ❌ | — | 4.4.2 |
-| 链式比较 a<b<c | ❌ | — | 4.4.2 |
+| not / and / or 词形 | ✅ | parser_test | 关键字词法;`and`/`or` 二元(15/10),`not` 一元(50)+后缀否定 |
+| in / not in | ✅ / ✅ | corpus, parser_test | 后缀否定集=in/matches/contains/startsWith/endsWith;`a not in b`→`not (a in b)`;字符串上的 legacy `in` 为子串语义(expr 报错,差异记录) |
+| ?? 空合并 | ✅ | eval_test | expr 混用限制已实现(`1 ?? 2 + 3` 解析报错,提示用括号);链式 `a ?? b ?? c` 合法;仅 nil/undefined 触发 |
+| .. 范围 | ✅ | builtin_test | 1e6 内存预算;负边界合法,降序空 |
+| 切片 [1:3] [:3] [3:] | ✅ | eval_test(双引擎) | expr 语义:负边界 len+x、越界 clamp、from>to 为空;数组+字符串(字符串按字符,mbel 注:expr 按字节,非 ASCII 差异记录) |
+| 可选链 ?. /?.[ | ✅ | parser_test, eval_test `user?.name` | 求值走 nil-safe drill(与 mbel drill 语义一致) |
+| 链式比较 a<b<c | ✅ | parser_test(结构) | `< > <= >=` 合取;`==`/`!=` 不链 |
 | matches 正则 | 🟡 | builtin_test | MoonBit core regex=字面量;完整 RE2 → 4.5 |
-| contains/startsWith/endsWith 运算符 | ❌(有同名函数) | builtin_test | 4.4.2 |
-| 管道 \| | 🟡 | jexl_test, corpus | Jexl transform 管道;expr 函数管道 → 4.4.2 |
-| 一元 -/!(优先级) | 🟡 | corpus `-2^2` | expr -90 < ^100;Jexl 词法负号 |
+| contains/startsWith/endsWith 运算符 | ✅ | eval_test, parser_test | expr 语义是**运算符**(非函数):infix、nil-safe(空操作数=false),双引擎注册 |
+| 管道 \| | ✅ | parser_test, eval_test | expr 管道:`x\|f(a)` desugar 为 `f(x,a)`;RHS 必须是调用(`1\|2` 解析报错);需宿主注册函数/转换 |
+| 一元 -/!(优先级) | ✅ | parser_test, eval_test | expr:一元 -/+ 90、not/! 50、幂 100 → `-2**2`=-(2**2)、`2**-2` 合法;Jexl legacy 词法负号保留 |
 
 ## 3. 表达式形式
 
 | 特性 | 状态 | 备注 |
 |---|---|---|
-| 三元 ?: / Elvis ?: | ✅ | evaluator_test, corpus |
-| if/else 块 | ❌ | 4.4.2 |
-| let 声明 + ; 序列 | ❌ | 4.4.2 |
-| 谓词 {#…} + #/#acc/#index/省略 # | 🟡 | 省略花括号形式 `filter(xs, # > 2)` 与 `.field` 相对访问已实现(expr 兼容);`{...}` 花括号包裹形式待 parser 重写 |
-| 方法调用 foo.bar() | ❌ | 4.4.2(注册式宿主函数) |
-| $env | ❌ | 4.4.4 |
+| 三元 ?: / Elvis ?: | ✅ | evaluator_test, corpus;expr 前端 elvis=`a ?: b`(真值取 a) |
+| if/else 块 | ✅ | expr 前端(parser_test/eval_test):`if c { seq } else { seq }`——两分支花括号与 `else` 均必选,分支体=完整序列(let/嵌套 if 可用),整体是表达式(需括号嵌入);仅表达式起点接受 `if`;else-if 链递归 |
+| let 声明 + ; 序列 | ✅ | expr 前端(parser_test/eval_test,双引擎):`let` 仅限 prec-0 位置(顶层/括号/参数/if 块);`x;y` 普通序列合法,结果为末值;词法作用域(内层遮蔽;Eval 模式允许重声明——checker 的"禁止重声明"待 4.4.4);谓词/过滤器可读外层 let |
+| 谓词 {#…} + #/#acc/#index/省略 # | ✅ | 花括号包裹与省略形式均支持(parser_test/eval_test);`.field` 相对访问=指针成员;未知指针后缀(#age)解析报错 |
+| 方法调用 foo.bar() | 🟡 语法✅ | 解析/管道目标均接受;求值=裁剪(数据值无方法,lower 报清晰错误)——expr 的 Go-reflect 方法调用对应裁剪项(§四),宿主注册函数池为替代路径 |
+| $env | ✅ | expr 前端:eval_test——求值为根 ctx(用户变量视图,不含内置);成员/索引/keys/len 可用;不可声明 |
 | 成员/索引/动态键 | ✅ | parser_test, corpus |
 | 相对过滤器 [.x==1] | ✅ | Jexl 形式(expr 无此语法) |
 
@@ -77,7 +80,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 转换 9 | 🟡 9/9 实现 | type() 返回 "number"(无 int/float);toJSON NaN→null(expr 报错) |
 | 位运算 8 | ✅ 8/8 | Int64 语义 |
 | 时间 4 | 🟡 最小集 | now/duration/date(ISO)/timezone=UTC;无 time.Time 对象/方法/多 layout/时区库 |
-| 谓词聚合 15 | 🟡 15/15 函数式 | 函数式调用形式已交付(2026-09-06,如 `count(list, # > 2)`):# /#index/#acc 指针、省略 # 的相对访问、子 Program+类型化槽位;`{expr}` 花括号谓词与 `list[?pred]` 语法待 Parser 重写(§6.2) |
+| 谓词聚合 15 | ✅ 15/15 | 函数式调用形式已交付(2026-09-06,如 `count(list, # > 2)`):# /#index/#acc 指针、省略 # 的相对访问、子 Program+类型化槽位;`{expr}` 花括号谓词形式已随 parser 重写交付(4.4.2,双引擎一致) |
 
 ## 5. 工程能力
 
@@ -89,7 +92,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | env 白名单 / Strict | ❌ | 4.4.4(Jexl 缺失键→undefined) |
 | 常量折叠 | ✅ | builtin_test fold 套件 |
 | 12-pass optimizer 其余 | ❌ | 4.3 剩余(需 VM 落点) |
-| 字节码 VM | ✅ v2(指令化) | 21 opcode(0-20)平行 Int 数组 + 编译期预解析 + 栈预分配 + 原生过滤器/聚合循环帧(消除每元素 Evaluator 分配);`Engine::set_engine(Walk \| Vm)`,默认 Walk;207 corpus + 手写用例 Walk vs Vm **真绿**(值+错误消息严格相等,NaN-aware;f37f10d 恢复端到端分发后首次为真,此前"假绿"见 §7 勘误);实测:迭代型负载 Vm 领先(过滤器 native −69% / wasm −39%,聚合 native −30~41%),微负载 Vm 落后(常量求值 +38~118%)——同批数据见 §7 |
+| 字节码 VM | ✅ v2(指令化) | 26 opcode(0-25)平行 Int 数组 + 编译期预解析 + 栈预分配 + 原生过滤器/聚合循环帧 + 词法作用域(局部变量槽/切片/env 指令,4.4.2);`Engine::set_engine(Walk \| Vm)`,默认 Walk;207 corpus + 手写用例 Walk vs Vm **真绿**(值+错误消息严格相等,NaN-aware;f37f10d 恢复端到端分发后首次为真,此前"假绿"见 §7 勘误);实测:迭代型负载 Vm 领先(过滤器 native −69% / wasm −39%,聚合 native −30~41%),微负载 Vm 落后(常量求值 +38~118%)——同批数据见 §7 |
 | 编译错误 行:列\|…^ | ❌ | 4.4.1 位置信息 |
 | 差分验证 harness | ✅ | tools/(expr 侧待 go 差分) |
 | 并发模型 | ✅ 文档化 | wasm 单线程原子 eval;实例隔离测试 7 项 |
@@ -97,21 +100,24 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 ## 6. 剩余功能实现方案(阶段 4.3 剩余 + 4.4/4.5)
 
 ### 6.1 字节码 VM(4.3)——v1 + v2 已交付
-**双引擎架构(2026-09-05/06,0010ef3/fce4d69)**:`evaluator/vm.mbt`。
-21 opcode(0-20:CONST/LOADCTX/LOADREL/FETCH/CALLBINFN/CALLUNFN/
+**双引擎架构(2026-09-05/06,0010ef3/fce4d69 + 4.4.2)**:`evaluator/vm.mbt`。
+26 opcode(0-25:CONST/LOADCTX/LOADREL/FETCH/CALLBINFN/CALLUNFN/
 MATCHES/ANDJUMP/ORJUMP/COALESCE/JUMP/JUMPIFFALSE/ARRAY/OBJECT/
 CALLFUNC/FILTERBEGIN/FILTEREND/FILTERSTATIC/LAZYBIN/LOADSLOT/
-CALLAGG)编码为平行 Int 数组(opcode+operand),常量池去重
-(CVal/CAst/CKeys/CFn/CUFn/CAgg;2026-09-06 增 CRaise 承载"抵达即
-raise"的缺省分支);编译期运算符预解析为直接函数引用(运行时零
-查找)、栈预分配+sp 指针(编译期 max_stack 模拟)、patch 式跳转;
-语义函数单源(apply_binary_op/call_pool_function/fetch_from/
+CALLAGG + 4.4.2 增 SLICE/LOADLOCAL/ADDLOCAL/POPLOCAL/ENV)编码为
+平行 Int 数组(opcode+operand),常量池去重
+(CVal/CAst/CKeys/CFn/CUFn/CAgg;CRaise 承载"抵达即 raise"的缺省分支);
+编译期运算符预解析为直接函数引用(运行时零查找)、栈预分配+sp 指针
+(编译期 max_stack 模拟)、patch 式跳转;语义函数单源
+(apply_binary_op/call_pool_function/fetch_from/slice_value/
 aggregate_call 由两引擎共享,指令只做调度);相对过滤器/静态索引
 指令化(FILTERBEGIN/END、FILTERSTATIC),谓词聚合编译为 CALLAGG
-子 Program + 单子 VM 跨元素复用(LOADSLOT 类型化槽位 #/#index/#acc);
-手动求值运算符(LAZYBIN)按需回调 tree-walk(共享预算);CLI
-`argv[3]=vm` 可选。
-剩余:let 变量槽、切片/可选链指令(依赖 4.4.2)、Disassemble 输出。
+子 Program + 单子 VM 跨元素复用(LOADSLOT 类型化槽位 #/#index/#acc),
+子程序编译期继承外层 let(编译期 local_names 镜像运行时 locals,
+LOADLOCAL 静态槽位解析,ADDLOCAL/POPLOCAL 维护词法作用域,ENV 推
+根 ctx 供 `$env`);手动求值运算符(LAZYBIN)按需回调 tree-walk(共享
+预算);CLI `argv[3]=vm` 可选。
+剩余:Disassemble 输出。
 
 **端到端分发补遗(f37f10d,2026-09-06)**:`Expression::eval` 自 4.3
 引入 VM 起(0010ef3)到 f37f10d 前一直没有分发到 Vm——所有经
@@ -125,20 +131,29 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
 手写用例的 Walk vs Vm 对拍**首次真正执行**且全绿(值+错误消息
 严格相等,NaN-aware);性能与稳定性实测见 §7。
 
-### 6.2 语言层(4.4,~35-50d,gate 后启动)
-1. **4.4.1 lexer(3-4d)**:数字家族(hex/oct/bin/_/exp/`x.y`)、字符串家族
-   (原始/字节/\u{}/八进制)、注释、关键字词法(in/and/or/not/matches/contains/
-   startsWith/endsWith/let/if/else)、Token 增加 offset/line/col(file.Source)。
-   评审补充:`.5` 仅在数字起始上下文词法化为浮点(与成员 `.` 由 parser 状态
-   区分);`and/or/not/matches` 等采用上下文相关关键字策略(词法统一出
-   Ident,parser 按位置判定运算符/标识符,保障 `a and b` 与变量名 `and`
-   共存);八进制转义降级范围与错误文案文档化。
-2. **4.4.2 parser 重写(10-14d)**:Pratt/递归下降替换状态机(状态机无法自然表达
-   块/序列/谓词)。AST 新节点:MemberNode(method?)/ChainNode/OptionalChain/
-   SliceNode/RangeNode/PredicateNode/PointerNode(#/#acc/#index)/IfNode/
-   VariableDeclaratorNode/SequenceNode/IntegerNode/FloatNode。要点:比较链合取、
-   ?? 混用报错、not 后缀否定表、`-2^2`=-(2^2)(一元 90 < 幂 100)、谓词作用域
-   深度计数(与 Jexl corpus 的回归通过 jexl-legacy 包双轨保证)。
+### 6.2 语言层(4.4)——4.4.1/4.4.2 已交付,剩余 4.4.3-4.4.5
+
+1. **✅ 已交付 4.4.1 lexer(2026-09-06,expr 前端)**:数字家族(hex/oct/
+   bin/_/指数/`.5`)、字符串家族(单双引号同转义集:简单转义+`\xNN`+
+   `\uXXXX`+`\UXXXXXXXX`+`\u{1-6 位}`+八进制 `\NNN`;非法转义/越界码点/
+   孤立代理=词法错误)、原始反引号(`` 双写)、字节串(`b"…"`/`B'…'`:
+   简单转义+`\xNN`+八进制≤`\377`,`\u` 拒绝,非 ASCII 按 UTF-8 编码;
+   求值待 4.4.3 Bytes)、注释 `//` `/* */`、关键字词法(and/or/not/in/
+   matches/contains/startsWith/endsWith/let/if/else/nil…)、Token 携带
+   line/col(错误 `行:列`)。证据:expr/lexer_wbtest(3)。
+2. **✅ 已交付 4.4.2 parser 重写 + 语法求值(2026-09-06,expr 前端)**
+   :Pratt/递归下降已落地为 expr/ 包(ENode+lower 桥接 legacy 双引擎),
+   覆盖:完整中缀表(右结合 `**`/`^` 100、`??` 500+混用报错、`..` 25、
+   链式比较合取)、一元 90/50 优先级(`-2**2`=-(2**2))、not 后缀否定
+   表(5 个)、三元/elvis、if/else(必选 else,块=序列)、let+`;` 序列
+   (prec-0 位置,词法作用域,**双引擎求值**:新节点
+   Sequence/VariableDeclarator + VM OP_SLICE/LOADLOCAL/ADDLOCAL/
+   POPLOCAL/ENV;谓词子程序继承外层 let)、`{}` 谓词块、`?.`/`?.[`、
+   切片(数组/字符串,expr 边界语义)、`$env`(求值为根 ctx)、管道
+   desugar。方法调用=语法支持、求值裁剪(§3 行)。证据:parser_test
+   14 + eval_test 17(全部双引擎 parity)。
+   原设计要点(比较链合取、?? 规则、谓词作用域、jexl-legacy 双轨)已
+   随实现落定,本节保留历史记录。
 3. **4.4.3 值模型类型化(8-12d,评审上调)**:类型**定义与 Parser 并行先行**
    (IntVal(Int64)/FloatVal 分离、全部运算符与内置函数签名修订清单),
    实现在 Parser 完成 ~70% 时启动并逐步替换 NumVal;涉及算术/比较/位运算/
@@ -153,8 +168,9 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
 5. **4.4.5 语义切换(4-6d)**:新顶层 `mbel::expr` API(Compile/Run/Eval + Options
    对齐:expr.Env→数据 Value、Optimize、MaxNodes、AsBool…);Jexl+JS 语义层降级
    为 legacy 包(104 测试锁定)。
-6. **谓词聚合 15(4-6d,依赖 4.4.2)**:filter/map/all/… 以 PredicateNode 特化
-   (tree-walk 先行,VM 循环指令随后);groupBy/sortBy/reduce 同批。
+6. **✅ 已交付(4.4.2,2026-09-06)**:谓词聚合 15——filter/map/all/… 与
+   groupBy/sortBy/reduce 已以共享驱动+注入 runner 交付(tree-walk 每元素
+   求值器 / VM 子 Program+单子 VM 复用),见 §4 行与 §7 实测。
 7. **4.5 依赖(P2/P3,评审修订)**:正则——"RE2 全特性"措辞修正(RE2 本身
    不支持反向引用;应为"正则全特性"裁剪):范围缩至**字面量/字符类/量词/
    锚点/非捕获分组**,明确不支持捕获替换、反向引用、Unicode 属性、环视;
@@ -248,7 +264,7 @@ Walk),已失效。Δ 为 Vm 相对 Walk(Vm 慢为 +)。
 结论:两引擎在稳定性套件下无不对称失败;确定性、预算强制、失败
 恢复、实例隔离能力均等;错误消息逐字一致由 vm_parity(207 corpus,
 Err 分支比对)与稳定性场景 3/4 双重锁定。三目标(native/wasm-gc/js)
-全量 168/168 含本套件。注:此前的"Vm 稳定性"运行同样受分发缺失
+全量 184/184 含本套件。注:此前的"Vm 稳定性"运行同样受分发缺失
 影响(f37f10d 前 Vm 列未真正执行),本表为修复后首次真实双引擎
 结果。
 
@@ -257,4 +273,4 @@ Err 分支比对)与稳定性场景 3/4 双重锁定。三目标(native/wasm-gc/
     moon bench --target native -p engine_test   # native(C toolchain)
     moon bench --target js -p engine_test       # js(V8 JIT via node)
     moon bench -p engine_test                   # wasm-gc(moonrun)
-    moon test --target native                   # 全量 168 回归(默认 wasm-gc)
+    moon test --target native                   # 全量 184 回归(默认 wasm-gc)

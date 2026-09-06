@@ -15,6 +15,11 @@ pub(all) enum NodeType {
   FilterExpressionNode
   FunctionCallNode
   PointerNode
+  // expr front-end additions (stage 4.4.2): let bindings and `;`
+  // sequences evaluate with a local scope; slices are data-level.
+  VariableDeclaratorNode
+  SequenceNode
+  SliceNode
 } derive(Debug, Eq)
 
 ///|
@@ -75,6 +80,9 @@ pub(all) struct AstNode {
   mut func_name : String
   mut args : Array[AstNode]
   mut pool : String
+  // SliceNode: subject[from:to], either bound optional
+  mut slice_from : AstNode?
+  mut slice_to : AstNode?
   // Parent pointer (non-enumerable in JS, used by Parser cursor traversal)
   mut parent : AstNode?
   // Marks a call argument that carries a predicate AST (expr-style
@@ -105,6 +113,8 @@ pub fn literal(val : Value) -> AstNode {
     func_name: "",
     args: [],
     pool: "",
+    slice_from: None,
+    slice_to: None,
     parent: None,
     is_pred: false,
   }
@@ -203,6 +213,37 @@ pub fn function_call(name : String, pool : String) -> AstNode {
 }
 
 ///|
+/// Creates a VariableDeclarator AST node: `let <name> = <value>`.
+/// Only valid as a direct element of a SequenceNode.
+pub fn variable_declarator(name : String, value : AstNode) -> AstNode {
+  let n = literal(UndefVal)
+  n.node_type = VariableDeclaratorNode
+  n.ident_name = name
+  n.args = [value]
+  n
+}
+
+///|
+/// Creates a Sequence AST node (`a; b; c`) with an empty item list.
+pub fn sequence() -> AstNode {
+  let n = literal(UndefVal)
+  n.node_type = SequenceNode
+  n.args = []
+  n
+}
+
+///|
+/// Creates a Slice AST node: subject[from:to], either bound optional.
+pub fn slice_node(subject : AstNode, from : AstNode?, to : AstNode?) -> AstNode {
+  let n = literal(UndefVal)
+  n.node_type = SliceNode
+  n.subject = Some(subject)
+  n.slice_from = from
+  n.slice_to = to
+  n
+}
+
+///|
 /// Structural equality on Values — mirrors JS `toEqual` semantics used
 /// by the Jexl Jest suite for AST comparisons.
 pub fn value_equal(a : Value, b : Value) -> Bool {
@@ -296,6 +337,31 @@ pub fn ast_equal(a : AstNode, b : AstNode) -> Bool {
       node_equal(a.filter_expr, b.filter_expr) &&
       node_equal(a.subject, b.subject)
     PointerNode => a.ident_name == b.ident_name
+    VariableDeclaratorNode =>
+      a.ident_name == b.ident_name &&
+      ({
+        let x = a.args
+        let y = b.args
+        x.length() == y.length() &&
+        (x.length() == 0 || (x.length() == 1 && ast_equal(x[0], y[0])))
+      })
+    SequenceNode => {
+      let x = a.args
+      let y = b.args
+      if x.length() != y.length() {
+        return false
+      }
+      for i in 0..<x.length() {
+        if !ast_equal(x[i], y[i]) {
+          return false
+        }
+      }
+      true
+    }
+    SliceNode =>
+      node_equal(a.subject, b.subject) &&
+      option_equal(a.slice_from, b.slice_from) &&
+      option_equal(a.slice_to, b.slice_to)
     FunctionCallNode =>
       a.func_name == b.func_name &&
       a.pool == b.pool &&
