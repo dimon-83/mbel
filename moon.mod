@@ -11,16 +11,16 @@
 
 name = "dimon-83/mbel"
 
-version = "0.1.0"
+version = "0.2.0"
 
 readme = "README.mbt.md"
 
-repository = ""
+repository = "https://github.com/dimon-83/mbel"
 
 license = "Apache-2.0"
 
-keywords = [ ]
+keywords = [ "expression", "jexl", "expr", "evaluator", "dsl" ]
 
 preferred_target = "wasm-gc"
 
-description = ""
+description = "mbel — a MoonBit expression language: Jexl-compatible dynamic evaluation with an expr-lang syntax front-end, dual tree-walk/bytecode-VM engines, predicate aggregates and resource budgets."
