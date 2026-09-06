@@ -61,3 +61,23 @@ pub fn Engine::eval_ast(
   }
   result
 }
+
+///|
+/// Strict (Compile-mode) evaluation: parses, TYPE-CHECKS (stage 4.4.4
+/// phase-1 checker), and lowers before delegating to the configured
+/// engine — the expr-lang `Compile`-analogue of eval_expr, which stays
+/// Eval-mode. Type violations raise expr's compile-mode messages
+/// ("invalid operation: + (mismatched types int and string)").
+pub fn Engine::eval_expr_checked(
+  self : Engine,
+  source : String,
+  ctx : @ast.Value,
+) -> @ast.Value raise EngineError {
+  let node = @expr.compile_expr_checked_limited(source, self.max_nodes) catch {
+    @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
+  }
+  match node {
+    Some(n) => self.eval_ast(n, ctx)
+    None => raise EngineError::EngineErr("Cannot evaluate an empty expression")
+  }
+}

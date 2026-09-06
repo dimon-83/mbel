@@ -36,3 +36,31 @@ pub fn compile_expr_limited(
   }
   Some(lowered)
 }
+
+///|
+/// Parses, type-checks, and lowers an expr source with a token budget.
+/// Raises EvalError with expr's compile-mode error text for type
+/// violations (the strict/Compile-mode counterpart of compile_expr).
+pub fn compile_expr_checked_limited(
+  source : String,
+  max_tokens : Int,
+) -> @ast.AstNode? raise @evaluator.EvalError {
+  let node = parse_limited(source, max_tokens) catch {
+    ParseErrExpr(msg, line, col) =>
+      raise @evaluator.EvalErr(
+        "parse error at " +
+        line.to_string() +
+        ":" +
+        col.to_string() +
+        ": " +
+        msg,
+      )
+  }
+  check(node) catch {
+    CheckErr(msg) => raise @evaluator.EvalErr(msg)
+  }
+  let lowered = lower(node) catch {
+    LowerErr(msg) => raise @evaluator.EvalErr(msg)
+  }
+  Some(lowered)
+}

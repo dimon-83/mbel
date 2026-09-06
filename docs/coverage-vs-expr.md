@@ -2,13 +2,12 @@
 
 对照基准:https://expr-lang.org/docs/language-definition 与
 expr 仓库 docs/language-definition.md(commit 4b31df3, v1.17.8)。
-测试证据:mbel 209 个 test 函数(`moon test` 常规计数 188 + 21 个
+测试证据:mbel 219 个 test 函数(`moon test` 常规计数 198 + 21 个
 bench 经 `moon bench` 运行)——lexer_test 21 / parser_test 29 /
-evaluator_test 28 / expr_test 32(parser 14 · eval 17 · opcode 1)/
-expr 白盒 3(lexer_wbtest:字符串/字节串转义与注释词法)/
-engine_test 96(API 26 · 预算 7 · builtin 16 · 聚合 10 · Walk-vs-Vm
-对拍 9 · 稳定性 3(7 场景套件×双引擎+引擎间一致性)· 预算 parity 4 ·
-bench 21);三目标(native / wasm-gc / js)均 188/188;另与真实 Jexl 的差分
+evaluator_test 28 / expr_test 42(parser 14 · eval 17 · opcode 4 ·
+typed 4 · checker 4)/expr 白盒 3(lexer_wbtest)/engine_test 96(API 26 ·
+预算 7 · builtin 16 · 聚合 10 · 对拍 9 · 稳定性 3 · 预算 parity 4 ·
+bench 21);三目标(native / wasm-gc / js)均 198/198;另与真实 Jexl 的差分
 corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7。
 语法层覆盖更新:2026-09-06 4.4.1(lexer)+4.4.2(parser+求值)交付,
 本轮(§1-§3)❌ 行大量转 ✅;未标"4.4.x"的行已实现。
@@ -77,7 +76,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 数学 8 | ✅ 8/8 | builtin_test;round=Go 半远离零 |
 | 字符串 16 | ✅ 16/16 | upper/lower 仅 ASCII(差异记录) |
 | 集合 12 | ✅ 12/12 | get 越界 nil;sort 数字/字符串 |
-| 转换 9 | 🟡 9/9 实现 | type() 返回 "number"(无 int/float);toJSON NaN→null(expr 报错) |
+| 转换 9 | 🟡 9/9 实现 | type() 对整数返回 "int"(4.4.3);float 仍报 "number"(legacy 锁定,expr 报 "float",待 dialect 拆分);toJSON NaN→null(expr 报错);大 int64 JSON 精度损失已记录 |
 | 位运算 8 | ✅ 8/8 | Int64 语义 |
 | 时间 4 | 🟡 最小集 | now/duration/date(ISO)/timezone=UTC;无 time.Time 对象/方法/多 layout/时区库 |
 | 谓词聚合 15 | ✅ 15/15 | 函数式调用形式已交付(2026-09-06,如 `count(list, # > 2)`):# /#index/#acc 指针、省略 # 的相对访问、子 Program+类型化槽位;`{expr}` 花括号谓词形式已随 parser 重写交付(4.4.2,双引擎一致) |
@@ -89,7 +88,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 节点上限(1e4,可配) | ✅ | budget_test |
 | 嵌套上限(1000;expr 无此项,wasm 栈必需) | ✅ | budget_test |
 | 求值深度 + 步数预算(跨 filter 共享) | ✅ | budget_test, stability_test, budget_parity_test | 深度预算双引擎同语义:Vm 每条指令携带源 AST 深度(program.depths),仅当 max_depth 低于程序最大深度时逐指令检查(默认预算零开销);相对过滤器谓词按「每元素新求值器」重新计深,与 Walk 一致;expr 前端 parse 应用 max_nodes(节点数,迭代统计)与递归/深度护栏(嵌套约 500-1000 层) |
-| env 白名单 / Strict | ❌ | 4.4.4(Jexl 缺失键→undefined) |
+| env 白名单 / Strict | 🟡 严格模式 | `eval_expr_checked`/`compile_expr_checked_limited`(4.4.4 checker 阶段1):已知类型的运算符规则按 expr Compile 文案报错(`invalid operation: + (mismatched types int and string)`、`non-bool expression (type int) used as condition`);`eval_expr` 保持 Eval 模式(动态语义,与 expr 的 Eval/Compile 双模式对齐);env 白名单=阶段 2 |
 | 常量折叠 | ✅ | builtin_test fold 套件 |
 | 12-pass optimizer 其余 | ❌ | 4.3 剩余(需 VM 落点) |
 | 字节码 VM | ✅ v2(指令化) | 26 opcode(0-25)平行 Int 数组 + 编译期预解析 + 栈预分配 + 原生过滤器/聚合循环帧 + 词法作用域(局部变量槽/切片/env 指令,4.4.2);`Engine::set_engine(Walk \| Vm)`,默认 Walk;207 corpus + 手写用例 Walk vs Vm **真绿**(值+错误消息严格相等,NaN-aware;f37f10d 恢复端到端分发后首次为真,此前"假绿"见 §7 勘误);实测:迭代型负载 Vm 领先(过滤器 native −69% / wasm −39%,聚合 native −30~41%),微负载 Vm 落后(常量求值 +38~118%)——同批数据见 §7 |
@@ -163,17 +162,20 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    14 + eval_test 17(全部双引擎 parity)。
    原设计要点(比较链合取、?? 规则、谓词作用域、jexl-legacy 双轨)已
    随实现落定,本节保留历史记录。
-3. **4.4.3 值模型类型化(8-12d,评审上调)**:类型**定义与 Parser 并行先行**
-   (IntVal(Int64)/FloatVal 分离、全部运算符与内置函数签名修订清单),
-   实现在 Parser 完成 ~70% 时启动并逐步替换 NumVal;涉及算术/比较/位运算/
-   转换全部行为调整。Int64 溢出行为文档化(Go 语义:回绕)。评审意见:
-   "保留统一 NumVal"的降级方案不作为首选(后拆成本更高)。Jexl legacy
-   引擎继续用现 Value。
-4. **4.4.4 checker(12-18d,拆两阶段降险)**:
-   第一阶段(4-6d):env 白名单(严格/宽松)、错误 `行:列 | expr | ....^`、
-   基本运算符类型检查(如 string+int 报错)——尽早交付可用错误反馈;
-   第二阶段(8-12d):完整 Nature 推断(运算符规则表、数组/Map 元素类型、
-   内置泛型特判)、AsBool/AsInt 期望检查。
+3. **🟡 4.4.3 值模型类型化——核心已交付(2026-09-06,3862565)**
+   :Value 增加 IntVal(Int64);expr 整数字面量→IntVal,超出 int64 为
+   解析错误;共享运算符按 expr 运行时类型化(`+ - *` 整数保型+Go 回绕、
+   int/float 提升、`/` 恒 float 无除零错、`%` 仅整数+integer divide by
+   zero、一元负号保型、跨类相等 false/排序与混合 `+` 报 invalid
+   operation、int 边界 range 出 IntVal 数组);判别器=操作数含 IntVal
+   (legacy 词法只产 NumVal → legacy 190 测试零改动)。剩余:内置/
+   聚合返回类型化(需 dialect 感知,随 4.4.5)、toJSON int64 精确输出。
+4. **🟡 4.4.4 checker——阶段 1 已交付(2026-09-06)**:expr/check.mbt
+   Nature 推断(字面量及传播)+ 运算符类型规则,按 expr **Compile 模式**
+   文案报错;接入严格入口 `Engine::eval_expr_checked`(内部委托双引擎,
+   与 eval_expr 的 Eval 模式对齐 expr 的 Eval/Compile 双模式)。剩余
+   (阶段 2):数组/Map 元素类型与内置泛型特判(含 let 作用域类型)、env
+   白名单/严格-宽松、带 `行:列` 位置的错误(需 AST 位置化重构)。
 5. **4.4.5 语义切换(4-6d)**:新顶层 `mbel::expr` API(Compile/Run/Eval + Options
    对齐:expr.Env→数据 Value、Optimize、MaxNodes、AsBool…);Jexl+JS 语义层降级
    为 legacy 包(104 测试锁定)。
