@@ -104,10 +104,18 @@ pub fn default_grammar() -> Grammar {
       ("!", fn(v) { @ast.BoolVal(!truthy(v)) }),
       // expr keyword `not` lowers to a unary op as well.
       ("not", fn(v) { @ast.BoolVal(!truthy(v)) }),
-      // expr unary minus (JS ToNumber semantics — Jexl folded negatives
-      // at the lexer, so this op is only reachable from the expr front
-      // end with non-literal operands).
-      ("-", fn(v) { @ast.NumVal(-to_number(v)) }),
+      // expr unary minus (preserves type: -int wraps Int64; -float is
+      // double negation — Jexl folded negatives at the lexer, so this
+      // op is only reachable from the expr front end).
+      (
+        "-",
+        fn(v) {
+          match v {
+            @ast.IntVal(i) => @ast.IntVal(-i)
+            other => @ast.NumVal(-to_number(other))
+          }
+        },
+      ),
     ],
     regex_cache: [],
     regex_failed: [],
@@ -239,10 +247,20 @@ fn range_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
     // Mirrors expr's DefaultMemoryBudget (1e6 elements).
     raise EvalError::EvalErr("memory budget exceeded")
   }
+  // expr ranges are integer arrays when both bounds are typed ints;
+  // legacy (NumVal) bounds keep the double-element behavior.
+  let typed = match (a, b) {
+    (@ast.IntVal(_), @ast.IntVal(_)) => true
+    (_, _) => false
+  }
   let out : Array[@ast.Value] = []
   let mut i = lo
   while i <= hi {
-    out.push(@ast.NumVal(i.to_double()))
+    if typed {
+      out.push(@ast.IntVal(i.to_int64()))
+    } else {
+      out.push(@ast.NumVal(i.to_double()))
+    }
     i += 1
   }
   @ast.ArrayVal(out)
@@ -286,6 +304,17 @@ fn grammar_regex_match(
 /// strings ("1,2", "[object Object]"), so any array/object/string
 /// operand makes `+` a concatenation. Otherwise numeric addition.
 pub fn plus(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  if typed_bin(a, b) {
+    match typed_int_arith("+", a, b) {
+      Some(v) => return v
+      None => ()
+    }
+    if numeric_val(a) && numeric_val(b) {
+      // int + float -> float64 (expr promotion)
+      return @ast.NumVal(to_number(a) + to_number(b))
+    }
+    raise typed_mismatch("+", a, b)
+  }
   if concat_like(a) || concat_like(b) {
     @ast.StrVal(to_string(a) + to_string(b))
   } else {
@@ -303,16 +332,41 @@ fn concat_like(v : @ast.Value) -> Bool {
 
 ///|
 fn minus(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  if typed_bin(a, b) {
+    match typed_int_arith("-", a, b) {
+      Some(v) => return v
+      None => ()
+    }
+    if numeric_val(a) && numeric_val(b) {
+      return @ast.NumVal(to_number(a) - to_number(b))
+    }
+    raise typed_mismatch("-", a, b)
+  }
   @ast.NumVal(to_number(a) - to_number(b))
 }
 
 ///|
 fn times(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  if typed_bin(a, b) {
+    match typed_int_arith("*", a, b) {
+      Some(v) => return v
+      None => ()
+    }
+    if numeric_val(a) && numeric_val(b) {
+      return @ast.NumVal(to_number(a) * to_number(b))
+    }
+    raise typed_mismatch("*", a, b)
+  }
   @ast.NumVal(to_number(a) * to_number(b))
 }
 
 ///|
 fn divide(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  // expr: `/` is always float division (7/2 = 3.5, 1/0 = +Inf); no
+  // divide-by-zero error. Non-numeric typed operands raise.
+  if typed_bin(a, b) && !(numeric_val(a) && numeric_val(b)) {
+    raise typed_mismatch("/", a, b)
+  }
   @ast.NumVal(to_number(a) / to_number(b))
 }
 
@@ -325,6 +379,23 @@ fn int_divide(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 ///|
 /// JS `%` — remainder with the sign of the dividend.
 fn rem(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  if typed_bin(a, b) {
+    // expr: `%` is integer-only (Go semantics, sign of dividend);
+    // %0 is the single divide-by-zero error.
+    match (a, b) {
+      (@ast.IntVal(x), @ast.IntVal(y)) =>
+        if y == 0L {
+          raise EvalError::EvalErr("integer divide by zero")
+        } else {
+          return @ast.IntVal(x % y)
+        }
+      (_, _) => ()
+    }
+    if numeric_val(a) && numeric_val(b) {
+      raise typed_mismatch("%", a, b)
+    }
+    raise typed_mismatch("%", a, b)
+  }
   @ast.NumVal(remainder(to_number(a), to_number(b)))
 }
 
@@ -335,14 +406,15 @@ fn power(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 }
 
 ///|
-/// JS `==` / `!=` — loose equality.
+/// JS `==` / `!=` — loose equality (typed/expr equality when an
+/// IntVal is involved: numerics promote, cross-kind is false).
 fn eq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
-  @ast.BoolVal(loose_eq(a, b))
+  @ast.BoolVal(if typed_bin(a, b) { typed_eq(a, b) } else { loose_eq(a, b) })
 }
 
 ///|
 fn neq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
-  @ast.BoolVal(!loose_eq(a, b))
+  @ast.BoolVal(if typed_bin(a, b) { !typed_eq(a, b) } else { !loose_eq(a, b) })
 }
 
 ///|
@@ -453,6 +525,7 @@ fn bound_int(v : @ast.Value) -> Int raise EvalError {
       } else {
         d.to_int()
       }
+    @ast.IntVal(i) => i.to_int()
     _ => raise EvalError::EvalErr("slice bounds must be integers")
   }
 }
@@ -491,6 +564,7 @@ pub fn value_kind(v : @ast.Value) -> String {
 pub fn index_value(subject : @ast.Value, res : @ast.Value) -> @ast.Value {
   match (subject, res) {
     (@ast.ArrayVal(xs), @ast.NumVal(d)) => arr_index(xs, d)
+    (@ast.ArrayVal(xs), @ast.IntVal(i)) => arr_index(xs, i.to_double())
     (@ast.ArrayVal(xs), @ast.StrVal(k)) => arr_str_key(xs, k)
     (@ast.ObjectVal(pairs), @ast.StrVal(k)) => key_of(pairs, k)
     (@ast.ObjectVal(pairs), @ast.NumVal(d)) =>

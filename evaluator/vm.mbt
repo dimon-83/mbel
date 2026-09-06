@@ -1098,11 +1098,10 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
 /// jump targets); compiled function references print as `<fn>`.
 pub fn disassemble(program : Program) -> String {
   let names = [
-    "CONST", "LOADCTX", "LOADREL", "FETCH", "CALLBINFN", "CALLUNFN",
-    "MATCHES", "ANDJUMP", "ORJUMP", "COALESCE", "JUMP", "JUMPIFFALSE",
-    "ARRAY", "OBJECT", "CALLFUNC", "FILTERBEGIN", "FILTEREND",
-    "FILTERSTATIC", "LAZYBIN", "LOADSLOT", "CALLAGG", "SLICE",
-    "LOADLOCAL", "ADDLOCAL", "POPLOCAL", "ENV",
+    "CONST", "LOADCTX", "LOADREL", "FETCH", "CALLBINFN", "CALLUNFN", "MATCHES", "ANDJUMP",
+    "ORJUMP", "COALESCE", "JUMP", "JUMPIFFALSE", "ARRAY", "OBJECT", "CALLFUNC", "FILTERBEGIN",
+    "FILTEREND", "FILTERSTATIC", "LAZYBIN", "LOADSLOT", "CALLAGG", "SLICE", "LOADLOCAL",
+    "ADDLOCAL", "POPLOCAL", "ENV",
   ]
   let jumps = [7, 8, 9, 10, 11, 15, 16] // operand is a pc target
   let out = StringBuilder::new()
@@ -1160,10 +1159,11 @@ fn disasm_note(
       }
       b.to_string()
     }
-    (14, CFunc(n, p, argc)) =>
-      n + "[" + p + "] argc=" + argc.to_string()
+    (14, CFunc(n, p, argc)) => n + "[" + p + "] argc=" + argc.to_string()
     (20, CAgg(n, argc, pred)) =>
-      n + " argc=" + argc.to_string() +
+      n +
+      " argc=" +
+      argc.to_string() +
       (if pred is Some(_) { " pred" } else { "" })
     (18, CRaise(msg)) => "raise: " + msg
     (_, _) => ""

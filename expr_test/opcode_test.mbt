@@ -72,7 +72,11 @@ fn disasm_of(src : String) -> String raise {
 }
 
 ///|
-fn expect_disasm_contains(src : String, frags : Array[String], label : String) -> Unit raise {
+fn expect_disasm_contains(
+  src : String,
+  frags : Array[String],
+  label : String,
+) -> Unit raise {
   let text = disasm_of(src)
   for frag in frags {
     if !text.contains(frag) {
@@ -83,28 +87,35 @@ fn expect_disasm_contains(src : String, frags : Array[String], label : String) -
 
 ///|
 test "disassemble: constants and aggregate calls decode" {
-  expect_disasm_contains("map(nums, # * 2)", [
-    "LOADCTX 0  ; \"nums\"",
-    "CALLAGG 1  ; map argc=1 pred",
-  ], "aggregate")
-  expect_disasm_contains("upper(name)", [
-    "CALLFUNC 1  ; upper[functions] argc=1",
-  ], "call")
+  expect_disasm_contains(
+    "map(nums, # * 2)",
+    ["LOADCTX 0  ; \"nums\"", "CALLAGG 1  ; map argc=1 pred"],
+    "aggregate",
+  )
+  expect_disasm_contains(
+    "upper(name)",
+    ["CALLFUNC 1  ; upper[functions] argc=1"],
+    "call",
+  )
   // constant folding collapses 42+1 to a single literal
   expect_disasm_contains("42 + 1", ["CONST 0  ; 43"], "folded consts")
-  expect_disasm_contains("x + 1", ["LOADCTX 0  ; \"x\"", "CONST 1  ; 1"], "consts")
+  expect_disasm_contains(
+    "x + 1",
+    ["LOADCTX 0  ; \"x\"", "CONST 1  ; 1"],
+    "consts",
+  )
 }
 
 ///|
 test "disassemble: locals, slice, jumps and env" {
-  expect_disasm_contains("let n = 2; nums[:n]", [
-    "ADDLOCAL 1  ; \"n\"",
-    "LOADLOCAL 0",
-    "SLICE 2", // flags=2: only the `to` bound is present
-    "POPLOCAL 1",
-  ], "let slice")
+  expect_disasm_contains(
+    "let n = 2; nums[:n]",
+    [
+      "ADDLOCAL 1  ; \"n\"", "LOADLOCAL 0", "SLICE 2", // flags=2: only the `to` bound is present
+       "POPLOCAL 1",
+    ],
+    "let slice",
+  )
   expect_disasm_contains("$env.age", ["ENV", "FETCH 0  ; \"age\""], "env")
-  expect_disasm_contains("1 < 2 && 3", [
-    "ANDJUMP", "-> ",
-  ], "and jump")
+  expect_disasm_contains("1 < 2 && 3", ["ANDJUMP", "-> "], "and jump")
 }

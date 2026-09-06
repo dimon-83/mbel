@@ -257,6 +257,9 @@ pub fn value_equal(a : Value, b : Value) -> Bool {
   match (a, b) {
     (BoolVal(x), BoolVal(y)) => x == y
     (NumVal(x), NumVal(y)) => x == y
+    (IntVal(x), IntVal(y)) => x == y
+    // typed integers and doubles are structurally distinct kinds
+    (IntVal(_), NumVal(_)) | (NumVal(_), IntVal(_)) => false
     (StrVal(x), StrVal(y)) => x == y
     (ArrayVal(x), ArrayVal(y)) => {
       if x.length() != y.length() {

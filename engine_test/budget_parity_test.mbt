@@ -119,8 +119,10 @@ test "depth budget: unexecuted deep branches are not rejected" {
   let rv = eval_expr_limited(Vm, src, ctx, 100000, 100, 1000000)
   assert_same_result(rw, rv, "dead deep branch")
   match rw {
-    Ok(@ast.NumVal(d)) => assert_eq(d, 7.0)
-    Ok(_) => inspect("wrong value", content="7")
+    Ok(v) =>
+      if !@ast.value_equal(v, @ast.IntVal(7L)) {
+        inspect(@evaluator.to_string(v), content="7")
+      }
     Err(m) => inspect(m, content="no error expected")
   }
 }
@@ -168,7 +170,10 @@ test "expr front end: parse budgets apply on eval_expr (max_nodes)" {
   let ov = eval_expr_limited(Vm, ok, ctx, 100000, 100000, 1000000)
   assert_same_result(ow, ov, "legal wide expr ok")
   match ow {
-    Ok(@ast.NumVal(d)) => assert_eq(d, 1.0)
+    Ok(v) =>
+      if !@ast.value_equal(v, @ast.IntVal(1L)) {
+        inspect(@evaluator.to_string(v), content="1")
+      }
     _ => inspect("bad", content="1")
   }
 }

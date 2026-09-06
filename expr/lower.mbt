@@ -15,7 +15,7 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
   match n {
     ENil => @ast.literal(@ast.NullVal)
     EBool(b) => @ast.literal(@ast.BoolVal(b))
-    EInt(i) => @ast.literal(@ast.NumVal(i.to_double()))
+    EInt(i) => @ast.literal(@ast.IntVal(i))
     EFloat(d) => @ast.literal(@ast.NumVal(d))
     EStr(s) => @ast.literal(@ast.StrVal(s))
     EBytes(_) =>
@@ -71,7 +71,7 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       match op {
         "-" =>
           match x {
-            EInt(i) => return @ast.literal(@ast.NumVal((-i).to_double()))
+            EInt(i) => return @ast.literal(@ast.IntVal(-i))
             EFloat(d) => return @ast.literal(@ast.NumVal(-d))
             _ => ()
           }

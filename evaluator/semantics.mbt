@@ -33,6 +33,9 @@ pub fn truthy(v : @ast.Value) -> Bool {
 pub fn strict_eq(a : @ast.Value, b : @ast.Value) -> Bool {
   match (a, b) {
     (@ast.NumVal(x), @ast.NumVal(y)) => x == y
+    (@ast.IntVal(x), @ast.IntVal(y)) => x == y
+    // typed integers are distinct kinds from doubles (expr DeepEqual)
+    (@ast.IntVal(_), _) | (_, @ast.IntVal(_)) => false
     (@ast.StrVal(x), @ast.StrVal(y)) => x == y
     (@ast.BoolVal(x), @ast.BoolVal(y)) => x == y
     (@ast.NullVal, @ast.NullVal) => true
@@ -238,7 +241,14 @@ pub fn loose_eq(a : @ast.Value, b : @ast.Value) -> Bool {
 ///|
 /// JS relational comparison semantics for `< <= > >=`:
 /// both strings → lexicographic; otherwise numeric with NaN → false.
-pub fn compare(op : String, a : @ast.Value, b : @ast.Value) -> Bool {
+pub fn compare(
+  op : String,
+  a : @ast.Value,
+  b : @ast.Value,
+) -> Bool raise EvalError {
+  if typed_bin(a, b) {
+    return typed_compare(op, a, b)
+  }
   // JS relational semantics: operands go through ToPrimitive first.
   // Arrays become their joined string, objects "[object Object]".
   // When BOTH results are strings the comparison is lexicographic by
@@ -373,4 +383,150 @@ pub fn index_of(s : String, sub : String) -> Int {
     }
   }
   -1
+}
+
+// --- Stage 4.4.3: typed (expr) semantics on IntVal-bearing operands ---
+//
+// The legacy Jexl path only ever produces NumVal (its lexer parses
+// numbers as doubles), so "any operand is or contains an IntVal" is a
+// sound runtime signal that expr's typed semantics apply. All numeric
+// operators below keep the legacy JS behavior for pure-NumVal inputs.
+
+///|
+/// Whether a value is (or contains) a typed integer — the expr
+/// dialect marker at runtime.
+pub fn has_int(v : @ast.Value) -> Bool {
+  match v {
+    @ast.IntVal(_) => true
+    @ast.ArrayVal(xs) => {
+      for x in xs {
+        if has_int(x) {
+          return true
+        }
+      }
+      false
+    }
+    @ast.ObjectVal(pairs) => {
+      for kv in pairs {
+        let (_, val) = kv
+        if has_int(val) {
+          return true
+        }
+      }
+      false
+    }
+    _ => false
+  }
+}
+
+///|
+fn typed_bin(a : @ast.Value, b : @ast.Value) -> Bool {
+  has_int(a) || has_int(b)
+}
+
+///|
+fn numeric_val(v : @ast.Value) -> Bool {
+  match v {
+    @ast.IntVal(_) | @ast.NumVal(_) => true
+    _ => false
+  }
+}
+
+///|
+/// expr-style type name for error messages (Go type names).
+fn typed_kind(v : @ast.Value) -> String {
+  match v {
+    @ast.IntVal(_) => "int"
+    @ast.NumVal(_) => "float"
+    @ast.BoolVal(_) => "bool"
+    @ast.NullVal => "nil"
+    @ast.UndefVal => "nil"
+    @ast.StrVal(_) => "string"
+    @ast.ArrayVal(_) => "array"
+    @ast.ObjectVal(_) => "map"
+  }
+}
+
+///|
+fn typed_mismatch(op : String, a : @ast.Value, b : @ast.Value) -> EvalError {
+  EvalError::EvalErr(
+    "invalid operation: " + typed_kind(a) + " " + op + " " + typed_kind(b),
+  )
+}
+
+///|
+/// Typed equality (expr Eval-mode semantics): numerics promote
+/// (int/int exact, int/float via float), anything else cross-kind is
+/// false; containers compare structurally with strict element kinds.
+pub fn typed_eq(a : @ast.Value, b : @ast.Value) -> Bool {
+  match (a, b) {
+    (@ast.IntVal(x), @ast.IntVal(y)) => x == y
+    (@ast.IntVal(x), @ast.NumVal(y)) => x.to_double() == y
+    (@ast.NumVal(x), @ast.IntVal(y)) => x == y.to_double()
+    (@ast.IntVal(_), _) | (_, @ast.IntVal(_)) => false
+    (_, _) => strict_eq(a, b)
+  }
+}
+
+///|
+/// Typed numeric comparison; other kind mixes raise (expr Eval-mode
+/// panics "invalid operation: int < string").
+pub fn typed_compare(
+  op : String,
+  a : @ast.Value,
+  b : @ast.Value,
+) -> Bool raise EvalError {
+  if numeric_val(a) && numeric_val(b) {
+    let r = match (a, b) {
+      (@ast.IntVal(x), @ast.IntVal(y)) =>
+        if x < y {
+          -1
+        } else if x > y {
+          1
+        } else {
+          0
+        }
+      (_, _) => {
+        let x = to_number(a)
+        let y = to_number(b)
+        if x != x || y != y {
+          return false
+        }
+        if x < y {
+          -1
+        } else if x > y {
+          1
+        } else {
+          0
+        }
+      }
+    }
+    match op {
+      "<" => r < 0
+      "<=" => r <= 0
+      ">" => r > 0
+      _ => r >= 0
+    }
+  } else {
+    raise typed_mismatch(op, a, b)
+  }
+}
+
+///|
+/// Typed integer arithmetic entry used by the shared operators.
+pub fn typed_int_arith(
+  op : String,
+  a : @ast.Value,
+  b : @ast.Value,
+) -> @ast.Value? {
+  match (a, b) {
+    (@ast.IntVal(x), @ast.IntVal(y)) =>
+      match op {
+        "+" => Some(@ast.IntVal(x + y))
+        "-" => Some(@ast.IntVal(x - y))
+        "*" => Some(@ast.IntVal(x * y))
+        _ => None
+      }
+    (_, _) => None
+  }
 }

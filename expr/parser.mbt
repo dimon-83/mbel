@@ -849,7 +849,10 @@ fn Parser::parse_map_literal(self : Parser) -> ENode raise ParseErrorExpr {
     let key : ENode = match self.cur().kind {
       TkIdent => EIdent(self.cur().text)
       TkStr => EStr(self.cur().text)
-      TkInt => int_from_text(self.cur().text)
+      TkInt => {
+        let kt = self.cur()
+        int_from_text_at(kt.text, kt.line, kt.col)
+      }
       TkFloat => float_from_text(self.cur().text)
       TkOperator =>
         if self.at_op("(") {
@@ -885,8 +888,10 @@ fn Parser::parse_primary(self : Parser) -> ENode raise ParseErrorExpr {
   match t.kind {
     TkInt => {
       let text = t.text
+      let line = t.line
+      let col = t.col
       self.pos += 1
-      int_from_text(text)
+      int_from_text_at(text, line, col)
     }
     TkFloat => {
       let text = t.text
@@ -1094,15 +1099,50 @@ fn bytes_from_str(s : String) -> Bytes {
 }
 
 ///|
-fn int_from_text(text : String) -> ENode {
-  // Radix-prefixed forms arrive as "int:<digits>" (already folded);
-  // plain decimals arrive as raw digits.
+fn int_from_text(text : String) -> ENode raise ParseErrorExpr {
+  int_from_text_at(text, 1, 1)
+}
+
+///|
+/// Parses an integer token ("int:<digits>" folded by the lexer, or raw
+/// digits), rejecting values beyond int64 range like expr does.
+fn int_from_text_at(
+  text : String,
+  line : Int,
+  col : Int,
+) -> ENode raise ParseErrorExpr {
   let chars = text.to_array()
-  if chars.length() > 4 && chars[0] == 'i' && chars[1] == 'n' {
-    EInt(parse_radix(text[4:].to_owned(), 10))
+  let digits = if chars.length() > 4 && chars[0] == 'i' && chars[1] == 'n' {
+    text[4:].to_owned()
   } else {
-    EInt(parse_radix(text, 10))
+    text
   }
+  match parse_int64_checked(digits) {
+    Some(v) => EInt(v)
+    None =>
+      raise ParseErrorExpr::ParseErrExpr(
+        "invalid integer literal: value out of range", line, col,
+      )
+  }
+}
+
+///|
+/// Decimal digits to Int64 with overflow detection (expr rejects
+/// literals above MaxInt64 at parse time).
+fn parse_int64_checked(digits : String) -> Int64? {
+  let chars = digits.to_array()
+  let mut v = 0L
+  for c in chars {
+    if c < '0' || c > '9' {
+      return None
+    }
+    let d = (c.to_int() - '0'.to_int()).to_int64()
+    if v > (9223372036854775807L - d) / 10L {
+      return None
+    }
+    v = v * 10L + d
+  }
+  Some(v)
 }
 
 ///|
