@@ -2,13 +2,13 @@
 
 对照基准:https://expr-lang.org/docs/language-definition 与
 expr 仓库 docs/language-definition.md(commit 4b31df3, v1.17.8)。
-测试证据:mbel 205 个 test 函数(`moon test` 常规计数 184 + 21 个
+测试证据:mbel 209 个 test 函数(`moon test` 常规计数 188 + 21 个
 bench 经 `moon bench` 运行)——lexer_test 21 / parser_test 29 /
 evaluator_test 28 / expr_test 32(parser 14 · eval 17 · opcode 1)/
 expr 白盒 3(lexer_wbtest:字符串/字节串转义与注释词法)/
-engine_test 92(API 26 · 预算 7 · builtin 16 · 聚合 10 · Walk-vs-Vm
-对拍 9 · 稳定性 3(7 场景套件×双引擎+引擎间一致性)· bench 21);
-三目标(native / wasm-gc / js)均 184/184;另与真实 Jexl 的差分
+engine_test 96(API 26 · 预算 7 · builtin 16 · 聚合 10 · Walk-vs-Vm
+对拍 9 · 稳定性 3(7 场景套件×双引擎+引擎间一致性)· 预算 parity 4 ·
+bench 21);三目标(native / wasm-gc / js)均 188/188;另与真实 Jexl 的差分
 corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7。
 语法层覆盖更新:2026-09-06 4.4.1(lexer)+4.4.2(parser+求值)交付,
 本轮(§1-§3)❌ 行大量转 ✅;未标"4.4.x"的行已实现。
@@ -88,7 +88,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 |---|---|---|
 | 节点上限(1e4,可配) | ✅ | budget_test |
 | 嵌套上限(1000;expr 无此项,wasm 栈必需) | ✅ | budget_test |
-| 求值深度 + 步数预算(跨 filter 共享) | ✅ | budget_test, stability_test |
+| 求值深度 + 步数预算(跨 filter 共享) | ✅ | budget_test, stability_test, budget_parity_test | 深度预算双引擎同语义:Vm 每条指令携带源 AST 深度(program.depths),仅当 max_depth 低于程序最大深度时逐指令检查(默认预算零开销);相对过滤器谓词按「每元素新求值器」重新计深,与 Walk 一致;expr 前端 parse 应用 max_nodes(节点数,迭代统计)与递归/深度护栏(嵌套约 500-1000 层) |
 | env 白名单 / Strict | ❌ | 4.4.4(Jexl 缺失键→undefined) |
 | 常量折叠 | ✅ | builtin_test fold 套件 |
 | 12-pass optimizer 其余 | ❌ | 4.3 剩余(需 VM 落点) |
@@ -117,6 +117,15 @@ aggregate_call 由两引擎共享,指令只做调度);相对过滤器/静态索�
 LOADLOCAL 静态槽位解析,ADDLOCAL/POPLOCAL 维护词法作用域,ENV 推
 根 ctx 供 `$env`);手动求值运算符(LAZYBIN)按需回调 tree-walk(共享
 预算);CLI `argv[3]=vm` 可选。
+深度预算修复(2026-09-06):Vm 运行时此前不执行 max_depth——现
+Program 携带逐指令源 AST 深度(depths/max_node_depth,编译期
+node_depth 记账;相对过滤器谓词按 Walk 的「每元素新求值器」重定基),
+run_program 仅在 max_depth < 程序最大深度时逐指令检查,报错文案与
+Walk 完全一致(expression is too deep (more than N levels))。
+expr 前端 parse 预算(同日修复):eval_expr 应用实例 max_nodes(解析后
+迭代统计节点数)与递归帧护栏 + AST 深度上限(≤1000 层,保护
+lower/fold/eval 递归,对齐 legacy 嵌套预算;报错 too large / too
+deeply nested)。证据:engine_test/budget_parity_test.mbt(4)。
 剩余:Disassemble 输出。
 
 **端到端分发补遗(f37f10d,2026-09-06)**:`Expression::eval` 自 4.3

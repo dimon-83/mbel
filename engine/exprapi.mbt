@@ -8,13 +8,15 @@
 
 ///|
 /// Evaluates an expr-dialect source string: new front-end
-/// (lexer/parser/lower) feeding the dual-engine core.
+/// (lexer/parser/lower) feeding the dual-engine core. The instance's
+/// max_nodes budget applies at parse time (token ceiling), mirroring
+/// the legacy parser path.
 pub fn Engine::eval_expr(
   self : Engine,
   source : String,
   ctx : @ast.Value,
 ) -> @ast.Value raise EngineError {
-  let node = @expr.compile_expr(source) catch {
+  let node = @expr.compile_expr_limited(source, self.max_nodes) catch {
     @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
   }
   match node {

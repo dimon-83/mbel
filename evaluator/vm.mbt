@@ -118,12 +118,18 @@ pub struct Program {
   operands : Array[Int]
   consts : Array[Const]
   max_stack : Int
+  // Per-instruction source AST depth (tree depth of the node the
+  // instruction belongs to) plus its maximum — lets the Vm enforce
+  // the same max_depth budget as the tree-walk engine.
+  depths : Array[Int]
+  max_node_depth : Int
 }
 
 ///|
 priv struct Compiler {
   opcodes : Array[Int]
   operands : Array[Int]
+  depths : Array[Int]
   consts : Array[Const]
   grammar : Grammar
   // stack-depth simulation for max_stack (filter frames tracked)
@@ -133,6 +139,13 @@ priv struct Compiler {
   // statically known let-bindings in scope (name per local slot); the
   // mirror of the runtime locals array order
   local_names : Array[String]
+  // source AST depth of the node currently being compiled (for the
+  // per-instruction depth budget); max over all emitted instructions
+  mut node_depth : Int
+  mut max_node_depth : Int
+  // relative-filter predicates compile against a rebased depth (the
+  // walk engine evaluates them on a fresh per-element evaluator)
+  mut pred_depth_rebase : Int
 }
 
 ///|
@@ -158,12 +171,16 @@ pub fn compile_program_with_locals(
   let c = {
     opcodes: [],
     operands: [],
+    depths: [],
     consts: [],
     grammar,
     cur_depth: 0,
     max_depth_seen: 0,
     filter_depths: [],
     local_names: outer.copy(),
+    node_depth: 0,
+    max_node_depth: 0,
+    pred_depth_rebase: 0,
   }
   c.compile_node(ast)
   {
@@ -171,6 +188,8 @@ pub fn compile_program_with_locals(
     operands: c.operands,
     consts: c.consts,
     max_stack: c.max_depth_seen + 2,
+    depths: c.depths,
+    max_node_depth: c.max_node_depth,
   }
 }
 
@@ -178,6 +197,13 @@ pub fn compile_program_with_locals(
 fn Compiler::emit(self : Compiler, op : Int, operand : Int) -> Int {
   self.opcodes.push(op)
   self.operands.push(operand)
+  // source-AST depth of the node this instruction belongs to (rebased
+  // while compiling relative-filter predicates — see compile_filter)
+  let d = self.node_depth - self.pred_depth_rebase
+  self.depths.push(d)
+  if d > self.max_node_depth {
+    self.max_node_depth = d
+  }
   self.opcodes.length() - 1
 }
 
@@ -213,7 +239,22 @@ fn Compiler::track(self : Compiler, pops : Int, pushes : Int) -> Unit {
 }
 
 ///|
+
+///|
+/// Compiles a node, tracking its source-AST depth for the per-
+/// instruction depth budget. Compilation failures abort the whole
+/// compile, so a raise needs no depth restore.
 fn Compiler::compile_node(
+  self : Compiler,
+  node : @ast.AstNode,
+) -> Unit raise EvalError {
+  self.node_depth += 1
+  self.compile_node_inner(node)
+  self.node_depth -= 1
+}
+
+///|
+fn Compiler::compile_node_inner(
   self : Compiler,
   node : @ast.AstNode,
 ) -> Unit raise EvalError {
@@ -560,6 +601,12 @@ fn Compiler::compile_filter(
   // loop body runs with the predicate result pushed per iteration
   self.filter_depths.push(self.cur_depth)
   let pred_start = self.opcodes.length()
+  // The walk engine evaluates a relative-filter predicate on a fresh
+  // per-element evaluator (depth starts at 1); rebase the depth so the
+  // per-instruction budget check matches that accounting. Nested
+  // relative filters rebase again from their own (absolute) depth.
+  let saved_rebase = self.pred_depth_rebase
+  self.pred_depth_rebase = self.node_depth
   match node.filter_expr {
     Some(e) => self.compile_node(e)
     None => {
@@ -567,6 +614,7 @@ fn Compiler::compile_filter(
       self.track(0, 1)
     }
   }
+  self.pred_depth_rebase = saved_rebase
   ignore(self.emit(OP_FILTEREND, pred_start))
   self.cur_depth = self.filter_depths.pop().unwrap_or(0) + 1
   if self.cur_depth > self.max_depth_seen {
@@ -606,6 +654,10 @@ priv struct VmState {
   // lexical let-bindings (innermost last); names kept so tree-walk
   // callbacks (LAZYBIN) can resolve them by name
   mut locals : Array[(String, @ast.Value)]
+  // per-instruction source-AST depths + whether any instruction can
+  // exceed max_depth (precomputed so the default budget never checks)
+  mut depths : Array[Int]
+  mut depth_check : Bool
 }
 
 ///|
@@ -637,6 +689,8 @@ pub fn run_program(
     slot_idx: 0,
     slot_acc: @ast.UndefVal,
     locals: [],
+    depths: program.depths,
+    depth_check: max_depth > 0 && program.max_node_depth > max_depth,
   }
   vm.run()
 }
@@ -704,6 +758,15 @@ fn VmState::walk_eval(
 fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
   let n = self.opcodes.length()
   while self.pc < n {
+    // Eval-depth budget (same message and accounting as the tree-walk
+    // engine: an executed node deeper than max_depth is rejected).
+    if self.depth_check && self.depths[self.pc] > self.max_depth {
+      raise EvalError::EvalErr(
+        "expression is too deep (more than " +
+        self.max_depth.to_string() +
+        " levels)",
+      )
+    }
     let op = self.opcodes[self.pc]
     let operand = self.operands[self.pc]
     match op {
@@ -936,6 +999,8 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
               slot_idx: 0,
               slot_acc: @ast.UndefVal,
               locals: self.locals.copy(),
+              depths: [],
+              depth_check: false,
             }
             let sub = match pred_prog {
               Some(prog) => {
@@ -943,6 +1008,9 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
                 blank.operands = prog.operands
                 blank.consts = prog.consts
                 blank.stack = Array::make(prog.max_stack, @ast.UndefVal)
+                blank.depths = prog.depths
+                blank.depth_check = self.max_depth > 0 &&
+                  prog.max_node_depth > self.max_depth
                 blank
               }
               None => blank

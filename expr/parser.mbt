@@ -17,6 +17,22 @@ pub(all) suberror ParseErrorExpr {
 }
 
 ///|
+/// Default token budget for expr-source parsing, mirroring the legacy
+/// parser's node budget (expr's MaxNodes). 0 disables the limit.
+pub fn default_max_tokens() -> Int {
+  10000
+}
+
+///|
+/// Default parser recursion guard. The expr parser recurses per
+/// nesting construct (parens, unary chains, right-assoc operators,
+/// else-if chains); MoonBit's wasm-gc target has a fixed stack, so
+/// recursion is capped the way the legacy parser caps nesting.
+pub fn default_max_parse_frames() -> Int {
+  1500
+}
+
+///|
 struct Parser {
   toks : Array[Token]
   mut pos : Int
@@ -25,18 +41,171 @@ struct Parser {
   // top-level/program site): expr only accepts `if`/`let` at those
   // sites, never as a binary operand (`1 + if …` is a parse error).
   mut at_expr0 : Bool
+  // budget: recursion-frame guard
+  max_frames : Int
+  mut frames : Int
 }
 
 ///|
-/// Parses an expr-language source string into the expr AST.
+/// Parses an expr-language source string into the expr AST (no token
+/// budget; the recursion guard still applies).
 pub fn parse(source : String) -> ENode raise ParseErrorExpr {
+  parse_limited(source, 0)
+}
+
+///|
+/// Parses with a token budget (0 disables): expressions consuming
+/// more than `max_tokens` tokens are rejected, mirroring the legacy
+/// parser's node budget and expr's MaxNodes option. The recursion
+/// guard always applies.
+pub fn parse_limited(
+  source : String,
+  max_tokens : Int,
+) -> ENode raise ParseErrorExpr {
   let toks = tokenize(source) catch {
     LexErr(msg, line, col) => raise ParseErrorExpr::ParseErrExpr(msg, line, col)
   }
-  let p : Parser = { toks, pos: 0, in_predicate: false, at_expr0: false }
+  let p : Parser = {
+    toks,
+    pos: 0,
+    in_predicate: false,
+    at_expr0: false,
+    max_frames: default_max_parse_frames(),
+    frames: 0,
+  }
   let e = p.parse_program()
   p.expect_eof()
+  ast_budget_check(e, max_tokens)
   e
+}
+
+///|
+/// Maximum AST depth an expr source may produce. Parsing itself is
+/// recursion-guarded (see default_max_parse_frames); this bound keeps
+/// later phases that recurse over the AST (lowering, constant
+/// folding, the walk engine's eval recursion) within the host stack,
+/// mirroring the legacy parser's nesting budget.
+pub fn default_max_ast_depth() -> Int {
+  1000
+}
+
+///|
+/// Iterative budget check over a parsed AST: counts nodes (0 =
+/// unlimited) and tracks the maximum tree depth without host
+/// recursion, so deep-but-legally-parsed shapes are rejected here
+/// rather than overflowing the stack in lowering/folding.
+fn ast_budget_check(n : ENode, max_nodes : Int) -> Unit raise ParseErrorExpr {
+  let stack : Array[(ENode, Int)] = [(n, 1)]
+  let mut count = 0
+  while stack.length() > 0 {
+    let (node, depth) = stack.pop().unwrap()
+    count += 1
+    if max_nodes > 0 && count > max_nodes {
+      raise ParseErrorExpr::ParseErrExpr(
+        "expression is too large (more than " +
+        max_nodes.to_string() +
+        " nodes)",
+        1,
+        1,
+      )
+    }
+    if depth > default_max_ast_depth() {
+      raise ParseErrorExpr::ParseErrExpr(
+        "expression is too deeply nested", 1, 1,
+      )
+    }
+    for child in node_children(node) {
+      stack.push((child, depth + 1))
+    }
+  }
+}
+
+///|
+fn node_children(n : ENode) -> Array[ENode] {
+  let out : Array[ENode] = []
+  match n {
+    EMember(b, _, _) => out.push(b)
+    EIndex(b, i) => {
+      out.push(b)
+      out.push(i)
+    }
+    ESlice(b, f, t) => {
+      out.push(b)
+      match f {
+        Some(x) => out.push(x)
+        None => ()
+      }
+      match t {
+        Some(x) => out.push(x)
+        None => ()
+      }
+    }
+    ECall(c, args) => {
+      out.push(c)
+      for a in args {
+        out.push(a)
+      }
+    }
+    EPred(inner) => out.push(inner)
+    EArray(xs) =>
+      for x in xs {
+        out.push(x)
+      }
+    EMap(pairs) =>
+      for kv in pairs {
+        let (k, v) = kv
+        out.push(k)
+        out.push(v)
+      }
+    EUnary(_, x) => out.push(x)
+    EBinary(_, l, r) => {
+      out.push(l)
+      out.push(r)
+    }
+    ECond(t, c, a) => {
+      out.push(t)
+      match c {
+        Some(x) => out.push(x)
+        None => ()
+      }
+      match a {
+        Some(x) => out.push(x)
+        None => ()
+      }
+    }
+    ELet(_, v, rest) => {
+      out.push(v)
+      out.push(rest)
+    }
+    ESeq(items) =>
+      for x in items {
+        out.push(x)
+      }
+    _ => ()
+  }
+  out
+}
+
+///|
+/// Enter a recursion frame: every parse cycle passes through one of
+/// the wrapped functions per nesting level, so the frame count bounds
+/// concurrent recursion (wasm stack safety). A raise aborts the whole
+/// parse, so no restore is needed on the error path.
+fn Parser::enter(self : Parser) -> Unit raise ParseErrorExpr {
+  self.frames += 1
+  if self.frames > self.max_frames {
+    let t = self.cur()
+    raise ParseErrorExpr::ParseErrExpr(
+      "expression is too deeply nested",
+      t.line,
+      t.col,
+    )
+  }
+}
+
+///|
+fn Parser::leave(self : Parser) -> Unit {
+  self.frames -= 1
 }
 
 ///|
@@ -145,6 +314,14 @@ fn Parser::parse_program(self : Parser) -> ENode raise ParseErrorExpr {
 ///|
 // let x = e; let y = e; rest — declarations chained via ELet.
 fn Parser::parse_let(self : Parser) -> ENode raise ParseErrorExpr {
+  self.enter()
+  let r = self.parse_let_inner()
+  self.leave()
+  r
+}
+
+///|
+fn Parser::parse_let_inner(self : Parser) -> ENode raise ParseErrorExpr {
   self.pos += 1 // consume `let`
   if self.cur().kind is TkIdent {
     let name = self.cur().text
@@ -167,6 +344,16 @@ fn Parser::parse_let(self : Parser) -> ENode raise ParseErrorExpr {
 ///|
 // rest of a program after a `let` declaration.
 fn Parser::parse_program_rest(self : Parser) -> ENode raise ParseErrorExpr {
+  self.enter()
+  let r = self.parse_program_rest_inner()
+  self.leave()
+  r
+}
+
+///|
+fn Parser::parse_program_rest_inner(
+  self : Parser,
+) -> ENode raise ParseErrorExpr {
   self.at_expr0 = true
   if self.at_kw("let") {
     return self.parse_let()
@@ -194,6 +381,14 @@ fn Parser::parse_program_rest(self : Parser) -> ENode raise ParseErrorExpr {
 /// if/else and ternary handled above/below the binary loop. A `let`
 /// declaration may begin any precedence-0 expression site.
 fn Parser::parse_expr(self : Parser) -> ENode raise ParseErrorExpr {
+  self.enter()
+  let r = self.parse_expr_inner()
+  self.leave()
+  r
+}
+
+///|
+fn Parser::parse_expr_inner(self : Parser) -> ENode raise ParseErrorExpr {
   self.at_expr0 = true
   if self.at_kw("let") {
     return self.parse_let()
@@ -265,6 +460,17 @@ fn op_of(t : Token) -> String? {
 
 ///|
 fn Parser::parse_binary(
+  self : Parser,
+  min_prec : Int,
+) -> ENode raise ParseErrorExpr {
+  self.enter()
+  let r = self.parse_binary_inner(min_prec)
+  self.leave()
+  r
+}
+
+///|
+fn Parser::parse_binary_inner(
   self : Parser,
   min_prec : Int,
 ) -> ENode raise ParseErrorExpr {
@@ -388,6 +594,14 @@ fn rewrite_pipe(left : ENode, right : ENode) -> ENode {
 
 ///|
 fn Parser::parse_unary(self : Parser) -> ENode raise ParseErrorExpr {
+  self.enter()
+  let r = self.parse_unary_inner()
+  self.leave()
+  r
+}
+
+///|
+fn Parser::parse_unary_inner(self : Parser) -> ENode raise ParseErrorExpr {
   if self.at_op("!") {
     self.pos += 1
     // expr unary precedence: `not`/`!` 50, `-`/`+` 90 — below `**`/`^`
@@ -801,6 +1015,14 @@ fn Parser::parse_array_literal(self : Parser) -> ENode raise ParseErrorExpr {
 /// (expr parity); else-if chains nest naturally. Each brace body is a
 /// full sequence expression: lets and `;`-separated exprs allowed.
 fn Parser::parse_if(self : Parser) -> ENode raise ParseErrorExpr {
+  self.enter()
+  let r = self.parse_if_inner()
+  self.leave()
+  r
+}
+
+///|
+fn Parser::parse_if_inner(self : Parser) -> ENode raise ParseErrorExpr {
   self.pos += 1 // consume `if`
   let cond = self.parse_expr()
   self.expect_op("{")
@@ -826,6 +1048,14 @@ fn Parser::parse_if(self : Parser) -> ENode raise ParseErrorExpr {
 /// Parses a braced block body: expr (';' expr)* (or a leading `let`),
 /// stopping at the closing brace; a trailing `;` is tolerated.
 fn Parser::parse_block_body(self : Parser) -> ENode raise ParseErrorExpr {
+  self.enter()
+  let r = self.parse_block_body_inner()
+  self.leave()
+  r
+}
+
+///|
+fn Parser::parse_block_body_inner(self : Parser) -> ENode raise ParseErrorExpr {
   self.at_expr0 = true
   let items : Array[ENode] = []
   if self.at_kw("let") {
