@@ -162,3 +162,24 @@ expr playground 验收用例(4 条)暴露三类问题,处置如下(证据:v1.17.
    (time - time → Duration 纳秒),补 Duration 值模型与比较;依赖
    §D"时间 4"行与 §E.2(FFI vs 自实现)。**4.5 落实时间运算时,该用例
    必须进入 expr eval/parity 测试(预期 true)。**
+
+## 7. 4.4.5 收尾处置(2026-09-07):物理拆分作废 + Options 审计
+
+**legacy 包物理拆分——作废(架构评审)**:4.4.5 的"严格语义引擎"落地形态
+为三入口共享核(Engine::eval/eval_expr/eval_expr_checked),方言隔离靠
+结构性判别器(操作数含 IntVal/BytesVal → typed 语义;legacy 词法只产
+NumVal)。该属性 AGENTS.md 明确要求保留;在此之上做"legacy 独立 moon.pkg"
+意味着把共享 semantics 复制成两条求值路径,直接危及差分 corpus 锁,且零
+用户可见收益。legacy 的冻结由 corpus + legacy 套件承担,1.0 gate 只决定
+保留/移除入口,不再拆分包。
+
+**Options 对齐——审计关闭(expr v1.17.8 conf/expr.go 19 个公开项)**:
+
+| expr Option | mbel 处置 |
+|---|---|
+| Env / EnvWithCache | ctx 每次调用传入;checked 入口做白名单 ✓ |
+| AllowUndefinedVariables | Eval 模式即宽松路径,checked 模式即严格路径——三入口已覆盖,无需新旋钮 |
+| Operator / Function / ConstExpr | per-instance add_binary_op/add_function/remove_op ✓(生命周期=实例而非编译,文档化差异) |
+| DisableIfOperator / DisableBuiltin / EnableBuiltin / Patch / Optimize / DisableShortCircuit | 编译期旋钮,无 mbel 对应(常量折叠恒开)——裁剪,记录 |
+| AsBool / AsInt / AsInt64 / AsFloat64 / AsAny / AsKind | Go 类型化输出约束,绑 expr.Compile 的 typed-program API;mbel 返回引擎 Value,条件类型已由 checker 强制——不适用 |
+| WithContext / Timezone | 宿主运行时旋钮;timezone 依赖 4.5 时间线 |

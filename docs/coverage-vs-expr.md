@@ -189,9 +189,8 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    `Engine::eval_expr`(expr 前端 **Eval 模式**:类型化运行时,无静态检查)、
    `Engine::eval_expr_checked`(expr 前端 **Compile 模式**:4.4.4 阶段 1 checker
    先行);均可在 Walk/Vm 上执行且受预算约束;README「Dialects and evaluation
-   modes」+ 本表 §3/§4/§5 行同步。**未完成:legacy 包物理拆分(独立
-   moon.pkg,104 测试随迁)、Options 对齐(env 白名单、AsBool 等)——见收尾
-   清单③**。
+   modes」+ 本表 §3/§4/§5 行同步。**未完成项已收尾(2026-09-07):legacy
+   物理拆分经架构评审作废,Options 对齐经逐项审计关闭——见收尾清单③**。
 6. **✅ 已交付(4.4.2,2026-09-06)**:谓词聚合 15——filter/map/all/… 与
    groupBy/sortBy/reduce 已以共享驱动+注入 runner 交付(tree-walk 每元素
    求值器 / VM 子 Program+单子 VM 复用),见 §4 行与 §7 实测。
@@ -204,11 +203,16 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    加载接口,可永不内置。两项均延后至核心稳定。
 8. **4.4 收尾清单(2026-09-07 起逐项收尾,完成即更新)**:① 文档对齐 ✅(本文);
    ② Bytes 字节串求值 ✅(BytesVal 全链路:相等/len/索引/切片/聚合/toJSON/
-   type()/string(),Checker BytesN 类型化,expr 文案 []uint8);③ legacy 包物理
-   拆分 + Options 对齐(4.4.5 剩余);④ checker 定位错误(`行:列`+caret,需
-   AST 位置化重构);⑤ 4.4 gate 验收(§6.3):expr 官方 TestExpr 167 行 want 表
-   全量转写 + parser/checker/optimizer 表抽样 ≥60%(未开始)。各项状态以
-   本节标记与提交记录为准,发布时 CHANGELOG 同步。
+   type()/string(),Checker BytesN 类型化,expr 文案 []uint8);③ legacy 物理拆分
+   + Options 对齐 ✅ 作废/关闭——物理拆分与 typed-signal 共享核架构冲突
+   (方言隔离=结构判别器,AGENTS.md 要求保留;拆分=复制求值路径,危及 corpus
+   锁);Options 经 expr 19 个公开项逐项审计:语义类(env 白名单/AllowUndefined
+   Variables)已被 Eval/Checked 双入口覆盖,Operator/Function 已有 per-instance
+   注册,AsBool/AsInt/AsKind 等类型化输出与 Optimize/Patch 旋钮属 Go Compile
+   API,不适用于 mbel 值语义运行时——审计表见 gap-analysis §5.2;④ checker
+   定位错误(`行:列`+caret,需 AST 位置化重构);⑤ 4.4 gate 验收(§6.3):expr
+   官方 TestExpr 167 行 want 表全量转写 + parser/checker/optimizer 表抽样
+   ≥60%(未开始)。各项状态以本节标记与提交记录为准,发布时 CHANGELOG 同步。
 
 ### 6.3 覆盖率目标
 4.4 完成后(收尾清单 ⑤):expr 官方 TestExpr 167 行 want 表全量转写 +
