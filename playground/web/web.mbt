@@ -22,8 +22,34 @@ fn with_env(
     _ => return error_out("env is not valid JSON")
   }
   let inst = @engine.new()
+  register_demo_transforms(inst)
   let v = f(inst, ctx) catch { @engine.EngineErr(msg) => return error_out(msg) }
   canon(v)
+}
+
+///|
+/// Demo transforms mirroring cmd/main: the legacy dialect's `|` is a
+/// Jexl transform pipe, so `x | first` needs "first" registered on
+/// the instance (kept in sync with the CLI's set).
+fn register_demo_transforms(inst : @engine.Engine) -> Unit {
+  @engine.Engine::add_transform(inst, "dbl", fn(
+    args : Array[@ast.Value],
+  ) -> @ast.Value {
+    @ast.NumVal(@evaluator.to_number(args[0]) * 2.0)
+  })
+  @engine.Engine::add_transform(inst, "first", fn(
+    args : Array[@ast.Value],
+  ) -> @ast.Value {
+    match args[0] {
+      @ast.ArrayVal(xs) => if xs.length() > 0 { xs[0] } else { @ast.UndefVal }
+      _ => @ast.UndefVal
+    }
+  })
+  @engine.Engine::add_transform(inst, "concatWith", fn(
+    args : Array[@ast.Value],
+  ) -> @ast.Value {
+    @evaluator.plus(args[0], args[1])
+  })
 }
 
 ///|
