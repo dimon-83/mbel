@@ -630,6 +630,9 @@ priv struct LoopFrame {
   mut idx : Int
   results : Array[@ast.Value]
   saved_rel : @ast.Value
+  saved_elem : @ast.Value
+  saved_idx : Int
+  saved_acc : @ast.Value
 }
 
 ///|
@@ -921,14 +924,22 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
         } else {
           // Non-empty: push a frame and fall through into the
           // predicate (pc += 1 lands on pred_start), which runs with
-          // the rel-context slot set to the first element.
+          // the rel-context slot set to the first element. The typed
+          // pointer slots mirror the Walk per-element evaluator: `#`
+          // and `#index` resolve to the element and its position.
           self.frames.push({
             list,
             idx: 0,
             results: [],
             saved_rel: self.rel_context,
+            saved_elem: self.slot_elem,
+            saved_idx: self.slot_idx,
+            saved_acc: self.slot_acc,
           })
           self.rel_context = list[0]
+          self.slot_elem = list[0]
+          self.slot_idx = 0
+          self.slot_acc = @ast.UndefVal
           self.pc += 1
         }
       }
@@ -942,11 +953,16 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
             frame.idx += 1
             if frame.idx < frame.list.length() {
               self.rel_context = frame.list[frame.idx]
+              self.slot_elem = frame.list[frame.idx]
+              self.slot_idx = frame.idx
               // Loop back to the predicate start.
               self.pc = operand
             } else {
               self.push(@ast.ArrayVal(frame.results.copy()))
               self.rel_context = frame.saved_rel
+              self.slot_elem = frame.saved_elem
+              self.slot_idx = frame.saved_idx
+              self.slot_acc = frame.saved_acc
               ignore(self.frames.pop())
               // Fall through past FILTEREND: pc is the end of the
               // filter construct.

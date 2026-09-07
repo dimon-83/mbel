@@ -512,16 +512,25 @@ fn Parser::parse_binary_inner(
     }
     self.pos += 1
     if op == "|" {
-      // pipe: right side must be a call (or bare name) whose first
-      // arg becomes left; expr rejects other right sides (`1 | 2`).
-      let right = self.parse_binary(prec + 1)
-      match right {
-        ECall(_, _) | EIdent(_) => {
-          left = rewrite_pipe(left, right)
-          continue
+      // Pipe: `left | fn(args)` → `fn(left, args...)`. expr requires a
+      // parenthesized call on the right (bare `| fn` and `| x.m()` are
+      // parse errors), and the subject takes call-argument 0 — so an
+      // aggregate's first explicit argument is its predicate and must
+      // parse in predicate context (expr's parseCall(ident, [left]).
+      if self.cur().kind is TkIdent &&
+        self.peek().kind is TkOperator &&
+        self.peek().text == "(" {
+        let name = self.cur().text
+        self.pos += 1
+        let args = self.parse_call_args_for(EIdent(name), true)
+        let all : Array[ENode] = [left]
+        for a in args {
+          all.push(a)
         }
-        _ => return self.err("unexpected token after '|' (expected a call)")
+        left = ECall(EIdent(name), all)
+        continue
       }
+      return self.err("unexpected token after '|' (expected a call)")
     }
     let right = if right_assoc(op) {
       self.parse_binary(prec)
@@ -573,22 +582,6 @@ fn left_midpoint(left : ENode) -> ENode {
   match left {
     EBinary(_, _, r) => r
     other => other
-  }
-}
-
-///|
-/// `x | f(a, …)` desugars to `f(x, a, …)`; `x | f` to `f(x)`.
-fn rewrite_pipe(left : ENode, right : ENode) -> ENode {
-  match right {
-    ECall(callee, args) => {
-      let all : Array[ENode] = [left]
-      for a in args {
-        all.push(a)
-      }
-      ECall(callee, all)
-    }
-    EIdent(f) => ECall(EIdent(f), [left])
-    other => ECall(other, [left])
   }
 }
 
@@ -694,6 +687,21 @@ fn Parser::parse_postfix(self : Parser) -> ENode raise ParseErrorExpr {
         e = ESlice(e, None, to)
         continue
       }
+      if self.at_op(".") {
+        // Bracket predicate `items[.expr]`: Jexl's relative filter —
+        // the predicate evaluates against each element. expr-lang has
+        // no bracket form (bare '.' after '[' is a parse error there),
+        // so this is mbel's documented Jexl-compat extension; lowered
+        // to the legacy relative FilterExpression, which both engines
+        // already execute (docs/expr-gap-analysis.md).
+        let saved = self.in_predicate
+        self.in_predicate = true
+        let inner = self.parse_expr()
+        self.in_predicate = saved
+        self.expect_op("]")
+        e = EIndex(e, EPred(inner))
+        continue
+      }
       let idx = self.parse_expr()
       if self.at_op(":") {
         self.pos += 1
@@ -711,7 +719,7 @@ fn Parser::parse_postfix(self : Parser) -> ENode raise ParseErrorExpr {
       continue
     }
     if self.at_op("(") {
-      let args = self.parse_call_args_for(e)
+      let args = self.parse_call_args_for(e, false)
       e = ECall(e, args)
       continue
     }
@@ -725,16 +733,19 @@ fn Parser::parse_postfix(self : Parser) -> ENode raise ParseErrorExpr {
 /// literal or a brace-wrapped predicate — disambiguated like expr:
 /// map keys must start with an identifier/string/number/paren.
 fn Parser::parse_call_args(self : Parser) -> Array[ENode] raise ParseErrorExpr {
-  self.parse_call_args_for(ENil)
+  self.parse_call_args_for(ENil, false)
 }
 
 ///|
 /// Parses `(args)`; when the callee is an aggregate function, the
-/// second argument parses in predicate context (bare `.field` access
-/// allowed), mirroring expr's predicate-position rule.
+/// predicate-position argument parses in predicate context (bare
+/// `.field` access allowed), mirroring expr's predicate-position rule:
+/// argument 1 for a direct call, argument 0 when the subject arrives
+/// through a pipe (it takes call-argument 0).
 fn Parser::parse_call_args_for(
   self : Parser,
   callee : ENode,
+  piped_subject : Bool,
 ) -> Array[ENode] raise ParseErrorExpr {
   self.expect_op("(")
   let args : Array[ENode] = []
@@ -748,7 +759,8 @@ fn Parser::parse_call_args_for(
   let mut arg_idx = 0
   while true {
     let saved = self.in_predicate
-    if arg_idx == 1 && @grammar.is_aggregate(callee_name) {
+    if @grammar.is_aggregate(callee_name) &&
+      ((piped_subject && arg_idx == 0) || (!piped_subject && arg_idx == 1)) {
       self.in_predicate = true
     }
     if self.at_op("{") && self.brace_starts_map() {
@@ -911,9 +923,14 @@ fn Parser::parse_primary(self : Parser) -> ENode raise ParseErrorExpr {
     TkPointer => {
       let text = t.text
       // expr supports exactly the pointers `#`, `#index`, `#acc`; any
-      // other suffix (`#age` etc.) is a compile error in expr.
+      // other suffix (`#age` etc.) is a compile error in expr. Pointers
+      // are also predicate-only: outside one, expr's parser rejects
+      // them as unexpected tokens (parsePrimary gates on depth > 0).
       if text != "#" && text != "#index" && text != "#acc" {
         let e = self.err("unknown pointer '" + text + "'")
+        e
+      } else if !self.in_predicate {
+        let e = self.err("unexpected token '" + text + "'")
         e
       } else {
         self.pos += 1

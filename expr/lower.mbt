@@ -33,8 +33,13 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
     }
     EIndex(base, idx) => {
       let b = lower(base)
-      let i = lower(idx)
-      @ast.filter_expression(i, false, b)
+      match idx {
+        // Bracket predicate `items[.expr]` (Jexl-compat extension):
+        // lower as a relative filter, evaluated per element. Plain
+        // indexing keeps the static-filter form.
+        EPred(inner) => @ast.filter_expression(lower(inner), true, b)
+        other => @ast.filter_expression(lower(other), false, b)
+      }
     }
     ESlice(base, from, to) => {
       let b = lower(base)

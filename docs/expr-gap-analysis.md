@@ -121,3 +121,44 @@ New divergences recorded:
 
 - 已决策:目标 = "expr 语言定义 + 官方测试"为验收基线(而非 Go API 面);E 类裁剪项显式记录。
 - 待 4.4 gate:Jexl legacy 保留期、$env/方法调用宿主扩展方式、time/regexp 实现路线(FFI vs 自实现)。
+
+## 6. 2026-09-07 增补:playground 验收用例驱动的对齐修复
+
+expr playground 验收用例(4 条)暴露三类问题,处置如下(证据:v1.17.8 parser.go / 官方语言定义):
+
+1. **方括号谓词 `items[.price <= 2].name` —— Jexl 兼容扩展(显式偏离,记录在案)**
+   expr-lang 的 `[` 后只接受索引/切片,裸 `.` 在 depth 0 直接 parse error
+   (谓词上下文仅由 parseCall 对 `predicates` map 函数的实参开启);
+   官方语言定义中 `[]` 仅用于元素访问/切片。mbel expr 前端现为对齐实现,
+   但作为 Jexl 源码兼容扩展,**expr 前端额外接受 `[.expr]` 相对过滤**:
+   lower 到 legacy `FilterExpression(relative=true)`,Walk/Vm 走既有
+   eval_filter/compile_filter 语义,结果与 Jexl 方言一致。此为"mbel 比
+   expr-lang 多接受"的显式偏离,依据 AGENTS.md 在此记录。
+
+2. **管道接谓词聚合 `tweets | filter(.Content contains "Hello") | map(.User) | first()` —— 对齐修复**
+   expr 的管道经 `parseCall(ident, [left], true)` 脱糖,谓词位的实参照常
+   进入谓词上下文(`parsePredicate`/depth++)。mbel 原实现不对管道右侧
+   实参开放谓词上下文 → 裸 `.field` parse error。已修:管道右侧聚合调用
+   的第 0 个显式实参按谓词上下文解析(`parse_call_args_for(piped=true)`),
+   `first()` 零参管道调用不受影响。
+
+3. **指针与裸管道严格化(对齐修复)**
+   - expr 仅在谓词上下文(depth > 0)接受 `#`/`#index`/`#acc`;mbel 原先
+     任意位置放行(运行时求值为 nil)。已在 parsePrimary 按 `in_predicate`
+     门控,非谓词位置报 parse error。
+   - expr 管道右侧必须是带括号调用(`| fn`、`| x.m()` 均 parse error);
+     mbel 原先接受裸 `| fn`。已收紧;language-definition 管道行同步修正。
+
+4. **时间运算(case 1/4)→ 计入 4.5(记录在案,暂不实现)**
+   用例:`request.Time - resource.Age < duration("24h")`,env:
+   request.Time = "2024-01-01T23:59:00Z"、resource.Age =
+   "2024-01-01T00:00:00Z",expr-lang 预期 `true`(时间串按 RFC3339 解析,
+   23h59m = 86340000000000ns < 86400000000000ns)。
+   现状盘点(2026-09-07):`duration()`/`date()`/`now()`/`timezone()` 内置
+   已有最小 UTC/ISO 实现(builtin/time.mbt,duration 返回纳秒数);缺的是
+   **时间串在运算符里的隐式解析** —— `request.Time - resource.Age` 当前按
+   JS 弱类型得 NaN(string - string),进而整条表达式得 `false`(非报错)。
+   4.5 需落时:RFC3339 串在 `-`/比较等二元运算中隐式转为时间值
+   (time - time → Duration 纳秒),补 Duration 值模型与比较;依赖
+   §D"时间 4"行与 §E.2(FFI vs 自实现)。**4.5 落实时间运算时,该用例
+   必须进入 expr eval/parity 测试(预期 true)。**

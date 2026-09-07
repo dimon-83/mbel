@@ -69,7 +69,7 @@ Precedence, highest first (all left-associative unless noted):
 | 20 | `==` `!=` `<` `>` `<=` `>=` `in` `matches` `contains` `startsWith` `endsWith` | `not in`/`not matches`/`not contains`… = negated suffix |
 | 15 | `&&` `and` | |
 | 10 | `\|\|` `or` | |
-| 0 | `\|` | pipe: `x \| f(a)` → `f(x, a)`; right side must be a call |
+| 0 | `\|` | pipe: `x \| f(a)` → `f(x, a)`; right side must be a parenthesized call (bare `\| f` and `\| x.m()` are parse errors) |
 | — | `??` | precedence 500, left-assoc, **cannot be followed by another operator** at the same level: `1 ?? 2 + 3` is a parse error, `1 + 2 ?? 3` and `(1 ?? 2) + 3` are fine, `a ?? b ?? c` chains |
 
 Other syntax:
@@ -112,7 +112,21 @@ count(nums, # > 2)
 Pointers: `#` (current element), `#index` (position), `#acc`
 (accumulator). `#index`/`#acc` are bound inside the aggregates that define
 them; only `#`, `#index` and `#acc` are valid — `#age` is a compile error
-"unknown pointer '#age'" (expr parity).
+"unknown pointer '#age'" (expr parity). Pointers are predicate-only:
+outside a predicate context (`# + 1`, `xs[#]`) they are parse errors.
+
+Through a pipe the subject takes call-argument 0, so the first explicit
+argument is the predicate:
+
+```text
+nums | map(# * 2)
+users | filter(.age >= 18) | map(.name) | first()
+```
+
+mbel additionally accepts the Jexl bracket predicate `items[.price <= 2]`
+(filters per element, chainable like any value) — expr has no bracket form
+and rejects a bare `.` after `[` (documented extension, see
+docs/expr-gap-analysis.md §6).
 
 Predicate aggregates (15): `all none any one filter map count sum find
 findIndex findLast findLastIndex groupBy sortBy reduce`.
@@ -152,6 +166,8 @@ transforms are registered per engine instance (no reflection — see
   doubles (integers above 2^53 lose exactness in context data; literals
   and `toJSON` of int64 are exact).
 - `//` is a comment (expr parity), not floor division.
+- Bracket predicates `items[.expr]` are accepted (Jexl compatibility);
+  expr-lang has no bracket form and rejects a bare `.` after `[`.
 
 Machine-checked status for every row of the expr language definition is in
 docs/coverage-vs-expr.md; cut items and rationale in docs/expr-gap-analysis.md.

@@ -373,3 +373,81 @@ test "expr eval: ?? mixing with other operators errors" {
   expect_eval("1 + 2 ?? 3", @ast.NumVal(3.0), "?? binds tighter than +")
   expect_eval("a ?? b ?? 7", @ast.NumVal(7.0), "chained ?? ok")
 }
+
+// --- piped aggregates: the subject takes call-arg 0, so the first
+// explicit argument is the predicate (expr's parseCall(ident,[left])).
+
+///|
+test "expr eval: piped aggregates parse predicate arguments" {
+  expect_eval(
+    "nums | map(# * 2)",
+    @ast.ArrayVal([
+      @ast.NumVal(2.0),
+      @ast.NumVal(4.0),
+      @ast.NumVal(6.0),
+      @ast.NumVal(8.0),
+      @ast.NumVal(10.0),
+    ]),
+    "pipe map pointer",
+  )
+  expect_eval(
+    "users | filter(.age >= 18)",
+    @ast.ArrayVal([
+      @ast.ObjectVal([
+        ("name", @ast.StrVal("Alice")),
+        ("age", @ast.NumVal(30.0)),
+      ]),
+      @ast.ObjectVal([("name", @ast.StrVal("Cyx")), ("age", @ast.NumVal(24.0))]),
+    ]),
+    "pipe filter bare dot",
+  )
+  expect_eval(
+    "users | filter(.age >= 18) | map(.name) | first()",
+    @ast.StrVal("Alice"),
+    "piped chain with first()",
+  )
+  expect_eval(
+    "users | filter({.age >= 18}) | count()",
+    @ast.NumVal(2.0),
+    "braced piped predicate + count()",
+  )
+}
+
+// --- Jexl-compat bracket predicates: `items[.expr]` filters per
+// element (expr-lang has no bracket form; documented extension).
+
+///|
+test "expr eval: bracket predicates filter relative to the element" {
+  expect_eval(
+    "users[.age >= 18]",
+    @ast.ArrayVal([
+      @ast.ObjectVal([
+        ("name", @ast.StrVal("Alice")),
+        ("age", @ast.NumVal(30.0)),
+      ]),
+      @ast.ObjectVal([("name", @ast.StrVal("Cyx")), ("age", @ast.NumVal(24.0))]),
+    ]),
+    "bracket predicate filters",
+  )
+  expect_eval(
+    "users[.name == \"Bob\"].age",
+    @ast.NumVal(15.0),
+    "bracket predicate then member chain",
+  )
+  expect_eval(
+    "users[.age >= 18] | map(.name)",
+    @ast.ArrayVal([@ast.StrVal("Alice"), @ast.StrVal("Cyx")]),
+    "bracket predicate feeds pipe",
+  )
+}
+
+// --- expr alignment: pointers live only in predicate context; the
+// pipe's right side must be a parenthesized call.
+
+///|
+test "expr eval: pointer and pipe strictness" {
+  expect_eval_err("# + 1", "parse error at", "top-level pointer")
+  expect_eval_err("nums[#]", "parse error at", "pointer in index position")
+  expect_eval_err("nums | first", "unexpected token after '|'", "bare pipe")
+  expect_eval_err("1 | 2", "unexpected token after '|'", "pipe to non-call")
+}

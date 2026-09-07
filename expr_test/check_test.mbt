@@ -152,3 +152,11 @@ test "strict mode: unknown top-level names error; Eval mode stays lenient" {
     other => inspect(@evaluator.to_string(other), content="nil-ish")
   }
 }
+
+///|
+test "strict mode: piped aggregates and bracket predicates" {
+  expect_checked("nums | map(# * 2)", "2,4", "piped map")
+  expect_checked("nums | filter(# > 1)", "2", "piped filter")
+  expect_checked("nums | map(# * 2) | first()", "2", "piped chain first()")
+  expect_checked("[{a:1},{a:2}][.a == 2] | count()", "1", "bracket pred strict")
+}

@@ -43,7 +43,7 @@
 | 20 | `==` `!=` `<` `>` `<=` `>=` `in` `matches` `contains` `startsWith` `endsWith` | `not in`/`not matches`/`not contains`… = 后缀否定 |
 | 15 | `&&` `and` | |
 | 10 | `\|\|` `or` | |
-| 0 | `\|` | 管道:`x \| f(a)` → `f(x, a)`;右侧必须是调用 |
+| 0 | `\|` | 管道:`x \| f(a)` → `f(x, a)`;右侧必须带括号调用(裸 `\| f`、`\| x.m()` 是 parse error) |
 | — | `??` | 优先级 500,左结合,**同一层后不能再跟运算符**:`1 ?? 2 + 3` 是解析错误,`1 + 2 ?? 3`、`(1 ?? 2) + 3` 合法,`a ?? b ?? c` 可链 |
 
 其他语法:
@@ -69,7 +69,16 @@ reduce(nums, #acc + #, 100)
 count(nums, # > 2)
 ```
 
-指针:`#`(当前元素)、`#index`(位置)、`#acc`(累加器)。`#index`/`#acc` 仅在定义它们的聚合内绑定;合法指针只有 `#`、`#index`、`#acc`——`#age` 是编译错误 "unknown pointer '#age'"(expr parity)。
+指针:`#`(当前元素)、`#index`(位置)、`#acc`(累加器)。`#index`/`#acc` 仅在定义它们的聚合内绑定;合法指针只有 `#`、`#index`、`#acc`——`#age` 是编译错误 "unknown pointer '#age'"(expr parity)。指针只能在谓词上下文使用——谓词之外(`# + 1`、`xs[#]`)是 parse error。
+
+管道的左侧占调用第 0 参,因此第一个显式实参就是谓词:
+
+```text
+nums | map(# * 2)
+users | filter(.age >= 18) | map(.name) | first()
+```
+
+mbel 额外接受 Jexl 方括号谓词 `items[.price <= 2]`(逐元素过滤,可继续链式访问)——expr 无方括号形式,`[` 后的裸 `.` 直接 parse error(已文档化的扩展,见 docs/expr-gap-analysis.md §6)。
 
 谓词聚合(15 个):`all none any one filter map count sum find findIndex findLast findLastIndex groupBy sortBy reduce`。
 
@@ -90,5 +99,6 @@ count(nums, # > 2)
 - `type()` 对浮点返回 `"number"`(legacy 锁定)而非 `"float"`。
 - legacy 方言中字符串 `in` 是子串语义(expr 前端 Eval 模式对字符串沿用该行为——差异已在覆盖矩阵记录)。
 - 字符串切片按字符;正则仅字面量;`upper`/`lower` 仅 ASCII;时间是最小 UTC/ISO 子集;JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。
+- 方括号谓词 `items[.expr]` 被接受(Jexl 兼容);expr-lang 无方括号形式,`[` 后的裸 `.` 直接报错。
 
 expr 语言定义每一行的可机检状态见 docs/coverage-vs-expr.md;裁剪项与理由见 docs/expr-gap-analysis.md。

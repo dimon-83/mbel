@@ -1098,10 +1098,13 @@ fn Evaluator::eval_filter(
       other => [other]
     }
     let results : Array[@ast.Value] = []
-    for elem in list {
+    for i in 0..<list.length() {
+      let elem = list[i]
       // Element evaluators share the parent's step budget so a large
       // filtered array cannot amplify work past the limit; they also
       // inherit lexical let-bindings from the enclosing sequence.
+      // Typed pointer slots mirror the aggregate runner: `#` and
+      // `#index` resolve to the element and its position.
       let e = {
         grammar: self.grammar,
         context: self.context,
@@ -1111,7 +1114,7 @@ fn Evaluator::eval_filter(
         budget: self.budget,
         max_steps: self.max_steps,
         slot_elem: elem,
-        slot_idx: 0,
+        slot_idx: i,
         slot_acc: @ast.UndefVal,
         locals: self.locals,
       }
