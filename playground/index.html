@@ -406,6 +406,12 @@
     { label: 'filter', expr: 'filter(users, .age >= 18)[0].name', env: '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 15}]}' },
     { label: 'sum 范围', expr: 'sum(1..100)', env: '{}' },
     { label: 'let 均值', expr: 'let n = count(nums); sum(nums) / n', env: '{"nums": [1, 2, 3, 4, 5]}' },
+    { label: 'let+if/else', expr: `let ok = all(tweets, len(.Content) <= 10);
+if ok {
+    "all tweets okay"
+} else {
+    "probably not"
+}`, env: '{"tweets": [{"Content": "Hello world"}, {"Content": "This is a short tweet under the limit"}, {"Content": "Expr is awesome!"}]}' },
     { label: '切片', expr: 'nums[1:3]', env: '{"nums": [1, 2, 3, 4, 5]}' },
     { label: '管道', expr: '[1,2,3] | first()', env: '{}' },
     { label: '管道过滤链', expr: 'tweets | filter(.Content contains "Hello") | map(.User) | first()', env: '{"tweets": [{"User": "John Doe", "Content": "Hello, world!"}, {"User": "Jane Doe", "Content": "Hi, there!"}, {"User": "Ivan Petrov", "Content": "How are you?"}]}' },
