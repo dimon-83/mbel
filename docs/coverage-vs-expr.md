@@ -139,7 +139,7 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
 手写用例的 Walk vs Vm 对拍**首次真正执行**且全绿(值+错误消息
 严格相等,NaN-aware);性能与稳定性实测见 §7。
 
-### 6.2 语言层(4.4)——4.4.1/4.4.2 已交付,剩余 4.4.3-4.4.5
+### 6.2 语言层(4.4)——交付状态与收尾清单(2026-09-07 修订,逐项状态见条目 8)
 
 1. **✅ 已交付 4.4.1 lexer(2026-09-06,expr 前端)**:数字家族(hex/oct/
    bin/_/指数/`.5`)、字符串家族(单双引号同转义集:简单转义+`\xNN`+
@@ -172,7 +172,9 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    已完成(2026-09-06):len/count/indexOf/lastIndexOf/findIndex/
    findLastIndex/int() 恒返 int;abs/min/max 输入驱动(int 入 int 出);
    sum 整数列表保型;toJSON 改用精确 JSON writer(int64 全精度输出,
-   NaN/Inf→null)。4.4.3 完成。
+   NaN/Inf→null)。IntVal 核心完成。**未完成:Bytes 字节串求值**(值模型
+   原计划含 Bytes;当前 byte 串词法/解析 ✅,求值在 lower 报
+   "byte-string values need the typed value model"——见收尾清单②)。
 4. **🟡 4.4.4 checker——阶段 1 已交付(2026-09-06)**:expr/check.mbt
    Nature 推断(字面量及传播)+ 运算符类型规则,按 expr **Compile 模式**
    文案报错;接入严格入口 `Engine::eval_expr_checked`(内部委托双引擎,
@@ -181,15 +183,17 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    型)、同质容器元素 Nature(`[]int` vs `[]string` 相等报错)、核心内置
    静态参数检查(len/int/float/abs/字符串/聚合首参,expr 文案)、严格
    模式 env 白名单(`eval_expr_checked` 未知顶层名报 "unknown name
-   x";Eval 模式保持宽松缺失→nil)。4.4.4 阶段 1+2 完成。剩余:带
-   `行:列` 位置的错误(需 AST 位置化重构)。
+   x";Eval 模式保持宽松缺失→nil)。阶段 1+2 完成。**未完成:带
+   `行:列` 位置的定位错误**(需 AST 位置化重构——见收尾清单④,
+   AGENTS.md 明示未实现前不宣称)。
 5. **🟡 4.4.5 语义切换——API 已定型并锁定(2026-09-06)**:三入口文档化——
    `Engine::eval`(Jexl legacy 方言,JS 动态语义,差分 corpus+legacy 套件锁定)、
    `Engine::eval_expr`(expr 前端 **Eval 模式**:类型化运行时,无静态检查)、
    `Engine::eval_expr_checked`(expr 前端 **Compile 模式**:4.4.4 阶段 1 checker
    先行);均可在 Walk/Vm 上执行且受预算约束;README「Dialects and evaluation
-   modes」+ 本表 §3/§4/§5 行同步。剩余:legacy 包物理拆分(独立 moon.pkg,104
-   测试随迁)、Options 对齐(env 白名单、AsBool 等,checker 阶段 2 后)。
+   modes」+ 本表 §3/§4/§5 行同步。**未完成:legacy 包物理拆分(独立
+   moon.pkg,104 测试随迁)、Options 对齐(env 白名单、AsBool 等)——见收尾
+   清单③**。
 6. **✅ 已交付(4.4.2,2026-09-06)**:谓词聚合 15——filter/map/all/… 与
    groupBy/sortBy/reduce 已以共享驱动+注入 runner 交付(tree-walk 每元素
    求值器 / VM 子 Program+单子 VM 复用),见 §4 行与 §7 实测。
@@ -200,10 +204,17 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    RegExp(js/wasm)为快速路径但牺牲可移植性,API 边界显式化。时间——civil
    日历(已有 days_from_civil 基础)+ 固定偏移;完整 tzdata 预留外部文件
    加载接口,可永不内置。两项均延后至核心稳定。
+8. **4.4 收尾清单(2026-09-07 起逐项收尾,完成即更新)**:① 文档对齐——本节
+   标题/标记/正文统一(本文);② Bytes 字节串求值(4.4.3 尾巴,对齐 expr 的
+   []byte 语义);③ legacy 包物理拆分 + Options 对齐(4.4.5 剩余);④ checker
+   定位错误(`行:列`+caret,需 AST 位置化重构);⑤ 4.4 gate 验收(§6.3):
+   expr 官方 TestExpr 167 行 want 表全量转写 + parser/checker/optimizer
+   表抽样 ≥60%(未开始)。各项状态以本节标记与提交记录为准,发布时
+   CHANGELOG 同步。
 
 ### 6.3 覆盖率目标
-4.4 完成后:expr 官方 TestExpr 167 行 want 表全量转写 + parser/checker/optimizer
-表抽样 ≥60%;4.5 后 builtin_test 904 行对齐。
+4.4 完成后(收尾清单 ⑤):expr 官方 TestExpr 167 行 want 表全量转写 +
+parser/checker/optimizer 表抽样 ≥60%;4.5 后 builtin_test 904 行对齐。
 
 ## 7. 双引擎实测:性能与稳定性对比(2026-09-06,f37f10d 后)
 
