@@ -12,10 +12,12 @@ fn main {
 }
 
 ///|
-/// Runs `f` against a fresh engine instance and the parsed env JSON,
+/// Runs `f` against a fresh engine instance (dialect demo transforms
+/// registered, execution engine selected) and the parsed env JSON,
 /// canonicalizing the result or formatting the error for the page.
 fn with_env(
   env : String,
+  engine : String,
   f : (@engine.Engine, @ast.Value) -> @ast.Value raise @engine.EngineError,
 ) -> String {
   let ctx = json_to_value(@json.parse(env)) catch {
@@ -23,6 +25,9 @@ fn with_env(
   }
   let inst = @engine.new()
   register_demo_transforms(inst)
+  if engine == "vm" {
+    @engine.Engine::set_engine(inst, Vm)
+  }
   let v = f(inst, ctx) catch { @engine.EngineErr(msg) => return error_out(msg) }
   canon(v)
 }
@@ -53,21 +58,23 @@ fn register_demo_transforms(inst : @engine.Engine) -> Unit {
 }
 
 ///|
-/// Legacy Jexl dialect (JS semantics) — the locked-corpus entry.
-pub fn eval_jexl(expr : String, env : String) -> String {
-  with_env(env, (inst, ctx) => @engine.Engine::eval(inst, expr, ctx))
+/// Classic dialect (JS semantics) — the locked-corpus entry.
+pub fn eval_jexl(expr : String, env : String, engine : String) -> String {
+  with_env(env, engine, (inst, ctx) => @engine.Engine::eval(inst, expr, ctx))
 }
 
 ///|
-/// expr front end, Eval mode — dynamic typed runtime errors.
-pub fn eval_expr(expr : String, env : String) -> String {
-  with_env(env, (inst, ctx) => @engine.Engine::eval_expr(inst, expr, ctx))
+/// Standard dialect, Eval mode — dynamic typed runtime errors.
+pub fn eval_expr(expr : String, env : String, engine : String) -> String {
+  with_env(env, engine, (inst, ctx) => {
+    @engine.Engine::eval_expr(inst, expr, ctx)
+  })
 }
 
 ///|
-/// expr front end, Compile mode — static checker errors.
-pub fn eval_checked(expr : String, env : String) -> String {
-  with_env(env, (inst, ctx) => {
+/// Standard dialect, Compile mode — static checker errors.
+pub fn eval_checked(expr : String, env : String, engine : String) -> String {
+  with_env(env, engine, (inst, ctx) => {
     @engine.Engine::eval_expr_checked(inst, expr, ctx)
   })
 }

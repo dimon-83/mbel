@@ -139,7 +139,8 @@ You can browse and install extra skills here:
 
 - `playground/` is a self-contained browser test page: `index.html` plus the
   built `mbel.wasm`. The wasm entry is the `playground/web` package, which
-  exports `eval_expr`, `eval_jexl`, `eval_checked`, `disassemble` and
+  exports `eval_expr`, `eval_jexl`, `eval_checked` (each `(expr, env,
+  engine)` where `engine` is `"walk"` or `"vm"`), `disassemble` and
   `dump_ast` — all taking and returning native JS strings. `web.mbt` mirrors
   `cmd/main`'s canonical serializer and env parsing (kept in sync by hand;
   main packages cannot be imported).
