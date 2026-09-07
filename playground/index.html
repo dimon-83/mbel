@@ -346,7 +346,7 @@
       <div class="card-body">
         <div id="resultBox" class="result-box">等待执行...</div>
         <div class="stats">
-          <span>⏱ 耗时: <strong id="execTime">—</strong> ns</span>
+          <span>⏱ 耗时: <strong id="execTime">—</strong></span>
           <span>📊 结果类型: <strong id="resultType">—</strong></span>
           <span>🔢 表达式长度: <strong id="exprLen">—</strong></span>
         </div>
@@ -523,6 +523,13 @@
     }
   }
 
+  // 纳秒 → 展示:求值耗时以微秒为主(<1ms 两/三位小数),重负载自动切毫秒。
+  function formatElapsed(ns) {
+    if (ns >= 1000000) return (ns / 1000000).toFixed(2) + ' ms';
+    if (ns >= 1000) return (ns / 1000).toFixed(2) + ' µs';
+    return ns + ' ns';
+  }
+
   function advText(name, args) {
     const call = callExport(name, args);
     if (call.error) return '⚠ ' + call.error;
@@ -539,7 +546,7 @@
       '结果: ' + (res.error ? 'Error — ' + res.error : res.value),
       '执行耗时: ' + (elapsedNs === null
         ? '—(报错路径不重复计时)'
-        : elapsedNs + 'ns/次(连续 ' + runs + ' 次平均)'),
+        : formatElapsed(elapsedNs) + '/次(连续 ' + runs + ' 次平均)'),
       'WASM 已加载: ' + wasmReady,
       '导出函数: ' + (wasmInstance ? Object.keys(wasmInstance.exports).filter(k => k !== '_start').join(', ') : '—'),
     ].join('\n');
@@ -587,8 +594,8 @@
           runs += 1;
         }
         elapsedNs = Math.round(Number(nsClock.now() - t1) / runs);
-        execTime.textContent = elapsedNs;
-        timerDisplay.textContent = `⏱ ${elapsedNs}ns`;
+        execTime.textContent = formatElapsed(elapsedNs);
+        timerDisplay.textContent = `⏱ ${formatElapsed(elapsedNs)}`;
       }
 
       if (res.error) {
