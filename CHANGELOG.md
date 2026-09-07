@@ -4,7 +4,46 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [0.3.1] — 2026-09-07
+
+Stage-4 close-out patch: the remaining 4.4 items landed, together with
+playground tooling and de-originated user-facing naming.
+
+### Added
+- **Byte strings evaluate as `BytesVal`** (4.4.3 close-out, expr
+  `[]byte` parity): `b"…"`/`B'…'` values now evaluate instead of
+  raising; typed comparison/`type()`/`toJSON` cover bytes.
+- **Position-carrying Compile-mode errors** (4.4.4 close-out): checker
+  errors carry expr's FileError layout — `msg (L:C)` plus the source
+  line and a caret column.
+- **Official test-table transcription** (4.4 gate acceptance): expr's
+  TestExpr and checker TestCheck suites transcribed into the safety
+  net (want-table harness in expr_test).
+- **Playground execution-engine selector**: `eval_expr`/`eval_jexl`/
+  `eval_checked` exports take an `engine` argument (`"walk"`/`"vm"`),
+  so every dialect/mode runs on the walk-tree interpreter or the
+  bytecode VM; quick examples grown to 18 (incl. a multi-line
+  let + if/else + `all()` demo); elapsed time reported in µs.
+- Options audit (4.4.5 close-out): env-whitelist/AsBool alignment
+  decisions recorded (docs/coverage-vs-expr.md §6.2 item 8).
+
+### Fixed
+- Playground timing read 0 or 1 000 000 ns on hosts whose
+  `performance.now()` is coarsened to 1 ms — single-shot measurement
+  replaced by an amplified ~40 ms window average, then displayed in
+  µs (auto-switching to ms for heavy expressions).
+
+### Changed
+- User-facing terminology de-originated: **standard dialect** (Eval /
+  Compile modes) and **classic dialect (legacy)** replace the
+  porting-source names in the playground, README, and the en/zh user
+  manuals (one reference-baseline note per docs set); README roadmap
+  refreshed to the 4.4 close-out list. API identifiers
+  (`Engine::eval_expr` etc.) are unchanged.
+- Test suite grown to 215 tests × 3 targets (native/wasm-gc/js).
+
 ## [0.3.0] — 2026-09-07
+
 
 Stage-4 typed milestone: typed value model, static checker with a
 strict Compile-mode entry, and a locked three-dialect API; the expr
