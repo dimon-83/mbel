@@ -319,12 +319,15 @@
 
         <div class="row" style="margin-top:0.75rem;">
           <div class="col">
-            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:0.25rem;">⚙️ 引擎版本</label>
+            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:0.25rem;">⚙️ 方言 / 模式</label>
             <select id="versionSelect" style="width:100%;">
-              <option value="expr">expr (最新)</option>
-              <option value="jexl">jexl (v1 稳定)</option>
-              <option value="checked">expr 严格检查</option>
+              <option value="expr">expr · Eval 模式(推荐)</option>
+              <option value="checked">expr · Compile 模式(严格检查)</option>
+              <option value="jexl">jexl · legacy(v1 JS 语义)</option>
             </select>
+            <div style="margin-top:0.4rem;font-size:0.72rem;color:#64748b;line-height:1.5;">
+              <b>expr</b>:新前端,类型化运行时错误(对齐 expr-lang);<b>严格</b>:先静态类型检查;<b>jexl</b>:v1 legacy 方言,JS 弱类型语义(如 <code>1 + "a"</code> → <code>"1a"</code>),corpus 锁定、不再新增特性。三者的差异是设计使然,不是 bug。
+            </div>
           </div>
           <div class="col" style="display:flex;align-items:flex-end;gap:0.5rem;flex-wrap:wrap;">
             <button class="btn btn-primary" id="evalBtn">▶ 执行</button>
@@ -403,7 +406,7 @@
     { label: 'filter', expr: 'filter(users, .age >= 18)[0].name', env: '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 15}]}' },
     { label: 'sum 范围', expr: 'sum(1..100)', env: '{}' },
     { label: '管道', expr: '[1,2,3] | first()', env: '{}' },
-    { label: '类型错误', expr: '1 + "a"', env: '{}' },
+    { label: '类型错误', expr: '1 + "a"', env: '{}', note: 'expr=类型化运行时报错;严格=静态检查报错;jexl=JS 语义得 "1a"' },
     { label: '年龄判断', expr: 'user.age >= 18 ? "成人" : "未成年"', env: '{"user": {"age": 25}}' },
   ];
 
@@ -591,11 +594,13 @@
     EXAMPLES.forEach(ex => {
       const btn = document.createElement('button');
       btn.textContent = ex.label;
-      btn.title = `${ex.expr}  →  ${ex.env}`;
+      btn.title = `${ex.expr}  →  ${ex.env}` + (ex.note ? `\n${ex.note}` : '');
       btn.addEventListener('click', () => {
         exprInput.value = ex.expr;
         envInput.value = ex.env;
-        if (ex.mode) versionSelect.value = ex.mode;
+        // 每个示例重置到自己的方言/模式:带 mode 的切过去,其余回默认,
+        // 避免上一个示例(如 Jexl 过滤)遗留的模式造成误解。
+        versionSelect.value = ex.mode || 'expr';
         runEval();
       });
       examplesContainer.appendChild(btn);
