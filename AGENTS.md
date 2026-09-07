@@ -133,6 +133,35 @@ You can browse and install extra skills here:
   with decoded constants and jump targets (see expr_test/opcode_test.mbt for
   expected output shapes).
 
+## Playground (browser WASM)
+
+- `playground/` is a self-contained browser test page: `index.html` plus the
+  built `mbel.wasm`. The wasm entry is the `playground/web` package, which
+  exports `eval_expr`, `eval_jexl`, `eval_checked`, `disassemble` and
+  `dump_ast` — all taking and returning native JS strings. `web.mbt` mirrors
+  `cmd/main`'s canonical serializer and env parsing (kept in sync by hand;
+  main packages cannot be imported).
+
+- Rebuild and deploy the wasm (wasm-gc release):
+
+  ```
+  moon build --target wasm-gc --release
+  cp _build/wasm-gc/release/build/playground/web/web.wasm playground/mbel.wasm
+  ```
+
+- String interop relies on js-string builtins; keep the three sides in sync:
+  `use-js-builtin-string: true` and the explicit `exports` list in
+  `playground/web/moon.pkg`; the JS compile options
+  `builtins: ["js-string"]` with `importedStringConstants: "_"` in the page
+  script; and the `__moonbit_time_unstable.now` stub (UInt64 nanoseconds)
+  the page provides because linking the builtin package pulls in moonrun's
+  time FFI. A plain CLI build (`cmd/main`) is not browser-instantiable — it
+  only exports `_start` and imports `__moonbit_fs_unstable.*`.
+
+- Serve the directory over HTTP (`python3 -m http.server` inside
+  `playground/`; never `file://`). Browsers need js-string builtins support:
+  Chrome/Edge 130+, Firefox 134+, Safari 18.4+.
+
 ## Workflow and contribution
 
 - Feature work happens on the worktree branch (`feat/4.4-language-frontend`

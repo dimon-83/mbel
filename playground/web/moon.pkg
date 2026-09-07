@@ -1,0 +1,24 @@
+import {
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/engine",
+  "dimon-83/mbel/evaluator",
+  "dimon-83/mbel/expr",
+  "dimon-83/mbel/parser",
+  "moonbitlang/core/json",
+}
+
+options(
+  "is-main": true,
+  link: {
+    "wasm-gc": {
+      "exports": [
+        "eval_jexl",
+        "eval_expr",
+        "eval_checked",
+        "disassemble",
+        "dump_ast",
+      ],
+      "use-js-builtin-string": true,
+    },
+  },
+)

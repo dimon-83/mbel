@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mbel 表达式测试台 · 增强版</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .app {
+      max-width: 1300px;
+      width: 100%;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 0 1.25rem;
+      border-bottom: 1px solid #2d313a;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .header h1 .badge {
+      font-size: 0.65rem;
+      background: #3b82f6;
+      color: #fff;
+      padding: 0.1rem 0.6rem;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+    .status {
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+    .status .ready { color: #22c55e; }
+    .status .error { color: #ef4444; }
+
+    /* Layout */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin-top: 1.25rem;
+    }
+    @media (max-width: 900px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: #1a1d27;
+      border-radius: 12px;
+      border: 1px solid #2d313a;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 0.6rem 1rem;
+      background: #222631;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #94a3b8;
+      border-bottom: 1px solid #2d313a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-body {
+      padding: 1rem;
+    }
+
+    /* Inputs */
+    textarea, input, select {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d313a;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.9rem;
+      padding: 0.6rem 0.75rem;
+      transition: border-color 0.2s;
+    }
+    textarea:focus, input:focus, select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .row .col {
+      flex: 1;
+      min-width: 150px;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 0.5rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: #2d313a;
+      color: #e2e8f0;
+    }
+    .btn-primary {
+      background: #3b82f6;
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #2563eb;
+      transform: translateY(-1px);
+    }
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-success {
+      background: #22c55e;
+      color: #fff;
+    }
+    .btn-success:hover {
+      background: #16a34a;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #2d313a;
+    }
+    .btn-outline:hover {
+      background: #2d313a;
+    }
+    .btn-sm {
+      padding: 0.25rem 0.75rem;
+      font-size: 0.75rem;
+    }
+
+    /* Result */
+    .result-box {
+      background: #0f1117;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.9rem;
+      min-height: 60px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      border: 1px solid #2d313a;
+    }
+    .result-box.error {
+      border-color: #ef4444;
+      background: #1f0f0f;
+      color: #fca5a5;
+    }
+    .result-box .type-tag {
+      display: inline-block;
+      font-size: 0.65rem;
+      background: #2d313a;
+      padding: 0.05rem 0.5rem;
+      border-radius: 10px;
+      color: #94a3b8;
+      margin-right: 0.5rem;
+    }
+
+    /* Stats */
+    .stats {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      padding: 0.5rem 0 0.25rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .stats span strong {
+      color: #e2e8f0;
+      font-weight: 500;
+    }
+
+    /* Examples */
+    .examples {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem 0.5rem;
+    }
+    .examples button {
+      background: #2d313a;
+      border: none;
+      border-radius: 14px;
+      padding: 0.1rem 0.7rem;
+      font-size: 0.7rem;
+      font-family: monospace;
+      cursor: pointer;
+      color: #94a3b8;
+      transition: all 0.1s;
+    }
+    .examples button:hover {
+      background: #3d414a;
+      color: #e2e8f0;
+    }
+
+    /* AST Viewer */
+    .ast-viewer {
+      background: #0f1117;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.75rem;
+      max-height: 300px;
+      overflow: auto;
+      border: 1px solid #2d313a;
+      white-space: pre;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+    .ast-viewer .token { color: #f472b6; }
+    .ast-viewer .string { color: #34d399; }
+    .ast-viewer .number { color: #60a5fa; }
+    .ast-viewer .keyword { color: #c084fc; }
+    .ast-viewer .bracket { color: #fbbf24; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      border-bottom: 1px solid #2d313a;
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .tabs button {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      padding: 0.3rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tabs button.active {
+      background: #2d313a;
+      color: #e2e8f0;
+    }
+    .tabs button:hover:not(.active) {
+      background: #222631;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f1117; }
+    ::-webkit-scrollbar-thumb { background: #2d313a; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3d414a; }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <h1>
+      🧪 mbel 表达式测试台
+      <span class="badge">WASM</span>
+    </h1>
+    <div class="status" id="status">⏳ 正在加载 WASM ...</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main-grid">
+    <!-- Left: Input -->
+    <div class="card">
+      <div class="card-header">
+        <span>📐 表达式</span>
+        <span style="font-size:0.7rem;color:#64748b;">Ctrl+Enter 执行</span>
+      </div>
+      <div class="card-body">
+        <textarea id="exprInput" rows="3" placeholder='例如: 6 + x * 2 > 10 ? "big" : "small"'>user.age >= 18 ? "成人" : "未成年"</textarea>
+
+        <div style="margin-top:0.75rem;">
+          <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:0.25rem;">📦 环境变量 (JSON)</label>
+          <input id="envInput" type="text" placeholder='{"user": {"age": 25}}' value='{"user": {"age": 25}}' />
+        </div>
+
+        <div class="row" style="margin-top:0.75rem;">
+          <div class="col">
+            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:0.25rem;">⚙️ 引擎版本</label>
+            <select id="versionSelect" style="width:100%;">
+              <option value="expr">expr (最新)</option>
+              <option value="jexl">jexl (v1 稳定)</option>
+              <option value="checked">expr 严格检查</option>
+            </select>
+          </div>
+          <div class="col" style="display:flex;align-items:flex-end;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-primary" id="evalBtn">▶ 执行</button>
+            <button class="btn btn-outline" id="clearBtn">清空</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Result -->
+    <div class="card">
+      <div class="card-header">
+        <span>📋 执行结果</span>
+        <span id="timerDisplay" style="font-size:0.7rem;color:#64748b;"></span>
+      </div>
+      <div class="card-body">
+        <div id="resultBox" class="result-box">等待执行...</div>
+        <div class="stats">
+          <span>⏱ 耗时: <strong id="execTime">—</strong> ms</span>
+          <span>📊 结果类型: <strong id="resultType">—</strong></span>
+          <span>🔢 表达式长度: <strong id="exprLen">—</strong></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Examples & Advanced -->
+  <div class="main-grid" style="margin-top:1.25rem;">
+    <!-- Examples -->
+    <div class="card">
+      <div class="card-header"><span>⚡ 快速示例</span></div>
+      <div class="card-body">
+        <div class="examples" id="examplesContainer"></div>
+      </div>
+    </div>
+
+    <!-- Advanced Tabs: AST / Bytecode -->
+    <div class="card">
+      <div class="card-header"><span>🔬 高级视图</span></div>
+      <div class="card-body">
+        <div class="tabs" id="tabHeaders">
+          <button class="active" data-tab="ast">🌳 AST</button>
+          <button data-tab="bytecode">⚙️ 字节码</button>
+          <button data-tab="debug">🐛 Debug</button>
+        </div>
+        <div id="tabAst" class="tab-content active">
+          <div class="ast-viewer" id="astViewer">执行表达式后此处显示 AST</div>
+        </div>
+        <div id="tabBytecode" class="tab-content">
+          <div class="ast-viewer" id="bytecodeViewer">执行表达式后此处显示字节码</div>
+        </div>
+        <div id="tabDebug" class="tab-content">
+          <div class="ast-viewer" id="debugViewer">执行表达式后此处显示调试信息</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:1rem;font-size:0.72rem;color:#64748b;">
+    mbel · WASM 构建 (wasm-gc + js-string builtins):需要 Chrome/Edge 130+、Firefox 134+、Safari 18.4+。请通过 HTTP 访问本目录(例如 <code>python3 -m http.server</code>),勿用 file:// 打开。AST 与字节码视图基于 expr 前端;字节码为 Vm 引擎实际执行(常量折叠后)的指令序列。
+  </div>
+</div>
+
+<script>
+(function() {
+  // ---------- 示例库 ----------
+  // 注:[.field] 方括号谓词是 Jexl 方言(如"Jexl 过滤"示例,自动切到
+  // jexl 模式);expr 前端与 expr-lang 一致,过滤用 filter()/map() 内置函数。
+  const EXAMPLES = [
+    { label: '算术', expr: '1 + 2 * 3', env: '{}' },
+    { label: '三元', expr: '6 + x * 2 > 10 ? "big" : "small"', env: '{"x": 3}' },
+    { label: '对象访问', expr: 'user.name + " 得分 " + (score * 10)', env: '{"user": {"name": "alice"}, "score": 8.5}' },
+    { label: '数组过滤', expr: 'map(filter(items, .price <= 2), .name)', env: '{"items": [{"name": "apple", "price": 1.5}, {"name": "pear", "price": 3}]}' },
+    { label: 'Jexl 过滤', expr: 'items[.price <= 2].name', env: '{"items": [{"name": "apple", "price": 1.5}, {"name": "pear", "price": 3}]}', mode: 'jexl' },
+    { label: 'map 聚合', expr: 'map(nums, # * 2)', env: '{"nums": [1, 2, 3, 4, 5]}' },
+    { label: 'filter', expr: 'filter(users, .age >= 18)[0].name', env: '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 15}]}' },
+    { label: 'sum 范围', expr: 'sum(1..100)', env: '{}' },
+    { label: '管道', expr: '[1,2,3] | first()', env: '{}' },
+    { label: '类型错误', expr: '1 + "a"', env: '{}' },
+    { label: '年龄判断', expr: 'user.age >= 18 ? "成人" : "未成年"', env: '{"user": {"age": 25}}' },
+  ];
+
+  // ---------- DOM ----------
+  const exprInput = document.getElementById('exprInput');
+  const envInput = document.getElementById('envInput');
+  const evalBtn = document.getElementById('evalBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const resultBox = document.getElementById('resultBox');
+  const statusEl = document.getElementById('status');
+  const execTime = document.getElementById('execTime');
+  const resultType = document.getElementById('resultType');
+  const exprLen = document.getElementById('exprLen');
+  const timerDisplay = document.getElementById('timerDisplay');
+  const astViewer = document.getElementById('astViewer');
+  const bytecodeViewer = document.getElementById('bytecodeViewer');
+  const debugViewer = document.getElementById('debugViewer');
+  const examplesContainer = document.getElementById('examplesContainer');
+  const versionSelect = document.getElementById('versionSelect');
+
+  // ---------- WASM ----------
+  let wasmInstance = null;
+  let wasmReady = false;
+
+  async function loadWasm() {
+    try {
+      statusEl.innerHTML = '⏳ 正在加载 mbel.wasm ...';
+      const response = await fetch('./mbel.wasm');
+      if (!response.ok) throw new Error(`HTTP ${response.status} — 请确认 mbel.wasm 文件存在`);
+      const bytes = await response.arrayBuffer();
+      // js-string builtins:MoonBit String 与 JS 字符串原生互转
+      const module = await WebAssembly.compile(bytes, {
+        builtins: ['js-string'],
+        importedStringConstants: '_',
+      });
+      // 引擎内置 now() 使用的时间桩(纳秒)
+      const imports = {
+        __moonbit_time_unstable: { now: () => BigInt(Date.now()) * 1000000n },
+      };
+      wasmInstance = await WebAssembly.instantiate(module, imports);
+      wasmReady = true;
+      statusEl.innerHTML = '✅ WASM 已就绪 <span class="ready">●</span>';
+      evalBtn.disabled = false;
+    } catch (err) {
+      statusEl.innerHTML = `❌ 加载失败: ${err.message} <span class="error">●</span>`;
+      evalBtn.disabled = true;
+      console.error('WASM load error:', err);
+    }
+  }
+
+  // ---------- 导出调用 ----------
+  // 选择器 → WASM 导出名(expr=Eval 模式 / jexl=传统兼容 / checked=Compile 模式)
+  const ENGINE_EXPORTS = { expr: 'eval_expr', jexl: 'eval_jexl', checked: 'eval_checked' };
+  const MODE_NAMES = {
+    expr: 'expr 前端 · Eval 模式(动态类型错误)',
+    jexl: 'Jexl 兼容 · 传统引擎(JS 语义)',
+    checked: 'expr 前端 · Compile 模式(静态检查)',
+  };
+
+  function callExport(name, args) {
+    if (!wasmReady || !wasmInstance) return { error: 'WASM 模块尚未加载完成' };
+    const fn = wasmInstance.exports[name];
+    if (!fn) {
+      return { error: 'WASM 未导出 ' + name + '。可用导出: ' + Object.keys(wasmInstance.exports).filter(k => k !== '_start').join(', ') };
+    }
+    try {
+      return { value: fn(...args) };
+    } catch (err) {
+      return { error: err.message || String(err) };
+    }
+  }
+
+  // {"$error":"msg"} → 错误;其余为规范序列化结果
+  function parseOut(out) {
+    if (typeof out === 'string' && out.startsWith('{"$error":')) {
+      try { return { error: JSON.parse(out).$error }; } catch (_) { return { error: out }; }
+    }
+    return { value: out };
+  }
+
+  function describeType(out) {
+    if (/^-?\d+(\.\d+)?$/.test(out)) return 'number';
+    if (out === 'true' || out === 'false') return 'boolean';
+    if (out === 'null') return 'null';
+    if (out.startsWith('"')) return 'string';
+    if (out.startsWith('[')) return 'array';
+    if (out.startsWith('{')) return 'object';
+    return 'unknown';
+  }
+
+  function pretty(out) {
+    if (/^-?\d+(\.\d+)?$/.test(out) || out === 'true' || out === 'false' || out === 'null') return out;
+    try {
+      const v = JSON.parse(out);
+      return typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+    } catch (_) {
+      return out;
+    }
+  }
+
+  function advText(name, args) {
+    const call = callExport(name, args);
+    if (call.error) return '⚠ ' + call.error;
+    const parsed = parseOut(call.value);
+    return parsed.error ? '⚠ ' + parsed.error : parsed.value;
+  }
+
+  function debugInfo(mode, expr, env, res, elapsed) {
+    return [
+      '[Debug Info]',
+      '方言/模式: ' + (MODE_NAMES[mode] || mode),
+      '表达式: ' + expr,
+      '环境变量: ' + env,
+      '结果: ' + (res.error ? 'Error — ' + res.error : res.value),
+      '执行耗时: ' + elapsed + 'ms',
+      'WASM 已加载: ' + wasmReady,
+      '导出函数: ' + (wasmInstance ? Object.keys(wasmInstance.exports).filter(k => k !== '_start').join(', ') : '—'),
+    ].join('\n');
+  }
+
+  // ---------- 执行并显示 ----------
+  function runEval() {
+    const expr = exprInput.value.trim();
+    if (!expr) {
+      resultBox.textContent = '⚠️ 请输入表达式';
+      resultBox.className = 'result-box error';
+      return;
+    }
+
+    const env = envInput.value.trim() || '{}';
+    try { JSON.parse(env); } catch (_) {
+      resultBox.textContent = '❌ 环境变量不是有效的 JSON';
+      resultBox.className = 'result-box error';
+      return;
+    }
+
+    resultBox.className = 'result-box';
+    resultBox.textContent = '⏳ 计算中...';
+    exprLen.textContent = expr.length;
+
+    setTimeout(() => {
+      const mode = versionSelect.value;
+      const evalName = ENGINE_EXPORTS[mode] || 'eval_expr';
+
+      const startTime = performance.now();
+      const call = callExport(evalName, [expr, env]);
+      const res = call.error ? call : parseOut(call.value);
+      const elapsed = (performance.now() - startTime).toFixed(2);
+
+      execTime.textContent = elapsed;
+      timerDisplay.textContent = `⏱ ${elapsed}ms`;
+
+      if (res.error) {
+        resultBox.textContent = '❌ ' + res.error;
+        resultBox.className = 'result-box error';
+        resultType.textContent = 'Error';
+      } else {
+        resultBox.textContent = pretty(res.value);
+        resultBox.className = 'result-box';
+        resultType.textContent = describeType(res.value);
+      }
+
+      // 高级视图:真实的解析树与字节码(expr 前端)
+      astViewer.textContent = advText('dump_ast', [expr]);
+      bytecodeViewer.textContent = advText('disassemble', [expr, env]);
+      debugViewer.textContent = debugInfo(mode, expr, env, res, elapsed);
+    }, 10);
+  }
+
+  // ---------- Tab 切换 ----------
+  document.querySelectorAll('#tabHeaders button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#tabHeaders button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      const target = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+      if (target) target.classList.add('active');
+    });
+  });
+
+  // ---------- 示例渲染 ----------
+  function renderExamples() {
+    examplesContainer.innerHTML = '';
+    EXAMPLES.forEach(ex => {
+      const btn = document.createElement('button');
+      btn.textContent = ex.label;
+      btn.title = `${ex.expr}  →  ${ex.env}`;
+      btn.addEventListener('click', () => {
+        exprInput.value = ex.expr;
+        envInput.value = ex.env;
+        if (ex.mode) versionSelect.value = ex.mode;
+        runEval();
+      });
+      examplesContainer.appendChild(btn);
+    });
+  }
+
+  // ---------- 事件绑定 ----------
+  evalBtn.addEventListener('click', runEval);
+  clearBtn.addEventListener('click', () => {
+    resultBox.textContent = '等待执行...';
+    resultBox.className = 'result-box';
+    execTime.textContent = '—';
+    resultType.textContent = '—';
+    exprLen.textContent = '—';
+    timerDisplay.textContent = '';
+    astViewer.textContent = '执行表达式后此处显示 AST';
+    bytecodeViewer.textContent = '执行表达式后此处显示字节码';
+    debugViewer.textContent = '执行表达式后此处显示调试信息';
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      runEval();
+    }
+  });
+
+  // 引擎切换时重新执行
+  versionSelect.addEventListener('change', runEval);
+
+  // ---------- 启动 ----------
+  renderExamples();
+  loadWasm().then(() => {
+    if (exprInput.value.trim()) runEval();
+  });
+})();
+</script>
+
+</body>
+</html>
