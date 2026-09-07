@@ -346,7 +346,7 @@
       <div class="card-body">
         <div id="resultBox" class="result-box">等待执行...</div>
         <div class="stats">
-          <span>⏱ 耗时: <strong id="execTime">—</strong> ms</span>
+          <span>⏱ 耗时: <strong id="execTime">—</strong> ns</span>
           <span>📊 结果类型: <strong id="resultType">—</strong></span>
           <span>🔢 表达式长度: <strong id="exprLen">—</strong></span>
         </div>
@@ -433,6 +433,16 @@
   const examplesContainer = document.getElementById('examplesContainer');
   const versionSelect = document.getElementById('versionSelect');
 
+  // ---------- 高分辨率时钟 ----------
+  // 引擎内置 now() 的 ABI 是 UInt64 纳秒。以 Date.now() 的 epoch 为基数、
+  // 叠加 performance.now() 的亚毫秒分数:now() 内置仍返回正确的 Unix
+  // 毫秒,而求值计时能测到微秒级差异并以纳秒为单位显示。
+  const nsClock = (() => {
+    const fracNs = () => BigInt(Math.round(performance.now() * 1e6));
+    const base = BigInt(Date.now()) * 1000000n - fracNs();
+    return { now: () => base + fracNs() };
+  })();
+
   // ---------- WASM ----------
   let wasmInstance = null;
   let wasmReady = false;
@@ -450,7 +460,7 @@
       });
       // 引擎内置 now() 使用的时间桩(纳秒)
       const imports = {
-        __moonbit_time_unstable: { now: () => BigInt(Date.now()) * 1000000n },
+        __moonbit_time_unstable: { now: nsClock.now },
       };
       wasmInstance = await WebAssembly.instantiate(module, imports);
       wasmReady = true;
@@ -527,7 +537,7 @@
       '表达式: ' + expr,
       '环境变量: ' + env,
       '结果: ' + (res.error ? 'Error — ' + res.error : res.value),
-      '执行耗时: ' + elapsed + 'ms',
+      '执行耗时: ' + elapsed + 'ns',
       'WASM 已加载: ' + wasmReady,
       '导出函数: ' + (wasmInstance ? Object.keys(wasmInstance.exports).filter(k => k !== '_start').join(', ') : '—'),
     ].join('\n');
@@ -557,13 +567,13 @@
       const mode = versionSelect.value;
       const evalName = ENGINE_EXPORTS[mode] || 'eval_expr';
 
-      const startTime = performance.now();
+      const t0 = nsClock.now();
       const call = callExport(evalName, [expr, env]);
       const res = call.error ? call : parseOut(call.value);
-      const elapsed = (performance.now() - startTime).toFixed(2);
+      const elapsedNs = Number(nsClock.now() - t0);
 
-      execTime.textContent = elapsed;
-      timerDisplay.textContent = `⏱ ${elapsed}ms`;
+      execTime.textContent = elapsedNs;
+      timerDisplay.textContent = `⏱ ${elapsedNs}ns`;
 
       if (res.error) {
         resultBox.textContent = '❌ ' + res.error;
@@ -578,7 +588,7 @@
       // 高级视图:真实的解析树与字节码(expr 前端)
       astViewer.textContent = advText('dump_ast', [expr]);
       bytecodeViewer.textContent = advText('disassemble', [expr, env]);
-      debugViewer.textContent = debugInfo(mode, expr, env, res, elapsed);
+      debugViewer.textContent = debugInfo(mode, expr, env, res, elapsedNs);
     }, 10);
   }
 
