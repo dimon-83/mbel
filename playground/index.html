@@ -530,14 +530,16 @@
     return parsed.error ? '⚠ ' + parsed.error : parsed.value;
   }
 
-  function debugInfo(mode, expr, env, res, elapsed) {
+  function debugInfo(mode, expr, env, res, elapsedNs, runs) {
     return [
       '[Debug Info]',
       '方言/模式: ' + (MODE_NAMES[mode] || mode),
       '表达式: ' + expr,
       '环境变量: ' + env,
       '结果: ' + (res.error ? 'Error — ' + res.error : res.value),
-      '执行耗时: ' + elapsed + 'ns',
+      '执行耗时: ' + (elapsedNs === null
+        ? '—(报错路径不重复计时)'
+        : elapsedNs + 'ns/次(连续 ' + runs + ' 次平均)'),
       'WASM 已加载: ' + wasmReady,
       '导出函数: ' + (wasmInstance ? Object.keys(wasmInstance.exports).filter(k => k !== '_start').join(', ') : '—'),
     ].join('\n');
@@ -567,13 +569,27 @@
       const mode = versionSelect.value;
       const evalName = ENGINE_EXPORTS[mode] || 'eval_expr';
 
-      const t0 = nsClock.now();
       const call = callExport(evalName, [expr, env]);
       const res = call.error ? call : parseOut(call.value);
-      const elapsedNs = Number(nsClock.now() - t0);
 
-      execTime.textContent = elapsedNs;
-      timerDisplay.textContent = `⏱ ${elapsedNs}ns`;
+      // 单次求值常在宿主时钟分辨率(1ms 粗化)之下,直接读数只会是 0 或
+      // 1000000;连续求值约 40ms 再平均,把刻度误差摊薄到 ~2% 以内。
+      // 报错路径只跑一次(结果框已醒目),不再计时。
+      let elapsedNs = null;
+      let runs = 1;
+      if (res.error) {
+        execTime.textContent = '—';
+        timerDisplay.textContent = '';
+      } else {
+        const t1 = nsClock.now();
+        while (runs < 20000 && Number(nsClock.now() - t1) < 40_000_000) {
+          callExport(evalName, [expr, env]);
+          runs += 1;
+        }
+        elapsedNs = Math.round(Number(nsClock.now() - t1) / runs);
+        execTime.textContent = elapsedNs;
+        timerDisplay.textContent = `⏱ ${elapsedNs}ns`;
+      }
 
       if (res.error) {
         resultBox.textContent = '❌ ' + res.error;
@@ -588,7 +604,7 @@
       // 高级视图:真实的解析树与字节码(expr 前端)
       astViewer.textContent = advText('dump_ast', [expr]);
       bytecodeViewer.textContent = advText('disassemble', [expr, env]);
-      debugViewer.textContent = debugInfo(mode, expr, env, res, elapsedNs);
+      debugViewer.textContent = debugInfo(mode, expr, env, res, elapsedNs, runs);
     }, 10);
   }
 
