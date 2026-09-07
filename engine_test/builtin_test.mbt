@@ -178,13 +178,15 @@ test "base64 round-trips UTF-8" {
 
 ///|
 test "bitwise builtins follow Int64 semantics" {
-  expect_v("bitand(12, 10)", @ast.NumVal(8.0), "bitand")
-  expect_v("bitor(12, 10)", @ast.NumVal(14.0), "bitor")
-  expect_v("bitxor(12, 10)", @ast.NumVal(6.0), "bitxor")
-  expect_v("bitnot(0)", @ast.NumVal(-1.0), "bitnot")
-  expect_v("bitshl(1, 4)", @ast.NumVal(16.0), "bitshl")
-  expect_v("bitshr(-16, 2)", @ast.NumVal(-4.0), "bitshr arith")
-  expect_v("bitushr(-16, 60)", @ast.NumVal(15.0), "bitushr logical")
+  // bit ops return exact ints (expr parity; 4.4.3 typed returns)
+  expect_v("bitand(12, 10)", @ast.IntVal(8L), "bitand")
+  expect_v("bitor(12, 10)", @ast.IntVal(14L), "bitor")
+  expect_v("bitxor(12, 10)", @ast.IntVal(6L), "bitxor")
+  expect_v("bitnot(0)", @ast.IntVal(-1L), "bitnot")
+  expect_v("bitshl(1, 4)", @ast.IntVal(16L), "bitshl")
+  expect_v("bitshr(-16, 2)", @ast.IntVal(-4L), "bitshr arith")
+  expect_v("bitushr(-16, 60)", @ast.IntVal(15L), "bitushr logical")
+  expect_v("bitnand(35, 9)", @ast.IntVal(34L), "bitnand and-not (expr)")
 }
 
 // --- Time builtins (minimal subset) ---

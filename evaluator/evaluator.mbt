@@ -592,7 +592,21 @@ pub fn value_kind(v : @ast.Value) -> String {
 pub fn index_value(subject : @ast.Value, res : @ast.Value) -> @ast.Value {
   match (subject, res) {
     (@ast.ArrayVal(xs), @ast.NumVal(d)) => arr_index(xs, d)
-    (@ast.ArrayVal(xs), @ast.IntVal(i)) => arr_index(xs, i.to_double())
+    // IntVal indices come from the expr front end, where negative
+    // indices are supported (expr parity); legacy NumVal indexing
+    // keeps JS semantics (negative -> undefined).
+    (@ast.ArrayVal(xs), @ast.IntVal(i)) =>
+      if i < 0L {
+        let n = xs.length()
+        let j = n + i.to_int()
+        if j < 0 || j >= n {
+          @ast.UndefVal
+        } else {
+          xs[j]
+        }
+      } else {
+        arr_index(xs, i.to_double())
+      }
     (@ast.ArrayVal(xs), @ast.StrVal(k)) => arr_str_key(xs, k)
     (@ast.ObjectVal(pairs), @ast.StrVal(k)) => key_of(pairs, k)
     (@ast.ObjectVal(pairs), @ast.NumVal(d)) =>

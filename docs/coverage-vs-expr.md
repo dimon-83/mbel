@@ -218,8 +218,10 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    行 want 表全量转写 + parser/checker/optimizer 表抽样 ≥60%(未开始)。各项状态以本节标记与提交记录为准,发布时 CHANGELOG 同步。
 
 ### 6.3 覆盖率目标
-4.4 完成后(收尾清单 ⑤):expr 官方 TestExpr 167 行 want 表全量转写 +
-parser/checker/optimizer 表抽样 ≥60%;4.5 后 builtin_test 904 行对齐。
+4.4 gate(收尾清单 ⑤,2026-09-07 状态):TestExpr 167 行全量处置 ✅
+(148 转写 + 19 文档化跳过,双引擎);checker TestCheck 107/112 ✅;
+**parser TestParse 143 行(Go AST want → mbel dump 翻译)与 optimizer
+表抽样未完成**——gate 达标前需补。4.5 后 builtin_test 904 行对齐。
 
 ## 7. 双引擎实测:性能与稳定性对比(2026-09-06,f37f10d 后)
 

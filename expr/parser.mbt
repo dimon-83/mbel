@@ -608,6 +608,9 @@ fn is_comparison(op : String) -> Bool {
 /// The midpoint of a chained comparison: for `a < b`, `b`.
 fn left_midpoint(left : ENode) -> ENode {
   match left {
+    // chained comparisons build and-nodes; the chain continues from
+    // the last comparison's RIGHT operand
+    EBinary("and", _, r, _, _) => left_midpoint(r)
     EBinary(_, _, r, _, _) => r
     other => other
   }

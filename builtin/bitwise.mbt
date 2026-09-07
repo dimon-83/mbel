@@ -25,7 +25,11 @@ fn to_int64_arg(
 
 ///|
 fn from_int64(v : Int64) -> @ast.Value {
-  @ast.NumVal(v.to_double())
+  @ast.IntVal(
+    // exact Int64 result (expr bit ops are int; NumVal loses precision
+    // beyond 2^53 — bitushr(-100, 5) exposed that)
+    v,
+  )
 }
 
 ///|
@@ -56,12 +60,12 @@ fn bitwise_functions() -> Array[(String, @evaluator.FnA)] {
       },
     ),
     (
-      // expr's bitnand = ~(a & b)
+      // expr's bitnand = Go's x &^ y (AND-NOT); this used to be ~(x & y)
       "bitnand",
       fn(args) {
         from_int64(
-          (to_int64_arg(args, 0, "bitnand") & to_int64_arg(args, 1, "bitnand")) ^
-          -1L,
+          to_int64_arg(args, 0, "bitnand") &
+          (to_int64_arg(args, 1, "bitnand") ^ -1L),
         )
       },
     ),

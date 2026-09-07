@@ -116,7 +116,7 @@ test "typed: builtin returns follow expr (len/int/index/count/sum/abs/min/max)" 
   expect_typed("min(3, 1, 2)", "int:1", "min ints")
   expect_typed("max([1, 5, 3])", "int:5", "max int array")
   expect_typed("sum(1..5)", "int:15", "sum int range")
-  expect_typed("count(1..5)", "int:5", "count")
+  expect_typed("count([true, true, false])", "int:2", "count bools")
   expect_typed("len(\"hello\")", "int:5", "len")
   expect_typed("indexOf(\"hello\", \"ll\")", "int:2", "indexOf")
   expect_typed("int(3.9)", "int:3", "int truncates")

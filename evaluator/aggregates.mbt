@@ -78,9 +78,21 @@ pub fn aggregate_call(
       @ast.ArrayVal(out)
     }
     "count" =>
-      // expr: count always returns an int
+      // expr: count always returns an int. Without a predicate it
+      // counts the TRUE booleans of the list (expr panics on non-bool
+      // elements via a Go interface conversion; mbel raises typed).
       if !has_pred {
-        @ast.IntVal(n.to_int64())
+        let mut c = 0
+        for i in 0..<n {
+          match list[i] {
+            @ast.BoolVal(b) => if b { c += 1 }
+            other =>
+              raise EvalError::EvalErr(
+                "invalid argument for count (type " + value_kind(other) + ")",
+              )
+          }
+        }
+        @ast.IntVal(c.to_int64())
       } else {
         let mut c = 0
         for i in 0..<n {

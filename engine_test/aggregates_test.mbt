@@ -161,7 +161,11 @@ test "predicate: all/any/none/one" {
 
 ///|
 test "predicate: count and sum" {
-  expect_agg("count(nums)", @ast.IntVal(5L), "count no pred")
+  expect_agg(
+    "count([true, true, false, true, false])",
+    @ast.IntVal(3L),
+    "count no pred (bools)",
+  )
   expect_agg("count(nums, # > 2)", @ast.IntVal(3L), "count pred")
   expect_agg("count(users, .age >= 18)", @ast.IntVal(3L), "count users")
   expect_agg("sum(nums)", @ast.NumVal(15.0), "sum no pred")
@@ -225,7 +229,11 @@ test "predicate: nested aggregates and ranges" {
     @ast.ArrayVal([@ast.NumVal(3.0), @ast.NumVal(6.0), @ast.NumVal(9.0)]),
     "filter range",
   )
-  expect_agg("count(filter(nums, # > 2))", @ast.IntVal(3L), "count of filter")
+  expect_agg(
+    "count(filter([true, false, true, false], #))",
+    @ast.IntVal(2L),
+    "count of filter",
+  )
   expect_agg("sum(map(nums, # * #))", @ast.NumVal(55.0), "sum of squares")
   expect_agg(
     "all(users, any([], # > 0))",

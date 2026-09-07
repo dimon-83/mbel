@@ -185,7 +185,7 @@ test "expr eval: unknown pointer suffix is a compile error" {
 ///|
 test "expr eval: aggregates inside range and nested" {
   expect_eval("sum(1..100)", @ast.NumVal(5050.0), "sum range")
-  expect_eval("count(filter(nums, # > 2))", @ast.IntVal(3L), "count filter")
+  expect_eval("len(filter(nums, # > 2))", @ast.IntVal(3L), "len filter")
 }
 
 // --- stage 4.4.1/4.4.2 evaluation: sequences, let, slices, $env ---
@@ -396,6 +396,18 @@ test "expr eval: byte strings reject arithmetic and ordering" {
 }
 
 ///|
+test "expr eval: bitwise builtins are exact ints" {
+  // bitnand is Go's x &^ y (AND-NOT) per expr — 35 &^ 9 = 34
+  expect_eval("bitnand(35, 9)", @ast.IntVal(34L), "bitnand and-not")
+  // uint64 reinterpretation must stay exact beyond 2^53
+  expect_eval(
+    "bitushr(-100, 5)",
+    @ast.IntVal(576460752303423484L),
+    "bitushr exact int64",
+  )
+}
+
+///|
 test "expr eval: byte indexing, slicing and type()" {
   expect_eval("b\"abc\"[1]", @ast.IntVal(98L), "bytes index is an int")
   expect_eval("b\"abc\"[0] == 97", @ast.BoolVal(true), "byte value compare")
@@ -489,9 +501,9 @@ test "expr eval: piped aggregates parse predicate arguments" {
     "piped chain with first()",
   )
   expect_eval(
-    "users | filter({.age >= 18}) | count()",
+    "users | filter({.age >= 18}) | len()",
     @ast.NumVal(2.0),
-    "braced piped predicate + count()",
+    "braced piped predicate + len()",
   )
 }
 
