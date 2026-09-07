@@ -66,6 +66,13 @@ fn debug_repr(v : @ast.Value) -> String {
     @ast.NumVal(d) => d.to_string()
     @ast.IntVal(i) => i.to_string()
     @ast.StrVal(s) => "\"" + s + "\""
+    @ast.BytesVal(b) => {
+      let parts : Array[String] = []
+      for i in 0..<b.length() {
+        parts.push(b[i].to_int().to_string())
+      }
+      "b[" + parts.join(",") + "]"
+    }
     @ast.BoolVal(b) => if b { "true" } else { "false" }
     @ast.NullVal => "null"
     @ast.UndefVal => "undef"

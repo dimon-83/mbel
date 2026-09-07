@@ -74,7 +74,14 @@ const Alphabet64 : String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy
 ///|
 /// Standard base64 encode (padded).
 pub fn encode64(s : String) -> String {
-  let data = utf8_encode(s)
+  encode64_bytes(utf8_encode(s))
+}
+
+///|
+/// Standard base64 encode of raw bytes (padded) — used by the toJSON
+/// writer and byte-string serialization (Go's json.Marshal encodes
+/// []byte as a base64 string).
+pub fn encode64_bytes(data : Bytes) -> String {
   let n = data.length()
   let out = StringBuilder::new()
   let alpha = Alphabet64.to_array()

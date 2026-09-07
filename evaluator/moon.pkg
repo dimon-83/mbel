@@ -8,5 +8,6 @@
 import {
   "dimon-83/mbel/ast",
   "dimon-83/mbel/grammar",
+  "moonbitlang/core/bytes",
   "moonbitlang/core/string",
 }

@@ -26,7 +26,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 字符串 '…' / "…" | ✅ | lexer_test, corpus | 单双引号同一转义集 |
 | 转义 `\xNN \uXXXX \u{…}` 八进制 | ✅ | lexer_wbtest, eval_test | 含 `\UXXXXXXXX`;非法转义/孤立代理/越界码点=词法错误(expr 语义) |
 | 原始字符串 `` `…` `` | ✅ | lexer_wbtest, parser_test | 反引号内无转义,`` 双写转义反引号,允许真实换行 |
-| 字节串 b"…" | 🟡 | lexer_wbtest | 词法/解析 ✅(`b"…"`/`B'…'`,转义=简单集+`\xNN`+八进制≤`\377`,`\u` 拒绝,非 ASCII 按 UTF-8 编码);求值待 4.4.3 值模型(Bytes) |
+| 字节串 b"…" | ✅ | lexer_wbtest, eval_test, check_test | 词法/解析 ✅(`b"…"`/`B'…'`,转义=简单集+`\xNN`+八进制≤`\377`,`\u` 拒绝,非 ASCII 按 UTF-8 编码);求值 ✅(BytesVal:字节相等/len/索引含负索引/切片/聚合迭代/toJSON=base64/type()="array";见 §6.2 收尾②) |
 | 布尔 true/false | ✅ | lexer_test | |
 | nil | ✅ | eval_test `nil contains…` | nil 字面量(expr 前端)+NullVal 运行时存在 |
 | 数组 [1,2,3] | ✅ | parser_test, corpus | |
@@ -172,9 +172,7 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    已完成(2026-09-06):len/count/indexOf/lastIndexOf/findIndex/
    findLastIndex/int() 恒返 int;abs/min/max 输入驱动(int 入 int 出);
    sum 整数列表保型;toJSON 改用精确 JSON writer(int64 全精度输出,
-   NaN/Inf→null)。IntVal 核心完成。**未完成:Bytes 字节串求值**(值模型
-   原计划含 Bytes;当前 byte 串词法/解析 ✅,求值在 lower 报
-   "byte-string values need the typed value model"——见收尾清单②)。
+   NaN/Inf→null)。4.4.3 完成(含收尾② Bytes)。
 4. **🟡 4.4.4 checker——阶段 1 已交付(2026-09-06)**:expr/check.mbt
    Nature 推断(字面量及传播)+ 运算符类型规则,按 expr **Compile 模式**
    文案报错;接入严格入口 `Engine::eval_expr_checked`(内部委托双引擎,
@@ -204,13 +202,13 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    RegExp(js/wasm)为快速路径但牺牲可移植性,API 边界显式化。时间——civil
    日历(已有 days_from_civil 基础)+ 固定偏移;完整 tzdata 预留外部文件
    加载接口,可永不内置。两项均延后至核心稳定。
-8. **4.4 收尾清单(2026-09-07 起逐项收尾,完成即更新)**:① 文档对齐——本节
-   标题/标记/正文统一(本文);② Bytes 字节串求值(4.4.3 尾巴,对齐 expr 的
-   []byte 语义);③ legacy 包物理拆分 + Options 对齐(4.4.5 剩余);④ checker
-   定位错误(`行:列`+caret,需 AST 位置化重构);⑤ 4.4 gate 验收(§6.3):
-   expr 官方 TestExpr 167 行 want 表全量转写 + parser/checker/optimizer
-   表抽样 ≥60%(未开始)。各项状态以本节标记与提交记录为准,发布时
-   CHANGELOG 同步。
+8. **4.4 收尾清单(2026-09-07 起逐项收尾,完成即更新)**:① 文档对齐 ✅(本文);
+   ② Bytes 字节串求值 ✅(BytesVal 全链路:相等/len/索引/切片/聚合/toJSON/
+   type()/string(),Checker BytesN 类型化,expr 文案 []uint8);③ legacy 包物理
+   拆分 + Options 对齐(4.4.5 剩余);④ checker 定位错误(`行:列`+caret,需
+   AST 位置化重构);⑤ 4.4 gate 验收(§6.3):expr 官方 TestExpr 167 行 want 表
+   全量转写 + parser/checker/optimizer 表抽样 ≥60%(未开始)。各项状态以
+   本节标记与提交记录为准,发布时 CHANGELOG 同步。
 
 ### 6.3 覆盖率目标
 4.4 完成后(收尾清单 ⑤):expr 官方 TestExpr 167 行 want 表全量转写 +

@@ -345,13 +345,95 @@ test "expr eval: escape family through string values" {
   expect_eval("\"\\x41\"", @ast.StrVal("A"), "hex escape")
 }
 
-// --- unsupported-but-parsed syntax surfaces clean errors ---
+// --- byte test helpers: expr_test is blackbox, build Bytes via core ---
 
 ///|
-test "expr eval: bytes and method calls surface clean errors" {
+fn bytes_lit(s : String) -> Bytes {
+  // core's String::to_bytes is UTF-16; build ASCII bytes directly
+  // (all byte literals in these tests are ASCII)
+  let arr : Array[Byte] = s.to_array().map(fn(c) { c.to_int().to_byte() })
+  Bytes::from_array(arr)
+}
+
+///|
+fn bytes_lit_raw(xs : Array[Int]) -> Bytes {
+  let arr : Array[Byte] = xs.map(fn(x) { x.to_byte() })
+  Bytes::from_array(arr)
+}
+
+// --- byte strings evaluate as BytesVal (expr []byte semantics) ---
+
+///|
+test "expr eval: byte string literals and typed operations" {
+  expect_eval("b\"abc\"", @ast.BytesVal(bytes_lit("abc")), "bytes literal")
+  expect_eval("b\"\\xff\"", @ast.BytesVal(bytes_lit_raw([255])), "hex escape")
+  expect_eval("len(b\"abc\")", @ast.IntVal(3L), "len of bytes is an int")
+  expect_eval("len(b\"\\xff\\x00\")", @ast.IntVal(2L), "len counts raw bytes")
+  // bytewise equality; bytes are a distinct kind from strings
+  expect_eval("b\"a\" == b\"a\"", @ast.BoolVal(true), "bytes eq")
+  expect_eval("b\"a\" != b\"b\"", @ast.BoolVal(true), "bytes neq")
+  expect_eval("b\"a\" == \"a\"", @ast.BoolVal(false), "bytes vs string false")
+  expect_eval("b\"a\" == nil", @ast.BoolVal(false), "bytes vs nil false")
+  expect_eval("b\"\" == b\"\"", @ast.BoolVal(true), "empty bytes eq")
+  expect_eval("b\"a\" == b\"b\"", @ast.BoolVal(false), "bytes neq 2")
+}
+
+///|
+test "expr eval: byte strings reject arithmetic and ordering" {
+  // expr runtime messages name byte slices []uint8 (Go type name)
   expect_eval_err(
-    "b\"hi\"", "byte-string values need the typed value model", "bytes",
+    "b\"a\" + b\"b\"", "invalid operation: []uint8 + []uint8", "bytes + bytes",
   )
+  expect_eval_err(
+    "b\"a\" + 1", "invalid operation: []uint8 + int", "bytes + int",
+  )
+  expect_eval_err(
+    "\"x\" + b\"y\"", "invalid operation: string + []uint8", "string + bytes",
+  )
+  expect_eval_err(
+    "b\"a\" < b\"b\"", "invalid operation: []uint8 < []uint8", "bytes ordering",
+  )
+}
+
+///|
+test "expr eval: byte indexing, slicing and type()" {
+  expect_eval("b\"abc\"[1]", @ast.IntVal(98L), "bytes index is an int")
+  expect_eval("b\"abc\"[0] == 97", @ast.BoolVal(true), "byte value compare")
+  expect_eval("b\"abc\"[0] + 1", @ast.IntVal(98L), "byte int arithmetic")
+  // expr supports negative indices on []byte
+  expect_eval("b\"abc\"[-1]", @ast.IntVal(99L), "negative bytes index")
+  expect_eval("b\"abc\"[1:3]", @ast.BytesVal(bytes_lit("bc")), "bytes slice")
+  expect_eval("b\"abc\"[1:3] == b\"bc\"", @ast.BoolVal(true), "sliced bytes eq")
+  // expr type() reports "array" for []byte too
+  expect_eval("type(b\"a\")", @ast.StrVal("array"), "type of bytes")
+  // string() prints decimal content comma-joined (mbel's array
+  // convention; expr prints Go's "[97 98 99]" — documented)
+  expect_eval("string(b\"abc\")", @ast.StrVal("97,98,99"), "string of bytes")
+  // toJSON encodes []byte as a base64 string (Go json.Marshal)
+  expect_eval("toJSON(b\"a\")", @ast.StrVal("\"YQ==\""), "toJSON of bytes")
+}
+
+///|
+test "expr eval: aggregates and filters over byte strings" {
+  // bytes iterate as their int elements (expr: []byte is a uint8 slice)
+  expect_eval(
+    "filter(b\"abc\", # > 97)",
+    @ast.ArrayVal([@ast.IntVal(98L), @ast.IntVal(99L)]),
+    "filter over bytes",
+  )
+  expect_eval("count(b\"abc\", # > 97)", @ast.IntVal(2L), "count over bytes")
+  expect_eval("sum(b\"abc\")", @ast.IntVal(294L), "sum of bytes")
+  expect_eval(
+    "map(b\"abc\", # + 1)",
+    @ast.ArrayVal([@ast.IntVal(98L), @ast.IntVal(99L), @ast.IntVal(100L)]),
+    "map over bytes",
+  )
+  expect_eval("first(b\"abc\")", @ast.IntVal(97L), "first of bytes")
+  expect_eval("last(b\"abc\")", @ast.IntVal(99L), "last of bytes")
+}
+
+///|
+test "expr eval: method calls surface clean errors" {
   expect_eval_err("name.upper()", "method call", "method on data")
 }
 

@@ -131,6 +131,9 @@ fn canon(v : @ast.Value) -> String {
     @ast.BoolVal(b) => if b { "true" } else { "false" }
     @ast.NumVal(d) => canon_num(d)
     @ast.IntVal(i) => i.to_string()
+    // Bytes serialize like Go's json.Marshal of []byte: base64
+    // (expr-only value; unreachable on the legacy CLI path).
+    @ast.BytesVal(b) => canon_str(@builtin.encode64_bytes(b))
     @ast.StrVal(s) => canon_str(s)
     @ast.NullVal => "null"
     @ast.UndefVal => "{\"$undef\":true}"

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // mbel expr package — lowering the expr AST to the legacy AstNode so
 // the existing dual-engine evaluator (tree-walk + bytecode VM) can
-// execute expr-dialect programs. Bridge stage: slices, byte values,
-// method calls, and let/sequences gain dedicated evaluation later.
+// execute expr-dialect programs. Bridge stage: method calls gain
+// dedicated evaluation later.
 
 ///|
 pub(all) suberror LowerError {
@@ -18,10 +18,10 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
     EInt(i) => @ast.literal(@ast.IntVal(i))
     EFloat(d) => @ast.literal(@ast.NumVal(d))
     EStr(s) => @ast.literal(@ast.StrVal(s))
-    EBytes(_) =>
-      raise LowerError::LowerErr(
-        "byte-string values need the typed value model (stage 4.4.3)",
-      )
+    // Byte literals evaluate to BytesVal (stage 4.4.3 tail); the
+    // legacy dialect has no byte literals, so this only ever runs on
+    // the expr front end.
+    EBytes(b) => @ast.literal(@ast.BytesVal(b))
     EIdent(name) => @ast.identifier(name)
     EMember(base, name, _) => {
       // ?. lowers to plain member access: mbel's drill-down already

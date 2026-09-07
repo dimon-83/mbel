@@ -911,6 +911,8 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
         let subject = self.pop()
         let list : Array[@ast.Value] = match subject {
           @ast.ArrayVal(xs) => xs
+          // bytes filter as their int elements (expr: []byte slice)
+          @ast.BytesVal(b) => bytes_elements(b)
           @ast.UndefVal => []
           other => [other]
         }
@@ -986,6 +988,8 @@ fn VmState::run(self : VmState) -> @ast.Value raise EvalError {
             let values = self.popn(argc)
             let list : Array[@ast.Value] = match values.get(0) {
               Some(@ast.ArrayVal(xs)) => xs
+              // bytes iterate as their int elements (expr: []byte)
+              Some(@ast.BytesVal(b)) => bytes_elements(b)
               Some(@ast.UndefVal) | None => []
               Some(_) =>
                 raise EvalError::EvalErr(

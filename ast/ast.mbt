@@ -35,6 +35,11 @@ pub(all) enum Value {
   // applies. Arithmetic wraps Int64 (Go semantics); literals beyond
   // int64 range are parse errors.
   IntVal(Int64)
+  // Byte string (stage 4.4.3 tail): produced only by the expr
+  // front-end's `b"…"` literals ([]byte in expr), so its presence is
+  // also a typed-semantics signal. expr reports Go's type name
+  // "[]uint8" in error messages.
+  BytesVal(Bytes)
   StrVal(String)
   ArrayVal(Array[Value])
   ObjectVal(Array[(String, Value)])
@@ -261,6 +266,17 @@ pub fn value_equal(a : Value, b : Value) -> Bool {
     // typed integers and doubles are structurally distinct kinds
     (IntVal(_), NumVal(_)) | (NumVal(_), IntVal(_)) => false
     (StrVal(x), StrVal(y)) => x == y
+    (BytesVal(x), BytesVal(y)) => {
+      if x.length() != y.length() {
+        return false
+      }
+      for i in 0..<x.length() {
+        if x[i] != y[i] {
+          return false
+        }
+      }
+      true
+    }
     (ArrayVal(x), ArrayVal(y)) => {
       if x.length() != y.length() {
         return false

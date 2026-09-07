@@ -326,6 +326,12 @@ fn collection_functions() -> Array[(String, @evaluator.FnA)] {
             } else {
               @ast.NullVal
             }
+          @ast.BytesVal(b) =>
+            if b.length() > 0 {
+              @ast.IntVal(b[0].to_int().to_int64())
+            } else {
+              @ast.NullVal
+            }
           _ => @ast.NullVal
         }
       },
@@ -337,6 +343,12 @@ fn collection_functions() -> Array[(String, @evaluator.FnA)] {
           @ast.ArrayVal(xs) =>
             if xs.length() > 0 {
               xs[xs.length() - 1]
+            } else {
+              @ast.NullVal
+            }
+          @ast.BytesVal(b) =>
+            if b.length() > 0 {
+              @ast.IntVal(b[b.length() - 1].to_int().to_int64())
             } else {
               @ast.NullVal
             }
@@ -572,6 +584,8 @@ fn conversion_functions() -> Array[(String, @evaluator.FnA)] {
             @ast.NumVal(_) => "number"
             @ast.IntVal(_) => "int"
             @ast.StrVal(_) => "string"
+            // expr reports "array" for []byte too
+            @ast.BytesVal(_) => "array"
             @ast.NullVal => "nil"
             @ast.UndefVal => "unknown"
             @ast.ArrayVal(_) => "array"

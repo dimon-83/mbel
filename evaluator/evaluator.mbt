@@ -511,6 +511,32 @@ pub fn slice_value(
       }
       @ast.StrVal(String::from_array(out))
     }
+    @ast.BytesVal(b) => {
+      // byte slices keep byte semantics (expr: []byte slices)
+      let n = b.length()
+      let f0 = clamp_bound(
+        match f {
+          Some(x) => x
+          None => 0
+        },
+        n,
+      )
+      let t0 = clamp_bound(
+        match t {
+          Some(x) => x
+          None => n
+        },
+        n,
+      )
+      let start = if f0 > t0 { t0 } else { f0 }
+      let out : Array[Byte] = []
+      let mut i = start
+      while i < t0 {
+        out.push(b[i])
+        i += 1
+      }
+      @ast.BytesVal(Bytes::from_array(out))
+    }
     _ => raise EvalError::EvalErr("cannot slice " + value_kind(subject))
   }
 }
@@ -551,6 +577,8 @@ pub fn value_kind(v : @ast.Value) -> String {
     @ast.NumVal(_) => "number"
     @ast.IntVal(_) => "int"
     @ast.StrVal(_) => "string"
+    // expr's type() reports "array" for []byte too
+    @ast.BytesVal(_) => "array"
     @ast.ArrayVal(_) => "array"
     @ast.ObjectVal(_) => "map"
     @ast.NullVal => "nil"
@@ -580,7 +608,33 @@ pub fn index_value(subject : @ast.Value, res : @ast.Value) -> @ast.Value {
       } else {
         @ast.UndefVal
       }
+    // Byte indexing yields the byte as an int. expr supports negative
+    // indices on []byte; mbel arrays stay JS-semantics (negative →
+    // undefined) on the legacy path, but bytes are expr-only so they
+    // follow expr's negative-normalized indexing.
+    (@ast.BytesVal(b), @ast.NumVal(d)) => byte_index(b, d)
+    (@ast.BytesVal(b), @ast.IntVal(i)) => byte_index(b, i.to_double())
     (_, _) => @ast.UndefVal
+  }
+}
+
+///|
+/// expr-style index over []byte: negative indices count from the end
+/// (b"abc"[-1] = 99); out-of-range yields UndefVal (mbel nil-safe —
+/// expr raises "index out of range").
+fn byte_index(b : Bytes, d : Double) -> @ast.Value {
+  if d != d || d != d.floor() {
+    return @ast.UndefVal
+  }
+  let n = b.length()
+  let mut i = d.to_int()
+  if i < 0 {
+    i = n + i
+  }
+  if i < 0 || i >= n {
+    @ast.UndefVal
+  } else {
+    @ast.IntVal(b[i].to_int().to_int64())
   }
 }
 
@@ -1077,6 +1131,18 @@ fn Evaluator::eval_object_literal(
 }
 
 ///|
+/// Byte strings iterate as their int elements in aggregates and
+/// relative filters (expr: []byte is a slice of uint8). Shared by the
+/// Walk evaluator and the Vm runtime (same package).
+fn bytes_elements(b : Bytes) -> Array[@ast.Value] {
+  let out : Array[@ast.Value] = []
+  for i in 0..<b.length() {
+    out.push(@ast.IntVal(b[i].to_int().to_int64()))
+  }
+  out
+}
+
+///|
 /// Evaluates a FilterExpression: relative filters run the expression
 /// against each subject element (arrays stay arrays, other values get
 /// wrapped); static filters index into the subject by the expression
@@ -1093,6 +1159,12 @@ fn Evaluator::eval_filter(
       @ast.ArrayVal(xs) => {
         self.charge_alloc(xs.length())
         xs
+      }
+      @ast.BytesVal(b) => {
+        // bytes filter as their int elements (expr: []byte is a
+        // uint8 slice); result arrays charge per element like arrays
+        self.charge_alloc(b.length())
+        bytes_elements(b)
       }
       @ast.UndefVal => []
       other => [other]
@@ -1163,6 +1235,7 @@ fn Evaluator::eval_aggregate(
   }
   let list : Array[@ast.Value] = match values.get(0) {
     Some(@ast.ArrayVal(xs)) => xs
+    Some(@ast.BytesVal(b)) => bytes_elements(b)
     Some(@ast.UndefVal) | None => []
     Some(_) =>
       raise EvalError::EvalErr(

@@ -160,3 +160,25 @@ test "strict mode: piped aggregates and bracket predicates" {
   expect_checked("nums | map(# * 2) | first()", "2", "piped chain first()")
   expect_checked("[{a:1},{a:2}][.a == 2] | count()", "1", "bracket pred strict")
 }
+
+///|
+test "strict mode: byte strings type as []uint8" {
+  expect_checked("b\"a\" == b\"a\"", "true", "bytes eq compiles")
+  expect_checked("len(b\"abc\")", "3", "len of bytes")
+  expect_checked("b\"abc\"[0]", "97", "bytes index")
+  expect_checked("string(b\"abc\")", "97,98,99", "string of bytes")
+  expect_checked("filter(b\"abc\", # > 97)", "98,99", "filter over bytes")
+  // compile-mode mismatches mirror expr (Go type name []uint8)
+  expect_checked(
+    "b\"a\" + b\"b\"", "ERR:invalid operation: + (mismatched types []uint8 and []uint8)",
+    "bytes + bytes",
+  )
+  expect_checked(
+    "b\"a\" == \"a\"", "ERR:invalid operation: == (mismatched types []uint8 and string)",
+    "bytes vs string",
+  )
+  expect_checked(
+    "b\"a\" < b\"b\"", "ERR:invalid operation: < (mismatched types []uint8 and []uint8)",
+    "bytes ordering",
+  )
+}

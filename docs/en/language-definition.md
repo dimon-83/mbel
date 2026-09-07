@@ -30,10 +30,15 @@ Two notes up front:
   strings are rejected.
 - Raw strings: backticks, no escapes, ` `` ` doubles a backtick, real
   newlines allowed.
-- Byte strings: `b"..."` / `B'...'` — parsed and typed as byte content
-  (escapes: simple set + `\xNN` + octal ≤ `\377`; `\u` rejected; non-ASCII
-  UTF-8-encoded); **not yet evaluable** — they need the typed Bytes value
-  (roadmap).
+- Byte strings: `b"..."` / `B'...'` — byte content evaluates as a
+  `BytesVal` (escapes: simple set + `\xNN` + octal ≤ `\377`; `\u`
+  rejected; non-ASCII UTF-8-encoded): bytewise equality, `len`, indexing
+  (negative allowed, out-of-range → nil), slicing (result stays a byte
+  string), aggregates/filters iterate the bytes as int elements,
+  `toJSON` → base64 string (Go json semantics), `type()` reports
+  `"array"`. Type names and error texts mirror expr's `[]uint8`.
+  Divergence: `string(b"abc")` prints `97,98,99` (mbel's array
+  convention; expr prints Go's `[97 98 99]`).
 - Booleans `true`/`false`; `nil`.
 - Comments: `//` line and `/* */` block.
 

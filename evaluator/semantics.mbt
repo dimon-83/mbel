@@ -23,7 +23,10 @@ pub fn truthy(v : @ast.Value) -> Bool {
     @ast.IntVal(i) => i != 0L
     @ast.StrVal(s) => s != ""
     @ast.NullVal | @ast.UndefVal => false
-    @ast.ArrayVal(_) | @ast.ObjectVal(_) => true
+    // Bytes follow arrays (always truthy, even empty). expr raises a
+    // "not bool" panic for byte conditions instead; mbel Eval mode
+    // keeps lenient JS-style conditions for every value.
+    @ast.ArrayVal(_) | @ast.ObjectVal(_) | @ast.BytesVal(_) => true
   }
 }
 
@@ -36,6 +39,7 @@ pub fn strict_eq(a : @ast.Value, b : @ast.Value) -> Bool {
     (@ast.IntVal(x), @ast.IntVal(y)) => x == y
     // typed integers are distinct kinds from doubles (expr DeepEqual)
     (@ast.IntVal(_), _) | (_, @ast.IntVal(_)) => false
+    (@ast.BytesVal(x), @ast.BytesVal(y)) => bytes_eq(x, y)
     (@ast.StrVal(x), @ast.StrVal(y)) => x == y
     (@ast.BoolVal(x), @ast.BoolVal(y)) => x == y
     (@ast.NullVal, @ast.NullVal) => true
@@ -44,6 +48,20 @@ pub fn strict_eq(a : @ast.Value, b : @ast.Value) -> Bool {
     (@ast.ObjectVal(x), @ast.ObjectVal(y)) => value_obj_eq(x, y)
     (_, _) => false
   }
+}
+
+///|
+/// Bytewise equality (expr: []byte == []byte via bytes.Equal).
+fn bytes_eq(x : Bytes, y : Bytes) -> Bool {
+  if x.length() != y.length() {
+    return false
+  }
+  for i in 0..<x.length() {
+    if x[i] != y[i] {
+      return false
+    }
+  }
+  true
 }
 
 ///|
@@ -93,6 +111,9 @@ pub fn to_number(v : @ast.Value) -> Double {
     // [] -> "" -> 0, [5] -> "5" -> 5, [1,2] -> "1,2" -> NaN.
     @ast.ArrayVal(xs) => str_to_number(arr_to_string(xs))
     @ast.ObjectVal(_) => nan()
+    // Bytes are expr-only and never reach JS coercion paths (typed
+    // guards reject them earlier); treat like objects: NaN.
+    @ast.BytesVal(_) => nan()
   }
 }
 
@@ -188,6 +209,22 @@ pub fn to_string(v : @ast.Value) -> String {
     @ast.NullVal => "null"
     @ast.UndefVal => "undefined"
     @ast.ArrayVal(xs) => arr_to_string(xs)
+    // Byte values print as their decimal content, comma-joined like
+    // arrays (expr's string() would print Go's "[97 98 99]" — mbel
+    // keeps its own array convention; see builtin type/string tests).
+    @ast.BytesVal(b) => {
+      let mut out = ""
+      let mut first = true
+      for i in 0..<b.length() {
+        if first {
+          first = false
+        } else {
+          out = out + ","
+        }
+        out = out + b[i].to_int().to_string()
+      }
+      out
+    }
     @ast.ObjectVal(_) => "[object Object]"
   }
 }
@@ -385,12 +422,13 @@ pub fn index_of(s : String, sub : String) -> Int {
   -1
 }
 
-// --- Stage 4.4.3: typed (expr) semantics on IntVal-bearing operands ---
+// --- Stage 4.4.3: typed (expr) semantics on typed-value operands ---
 //
 // The legacy Jexl path only ever produces NumVal (its lexer parses
-// numbers as doubles), so "any operand is or contains an IntVal" is a
-// sound runtime signal that expr's typed semantics apply. All numeric
-// operators below keep the legacy JS behavior for pure-NumVal inputs.
+// numbers as doubles), so "any operand is or contains an IntVal (or,
+// stage 4.4.3 tail, a BytesVal — also expr-only)" is a sound runtime
+// signal that expr's typed semantics apply. All numeric operators
+// below keep the legacy JS behavior for pure-NumVal inputs.
 
 ///|
 /// Whether a value is (or contains) a typed integer — the expr
@@ -420,8 +458,36 @@ pub fn has_int(v : @ast.Value) -> Bool {
 }
 
 ///|
+/// Whether a value is (or contains) a byte string. BytesVal is also
+/// expr-front-end-only (legacy has no byte literals), so it extends
+/// the typed-semantics signal like IntVal.
+fn has_bytes(v : @ast.Value) -> Bool {
+  match v {
+    @ast.BytesVal(_) => true
+    @ast.ArrayVal(xs) => {
+      for x in xs {
+        if has_bytes(x) {
+          return true
+        }
+      }
+      false
+    }
+    @ast.ObjectVal(pairs) => {
+      for kv in pairs {
+        let (_, val) = kv
+        if has_bytes(val) {
+          return true
+        }
+      }
+      false
+    }
+    _ => false
+  }
+}
+
+///|
 fn typed_bin(a : @ast.Value, b : @ast.Value) -> Bool {
-  has_int(a) || has_int(b)
+  has_int(a) || has_int(b) || has_bytes(a) || has_bytes(b)
 }
 
 ///|
@@ -433,7 +499,8 @@ fn numeric_val(v : @ast.Value) -> Bool {
 }
 
 ///|
-/// expr-style type name for error messages (Go type names).
+/// expr-style type name for error messages (Go type names; expr
+/// reports byte slices as []uint8).
 fn typed_kind(v : @ast.Value) -> String {
   match v {
     @ast.IntVal(_) => "int"
@@ -442,6 +509,7 @@ fn typed_kind(v : @ast.Value) -> String {
     @ast.NullVal => "nil"
     @ast.UndefVal => "nil"
     @ast.StrVal(_) => "string"
+    @ast.BytesVal(_) => "[]uint8"
     @ast.ArrayVal(_) => "array"
     @ast.ObjectVal(_) => "map"
   }

@@ -26,6 +26,8 @@ pub(all) enum Nature {
   IntN
   FloatN
   StringN
+  // byte strings (expr []byte, Go type name []uint8)
+  BytesN
   BoolN
   NilN
   // homogeneous containers: element nature known
@@ -41,6 +43,7 @@ pub fn nature_name(n : Nature) -> String {
     IntN => "int"
     FloatN => "float"
     StringN => "string"
+    BytesN => "[]uint8"
     BoolN => "bool"
     NilN => "nil"
     ArrN(t) => "[]" + nature_name(t)
@@ -89,7 +92,8 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
     EBool(_) => BoolN
     EInt(_) => IntN
     EFloat(_) => FloatN
-    EStr(_) | EBytes(_) => StringN
+    EStr(_) => StringN
+    EBytes(_) => BytesN
     EIdent(name) =>
       match scope_get(scope, name) {
         Some(t) => t
@@ -247,7 +251,7 @@ fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
   match name {
     "len" =>
       match t {
-        StringN | ArrN(_) | MapN(_) | UnknownN => ()
+        StringN | BytesN | ArrN(_) | MapN(_) | UnknownN => ()
         other =>
           raise CheckError::CheckErr(
             "invalid argument for len (type " + nature_name(other) + ")",
@@ -309,7 +313,7 @@ fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
     | "sortBy"
     | "reduce" =>
       match t {
-        ArrN(_) | UnknownN => ()
+        ArrN(_) | BytesN | UnknownN => ()
         other =>
           raise CheckError::CheckErr(
             "invalid argument for " +
@@ -385,7 +389,8 @@ fn check_binary(
       match (lt, rt) {
         (IntN, IntN) | (IntN, FloatN) | (FloatN, IntN) | (FloatN, FloatN) =>
           BoolN
-        (StringN, StringN) | (BoolN, BoolN) | (NilN, NilN) => BoolN
+        (StringN, StringN) | (BytesN, BytesN) | (BoolN, BoolN) | (NilN, NilN) =>
+          BoolN
         (NilN, _) | (_, NilN) => BoolN
         // arrays are value-comparable when their element natures match
         (ArrN(a), ArrN(b)) =>

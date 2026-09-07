@@ -97,6 +97,7 @@ fn value_len(v : @ast.Value) -> Int {
     @ast.ArrayVal(xs) => xs.length()
     @ast.ObjectVal(pairs) => pairs.length()
     @ast.StrVal(s) => s.length()
+    @ast.BytesVal(b) => b.length()
     _ => 0
   }
 }
@@ -161,6 +162,8 @@ fn value_to_json(v : @ast.Value) -> Json {
     // exact digits) — documented divergence until a typed JSON writer
     @ast.IntVal(i) => Json::number(i.to_double())
     @ast.StrVal(s) => Json::string(s)
+    // Go's json.Marshal encodes []byte as a base64 string
+    @ast.BytesVal(b) => Json::string(encode64_bytes(b))
     @ast.NullVal | @ast.UndefVal => Json::null()
     @ast.ArrayVal(xs) => Json::array(xs.map(value_to_json))
     @ast.ObjectVal(pairs) => {
@@ -410,6 +413,12 @@ fn write_json(b : StringBuilder, v : @ast.Value) -> Unit {
         b.write_string(d.to_string())
       }
     @ast.IntVal(i) => b.write_string(i.to_string())
+    // expr/Go json.Marshal encodes []byte as a base64 string
+    @ast.BytesVal(x) => {
+      b.write_string("\"")
+      b.write_string(encode64_bytes(x))
+      b.write_string("\"")
+    }
     @ast.StrVal(s) => {
       b.write_string("\"")
       write_json_string(b, s)
