@@ -13,17 +13,17 @@ pub(all) suberror LowerError {
 /// Lowers a parsed expr AST to the legacy AST the engines execute.
 pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
   match n {
-    ENil => @ast.literal(@ast.NullVal)
-    EBool(b) => @ast.literal(@ast.BoolVal(b))
-    EInt(i) => @ast.literal(@ast.IntVal(i))
-    EFloat(d) => @ast.literal(@ast.NumVal(d))
-    EStr(s) => @ast.literal(@ast.StrVal(s))
+    ENil(_, _) => @ast.literal(@ast.NullVal)
+    EBool(b, _, _) => @ast.literal(@ast.BoolVal(b))
+    EInt(i, _, _) => @ast.literal(@ast.IntVal(i))
+    EFloat(d, _, _) => @ast.literal(@ast.NumVal(d))
+    EStr(s, _, _) => @ast.literal(@ast.StrVal(s))
     // Byte literals evaluate to BytesVal (stage 4.4.3 tail); the
     // legacy dialect has no byte literals, so this only ever runs on
     // the expr front end.
-    EBytes(b) => @ast.literal(@ast.BytesVal(b))
-    EIdent(name) => @ast.identifier(name)
-    EMember(base, name, _) => {
+    EBytes(b, _, _) => @ast.literal(@ast.BytesVal(b))
+    EIdent(name, _, _) => @ast.identifier(name)
+    EMember(base, name, _, _, _) => {
       // ?. lowers to plain member access: mbel's drill-down already
       // returns nil/undefined for nil bases (nil-safe by default).
       let b = lower(base)
@@ -31,17 +31,17 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       member.from = Some(b)
       member
     }
-    EIndex(base, idx) => {
+    EIndex(base, idx, _, _) => {
       let b = lower(base)
       match idx {
         // Bracket predicate `items[.expr]` (Jexl-compat extension):
         // lower as a relative filter, evaluated per element. Plain
         // indexing keeps the static-filter form.
-        EPred(inner) => @ast.filter_expression(lower(inner), true, b)
+        EPred(inner, _, _) => @ast.filter_expression(lower(inner), true, b)
         other => @ast.filter_expression(lower(other), false, b)
       }
     }
-    ESlice(base, from, to) => {
+    ESlice(base, from, to, _, _) => {
       let b = lower(base)
       let f = match from {
         Some(x) => Some(lower(x))
@@ -53,16 +53,16 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       }
       @ast.slice_node(b, f, t)
     }
-    ECall(callee, args) => lower_call(callee, args)
-    EPred(inner) => lower(inner)
-    EArray(items) => {
+    ECall(callee, args, _, _) => lower_call(callee, args)
+    EPred(inner, _, _) => lower(inner)
+    EArray(items, _, _) => {
       let arr = @ast.array_literal()
       for x in items {
         arr.array_value.push(lower(x))
       }
       arr
     }
-    EMap(pairs) => {
+    EMap(pairs, _, _) => {
       let obj = @ast.object_literal()
       for kv in pairs {
         let (k, v) = kv
@@ -71,13 +71,13 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       }
       obj
     }
-    EUnary(op, x) => {
+    EUnary(op, x, _, _) => {
       let inner = lower(x)
       match op {
         "-" =>
           match x {
-            EInt(i) => return @ast.literal(@ast.IntVal(-i))
-            EFloat(d) => return @ast.literal(@ast.NumVal(-d))
+            EInt(i, _, _) => return @ast.literal(@ast.IntVal(-i))
+            EFloat(d, _, _) => return @ast.literal(@ast.NumVal(-d))
             _ => ()
           }
         _ => ()
@@ -86,7 +86,7 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       u.right = Some(inner)
       u
     }
-    EBinary(op, l, r) => {
+    EBinary(op, l, r, _, _) => {
       let lo = lower(l)
       let ro = lower(r)
       let mopped = match op {
@@ -101,7 +101,7 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       b.right = Some(ro)
       b
     }
-    ECond(t, c, a) => {
+    ECond(t, c, a, _, _) => {
       let cond = @ast.conditional()
       cond.cond_test = Some(lower(t))
       match c {
@@ -114,7 +114,7 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       }
       cond
     }
-    ELet(name, v, rest) => {
+    ELet(name, v, rest, _, _) => {
       let items : Array[@ast.AstNode] = [
         @ast.variable_declarator(name, lower(v)),
       ]
@@ -125,7 +125,7 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       s.args = items
       s
     }
-    ESeq(items) => {
+    ESeq(items, _, _) => {
       let s = @ast.sequence()
       for item in items {
         for x in seq_items(item) {
@@ -134,7 +134,7 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
       }
       s
     }
-    EPointer(kind) => {
+    EPointer(kind, _, _) => {
       let p = @ast.pointer(kind)
       p
     }
@@ -147,14 +147,14 @@ pub fn lower(n : ENode) -> @ast.AstNode raise LowerError {
 /// inside a sequence arrives with its body already attached).
 fn seq_items(n : ENode) -> Array[@ast.AstNode] raise LowerError {
   match n {
-    ELet(name, v, rest) => {
+    ELet(name, v, rest, _, _) => {
       let out : Array[@ast.AstNode] = [@ast.variable_declarator(name, lower(v))]
       for x in seq_items(rest) {
         out.push(x)
       }
       out
     }
-    ESeq(items) => {
+    ESeq(items, _, _) => {
       let out : Array[@ast.AstNode] = []
       for item in items {
         for x in seq_items(item) {
@@ -173,8 +173,8 @@ fn lower_call(
   args : Array[ENode],
 ) -> @ast.AstNode raise LowerError {
   let fname = match callee {
-    EIdent(f) => f
-    EMember(_, m, _) =>
+    EIdent(f, _, _) => f
+    EMember(_, m, _, _, _) =>
       raise LowerError::LowerErr(
         "method call '" +
         m +
@@ -199,10 +199,10 @@ fn lower_call(
 ///|
 fn lower_key(k : ENode) -> String raise LowerError {
   match k {
-    EIdent(name) => name
-    EStr(s) => s
-    EInt(i) => i.to_double().to_string()
-    EFloat(d) => d.to_string()
+    EIdent(name, _, _) => name
+    EStr(s, _, _) => s
+    EInt(i, _, _) => i.to_double().to_string()
+    EFloat(d, _, _) => d.to_string()
     _ => raise LowerError::LowerErr("invalid map key")
   }
 }

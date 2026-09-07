@@ -6,30 +6,86 @@
 // the legacy AstNode is a bridge until dedicated evaluation lands.
 
 ///|
-/// The expr dialect AST. Positions live on tokens; nodes are plain
-/// values so tests assert structure directly.
+/// The expr dialect AST. Each node carries its source position
+/// (1-based line/col of the construct's first token; for EBinary the
+/// position of the infix OPERATOR, matching expr's caret placement).
+/// Tests assert structure via dump(), which ignores positions.
 pub(all) enum ENode {
-  ENil
-  EBool(Bool)
-  EInt(Int64) // decimal/hex/octal/binary, `_` separators folded out
-  EFloat(Double)
-  EStr(String)
-  EBytes(Bytes)
-  EIdent(String) // identifiers and $env
-  EMember(ENode, String, Bool) // base.name (opt=true for ?.name)
-  EIndex(ENode, ENode) // base[index]
-  ESlice(ENode, ENode?, ENode?) // base[from:to], either bound optional
-  ECall(ENode, Array[ENode]) // callee(args...)
-  EPred(ENode) // brace-wrapped or predicate-position expression
-  EArray(Array[ENode])
-  EMap(Array[(ENode, ENode)])
-  EUnary(String, ENode) // ! - + not
-  EBinary(String, ENode, ENode) // all infix ops incl. `..` and `**`
-  ECond(ENode, ENode?, ENode?) // ternary ?: and if/else (consequent
-  // may be None for the `a ?: b` form)
-  ELet(String, ENode, ENode) // let x = value; rest
-  ESeq(Array[ENode]) // a; b; c
-  EPointer(String) // # / #index / #acc
+  ENil(Int, Int)
+  EBool(Bool, Int, Int)
+  EInt(Int64, Int, Int) // decimal/hex/octal/binary, `_` separators
+  // folded out
+  EFloat(Double, Int, Int)
+  EStr(String, Int, Int)
+  EBytes(Bytes, Int, Int)
+  EIdent(String, Int, Int) // identifiers and $env
+  EMember(ENode, String, Bool, Int, Int) // base.name (opt for ?.name)
+  EIndex(ENode, ENode, Int, Int) // base[index]
+  ESlice(ENode, ENode?, ENode?, Int, Int) // base[from:to]
+  ECall(ENode, Array[ENode], Int, Int) // callee(args...)
+  EPred(ENode, Int, Int) // brace-wrapped/predicate-position expr
+  EArray(Array[ENode], Int, Int)
+  EMap(Array[(ENode, ENode)], Int, Int)
+  EUnary(String, ENode, Int, Int) // ! - + not
+  EBinary(String, ENode, ENode, Int, Int) // infix; pos = the operator
+  ECond(ENode, ENode?, ENode?, Int, Int) // ternary ?: and if/else
+  ELet(String, ENode, ENode, Int, Int) // let x = value; rest
+  ESeq(Array[ENode], Int, Int) // a; b; c
+  EPointer(String, Int, Int) // # / #index / #acc
+}
+
+///|
+/// Node start position (1-based). EBinary reports its operator token.
+pub fn node_line(n : ENode) -> Int {
+  match n {
+    ENil(l, _)
+    | EBool(_, l, _)
+    | EInt(_, l, _)
+    | EFloat(_, l, _)
+    | EStr(_, l, _)
+    | EBytes(_, l, _)
+    | EIdent(_, l, _)
+    | EMember(_, _, _, l, _)
+    | EIndex(_, _, l, _)
+    | ESlice(_, _, _, l, _)
+    | ECall(_, _, l, _)
+    | EPred(_, l, _)
+    | EArray(_, l, _)
+    | EMap(_, l, _)
+    | EUnary(_, _, l, _)
+    | EBinary(_, _, _, l, _)
+    | ECond(_, _, _, l, _)
+    | ELet(_, _, _, l, _)
+    | ESeq(_, l, _)
+    | EPointer(_, l, _) => l
+  }
+}
+
+///|
+/// Node start column (1-based; EBinary = the operator's column).
+pub fn node_col(n : ENode) -> Int {
+  match n {
+    ENil(_, c)
+    | EBool(_, _, c)
+    | EInt(_, _, c)
+    | EFloat(_, _, c)
+    | EStr(_, _, c)
+    | EBytes(_, _, c)
+    | EIdent(_, _, c)
+    | EMember(_, _, _, _, c)
+    | EIndex(_, _, _, c)
+    | ESlice(_, _, _, _, c)
+    | ECall(_, _, _, c)
+    | EPred(_, _, c)
+    | EArray(_, _, c)
+    | EMap(_, _, c)
+    | EUnary(_, _, _, c)
+    | EBinary(_, _, _, _, c)
+    | ECond(_, _, _, _, c)
+    | ELet(_, _, _, _, c)
+    | ESeq(_, _, c)
+    | EPointer(_, _, c) => c
+  }
 }
 
 ///|
@@ -71,19 +127,19 @@ pub fn right_assoc(op : String) -> Bool {
 /// oracle for parser structure assertions.
 pub fn dump(n : ENode) -> String {
   match n {
-    ENil => "nil"
-    EBool(b) => if b { "true" } else { "false" }
-    EInt(i) => "int:" + i.to_string()
-    EFloat(d) => "float:" + d.to_string()
-    EStr(s) => "str:" + s
-    EBytes(_) => "bytes"
-    EIdent(s) => "id:" + s
-    EMember(b, name, opt) =>
+    ENil(_, _) => "nil"
+    EBool(b, _, _) => if b { "true" } else { "false" }
+    EInt(i, _, _) => "int:" + i.to_string()
+    EFloat(d, _, _) => "float:" + d.to_string()
+    EStr(s, _, _) => "str:" + s
+    EBytes(_, _, _) => "bytes"
+    EIdent(s, _, _) => "id:" + s
+    EMember(b, name, opt, _, _) =>
       "member(" + dump(b) + "." + name + (if opt { "?)" } else { ")" })
-    EIndex(b, i) => "index(" + dump(b) + "," + dump(i) + ")"
-    ESlice(b, f, t) =>
+    EIndex(b, i, _, _) => "index(" + dump(b) + "," + dump(i) + ")"
+    ESlice(b, f, t, _, _) =>
       "slice(" + dump(b) + "," + opt_dump(f) + "," + opt_dump(t) + ")"
-    ECall(c, args) => {
+    ECall(c, args, _, _) => {
       let out = StringBuilder::new()
       out.write_string("call(" + dump(c))
       for a in args {
@@ -92,8 +148,8 @@ pub fn dump(n : ENode) -> String {
       out.write_string(")")
       out.to_string()
     }
-    EPred(inner) => "pred(" + dump(inner) + ")"
-    EArray(xs) => {
+    EPred(inner, _, _) => "pred(" + dump(inner) + ")"
+    EArray(xs, _, _) => {
       let out = StringBuilder::new()
       out.write_string("arr[")
       for i in 0..<xs.length() {
@@ -105,7 +161,7 @@ pub fn dump(n : ENode) -> String {
       out.write_string("]")
       out.to_string()
     }
-    EMap(pairs) => {
+    EMap(pairs, _, _) => {
       let out = StringBuilder::new()
       out.write_string("map{")
       for i in 0..<pairs.length() {
@@ -118,13 +174,13 @@ pub fn dump(n : ENode) -> String {
       out.write_string("}")
       out.to_string()
     }
-    EUnary(op, x) => "un(" + op + "," + dump(x) + ")"
-    EBinary(op, l, r) => "bin(" + op + "," + dump(l) + "," + dump(r) + ")"
-    ECond(t, c, a) =>
+    EUnary(op, x, _, _) => "un(" + op + "," + dump(x) + ")"
+    EBinary(op, l, r, _, _) => "bin(" + op + "," + dump(l) + "," + dump(r) + ")"
+    ECond(t, c, a, _, _) =>
       "cond(" + dump(t) + "," + opt_dump(c) + "," + opt_dump(a) + ")"
-    ELet(name, v, rest) =>
+    ELet(name, v, rest, _, _) =>
       "let(" + name + "," + dump(v) + "," + dump(rest) + ")"
-    ESeq(xs) => {
+    ESeq(xs, _, _) => {
       let out = StringBuilder::new()
       out.write_string("seq[")
       for i in 0..<xs.length() {
@@ -136,7 +192,7 @@ pub fn dump(n : ENode) -> String {
       out.write_string("]")
       out.to_string()
     }
-    EPointer(kind) => "ptr:" + kind
+    EPointer(kind, _, _) => "ptr:" + kind
   }
 }
 

@@ -181,9 +181,12 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    型)、同质容器元素 Nature(`[]int` vs `[]string` 相等报错)、核心内置
    静态参数检查(len/int/float/abs/字符串/聚合首参,expr 文案)、严格
    模式 env 白名单(`eval_expr_checked` 未知顶层名报 "unknown name
-   x";Eval 模式保持宽松缺失→nil)。阶段 1+2 完成。**未完成:带
-   `行:列` 位置的定位错误**(需 AST 位置化重构——见收尾清单④,
-   AGENTS.md 明示未实现前不宣称)。
+   x";Eval 模式保持宽松缺失→nil)。阶段 1+2 完成。**定位错误已交付
+   (收尾④)**:ENode 全节点位置化(EBinary=运算符 token,其余=起点),
+   checker 报错按 expr FileError 布局输出 "msg (L:C) + 源码行 + caret"
+   ——运算符不匹配/条件/内置参数三类 caret 位置经 expr Go oracle 实证。
+   **例外:unknown name(引擎级 env 白名单,走 legacy AST)暂无位置**,
+   见收尾清单④注。
 5. **🟡 4.4.5 语义切换——API 已定型并锁定(2026-09-06)**:三入口文档化——
    `Engine::eval`(Jexl legacy 方言,JS 动态语义,差分 corpus+legacy 套件锁定)、
    `Engine::eval_expr`(expr 前端 **Eval 模式**:类型化运行时,无静态检查)、
@@ -209,10 +212,10 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    锁);Options 经 expr 19 个公开项逐项审计:语义类(env 白名单/AllowUndefined
    Variables)已被 Eval/Checked 双入口覆盖,Operator/Function 已有 per-instance
    注册,AsBool/AsInt/AsKind 等类型化输出与 Optimize/Patch 旋钮属 Go Compile
-   API,不适用于 mbel 值语义运行时——审计表见 gap-analysis §5.2;④ checker
-   定位错误(`行:列`+caret,需 AST 位置化重构);⑤ 4.4 gate 验收(§6.3):expr
-   官方 TestExpr 167 行 want 表全量转写 + parser/checker/optimizer 表抽样
-   ≥60%(未开始)。各项状态以本节标记与提交记录为准,发布时 CHANGELOG 同步。
+   API,不适用于 mbel 值语义运行时——审计表见 gap-analysis §5.2;④ checker 定位错误 ✅(ENode 位置化 + expr FileError 布局;注:unknown
+   name 走引擎级 legacy AST 白名单,暂无位置——如需可把白名单迁入 checker
+   并传 ctx 键,列为后续项);⑤ 4.4 gate 验收(§6.3):expr 官方 TestExpr 167
+   行 want 表全量转写 + parser/checker/optimizer 表抽样 ≥60%(未开始)。各项状态以本节标记与提交记录为准,发布时 CHANGELOG 同步。
 
 ### 6.3 覆盖率目标
 4.4 完成后(收尾清单 ⑤):expr 官方 TestExpr 167 行 want 表全量转写 +

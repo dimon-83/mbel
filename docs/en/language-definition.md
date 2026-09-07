@@ -147,7 +147,9 @@ transforms are registered per engine instance (no reflection — see
 ## Errors and budgets
 
 - Parse errors: `parse error at L:C: message` (location from the source).
-- Compile-mode (strict) errors use expr wording: `invalid operation: +
+- Compile-mode (strict) errors use expr wording and expr's FileError
+  layout — "msg (L:C)" plus the source line with a caret under the
+  offending operator/condition/call: `invalid operation: +
   (mismatched types int and string)`, `non-bool expression (type int) used
   as condition`, `invalid argument for len (type int)`, `unknown name x`.
 - Runtime (Eval-mode) typing errors: `invalid operation: int + string`,

@@ -114,9 +114,11 @@ You can browse and install extra skills here:
   `NumVal`, so "an operand is or contains `IntVal`" is the runtime signal
   that expr typed semantics apply — keep that property intact.
 
-- Parse errors carry "parse error at L:C: message"; position-carrying
-  checker errors (line:col with caret) are planned but not yet implemented —
-  do not claim or fake them.
+- Parse errors carry "parse error at L:C: message"; Compile-mode checker
+  errors carry expr's FileError layout ("msg (L:C)" + source line + caret
+  column, operator/condition/call positions as in expr). Exception: the
+  engine-level env-whitelist error "unknown name x" has no position (it
+  walks the lowered legacy AST, which carries none).
 
 ## Performance
 

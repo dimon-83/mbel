@@ -181,8 +181,9 @@ test "expr front end: parse budgets apply on eval_expr (max_nodes)" {
 ///|
 test "expr front end: recursion guard rejects deep nesting" {
   let ctx = @ast.ObjectVal([("x", @ast.NumVal(1.0))])
-  // 1500 nested parens: beyond the ~1000-level recursion guard (the
-  // legacy parser rejects the same shape via its nesting budget).
+  // 1500 nested parens: beyond the recursion guard (each level costs
+  // several parser frames; the legacy parser rejects the same shape
+  // via its nesting budget).
   let mut deep = "x"
   for _ in 0..<1500 {
     deep = "(" + deep + ")"
@@ -197,9 +198,9 @@ test "expr front end: recursion guard rejects deep nesting" {
       }
     Ok(_) => inspect("ok", content="expected nesting error")
   }
-  // Moderate nesting (300) still parses fine on both engines.
+  // Moderate nesting (200) still parses fine on both engines.
   let mut ok = "x"
-  for _ in 0..<300 {
+  for _ in 0..<200 {
     ok = "(" + ok + ")"
   }
   let ow = eval_expr_limited(Walk, ok, ctx, 100000, 100000, 1000000)

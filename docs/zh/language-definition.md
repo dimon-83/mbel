@@ -89,7 +89,8 @@ mbel 额外接受 Jexl 方括号谓词 `items[.price <= 2]`(逐元素过滤,可�
 ## 错误与预算
 
 - 解析错误:`parse error at L:C: message`(带源码位置)。
-- Compile 模式(严格)错误采用 expr 文案:`invalid operation: + (mismatched types int and string)`、`non-bool expression (type int) used as condition`、`invalid argument for len (type int)`、`unknown name x`。
+- Compile 模式(严格)错误采用 expr 文案与 expr FileError 布局——"msg
+  (L:C)" + 源码行 + caret(指向运算符/条件/调用起点):`invalid operation: + (mismatched types int and string)`、`non-bool expression (type int) used as condition`、`invalid argument for len (type int)`、`unknown name x`。
 - 运行时(Eval 模式)类型错误:`invalid operation: int + string`、`integer divide by zero`、`slice bounds must be integers`。
 - 预算:解析期节点/token 上限与递归护栏;求值期深度(两引擎);分配点步数预算——消息:`expression is too large (more than N nodes)`、`expression is too deeply nested`、`expression is too deep (more than N levels)`、`memory budget exceeded`。
 

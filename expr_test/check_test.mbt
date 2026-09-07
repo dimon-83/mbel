@@ -52,6 +52,24 @@ fn expect_checked(
 }
 
 ///|
+/// Asserts a positioned compile error in expr's FileError layout:
+/// "msg (L:C)" then the source line and a caret under column C
+/// (dots = col - 1).
+fn expect_checked_err(
+  src : String,
+  msg_line : String,
+  dots : Int,
+  label : String,
+) -> Unit raise {
+  let mut caret = ""
+  for _ in 0..<dots {
+    caret = caret + "."
+  }
+  let expected = "ERR:" + msg_line + "\n | " + src + "\n | " + caret + "^"
+  inspect(checked(src), content=expected)
+}
+
+///|
 test "checker: valid programs evaluate identically on both engines" {
   expect_checked("1 + 2 * 3", "7", "arith")
   expect_checked("name + \"!\"", "Archer!", "string concat")
@@ -62,38 +80,45 @@ test "checker: valid programs evaluate identically on both engines" {
 
 ///|
 test "checker: known-type operator mismatches are compile errors" {
-  expect_checked(
-    "1 + \"a\"", "ERR:invalid operation: + (mismatched types int and string)", "int+string",
+  // caret sits on the operator token, as in expr
+  expect_checked_err(
+    "1 + \"a\"", "invalid operation: + (mismatched types int and string) (1:3)",
+    2, "int+string",
   )
-  expect_checked(
-    "\"a\" - 1", "ERR:invalid operation: - (mismatched types string and int)", "string-int",
+  expect_checked_err(
+    "\"a\" - 1", "invalid operation: - (mismatched types string and int) (1:5)",
+    4, "string-int",
   )
-  expect_checked(
-    "1.5 % 1", "ERR:invalid operation: % (mismatched types float and int)", "float modulo",
+  expect_checked_err(
+    "1.5 % 1", "invalid operation: % (mismatched types float and int) (1:5)", 4,
+    "float modulo",
   )
-  expect_checked(
-    "1.5 .. 3", "ERR:invalid operation: .. (mismatched types float and int)", "float range",
+  expect_checked_err(
+    "1.5 .. 3", "invalid operation: .. (mismatched types float and int) (1:5)", 4,
+    "float range",
   )
-  expect_checked(
-    "1 == \"1\"", "ERR:invalid operation: == (mismatched types int and string)",
-    "typed eq mismatch",
+  expect_checked_err(
+    "1 == \"1\"", "invalid operation: == (mismatched types int and string) (1:3)",
+    2, "typed eq mismatch",
   )
-  expect_checked(
-    "1 < \"2\"", "ERR:invalid operation: < (mismatched types int and string)", "ordering mismatch",
+  expect_checked_err(
+    "1 < \"2\"", "invalid operation: < (mismatched types int and string) (1:3)",
+    2, "ordering mismatch",
   )
-  expect_checked(
-    "1 && true", "ERR:invalid operation: && (mismatched types int and bool)", "and on int",
+  expect_checked_err(
+    "1 && true", "invalid operation: && (mismatched types int and bool) (1:3)", 2,
+    "and on int",
   )
 }
 
 ///|
 test "checker: conditions must be bool when statically known" {
-  expect_checked(
-    "if 1 { 2 } else { 3 }", "ERR:non-bool expression (type int) used as condition",
-    "if on int",
+  expect_checked_err(
+    "if 1 { 2 } else { 3 }", "non-bool expression (type int) used as condition (1:4)",
+    3, "if on int",
   )
-  expect_checked(
-    "1 ? 2 : 3", "ERR:non-bool expression (type int) used as condition", "ternary on int",
+  expect_checked_err(
+    "1 ? 2 : 3", "non-bool expression (type int) used as condition (1:1)", 0, "ternary on int",
   )
   expect_checked("if name { 1 } else { 2 }", "1", "dynamic cond passes compile")
 }
@@ -107,14 +132,14 @@ test "checker: dynamic sides stay legal (Eval-mode flexibility)" {
 
 ///|
 test "checker: let bindings are statically typed in scope" {
-  expect_checked(
-    "let x = 1; x + \"a\"", "ERR:invalid operation: + (mismatched types int and string)",
-    "let int then string",
+  expect_checked_err(
+    "let x = 1; x + \"a\"", "invalid operation: + (mismatched types int and string) (1:14)",
+    13, "let int then string",
   )
   expect_checked("let x = 1; x * 3", "3", "let int arithmetic")
-  expect_checked(
-    "let s = \"a\"; s + 1", "ERR:invalid operation: + (mismatched types string and int)",
-    "let string then int",
+  expect_checked_err(
+    "let s = \"a\"; s + 1", "invalid operation: + (mismatched types string and int) (1:16)",
+    15, "let string then int",
   )
   // shadowing replaces the binding's type
   expect_checked("let x = 1; let x = \"s\"; x + \"!\"", "s!", "shadow retypes")
@@ -122,19 +147,20 @@ test "checker: let bindings are statically typed in scope" {
 
 ///|
 test "checker: homogeneous container element natures" {
-  expect_checked(
-    "[1, 2] == [\"a\"]", "ERR:invalid operation: == (mismatched types []int and []string)",
-    "array element mismatch",
+  expect_checked_err(
+    "[1, 2] == [\"a\"]", "invalid operation: == (mismatched types []int and []string) (1:8)",
+    7, "array element mismatch",
   )
   expect_checked("[1, 2] == [1, 2]", "true", "same element arrays ok")
-  expect_checked(
-    "len(5)", "ERR:invalid argument for len (type int)", "len on int",
+  // builtin-argument errors point at the call start (expr parity)
+  expect_checked_err(
+    "len(5)", "invalid argument for len (type int) (1:1)", 0, "len on int",
   )
-  expect_checked(
-    "int(true)", "ERR:invalid argument for int (type bool)", "int on bool",
+  expect_checked_err(
+    "int(true)", "invalid argument for int (type bool) (1:1)", 0, "int on bool",
   )
-  expect_checked(
-    "filter(5, # > 0)", "ERR:invalid argument for filter (type int)", "filter on int",
+  expect_checked_err(
+    "filter(5, # > 0)", "invalid argument for filter (type int) (1:1)", 0, "filter on int",
   )
   expect_checked("upper(\"x\")", "X", "string builtin ok")
 }
@@ -168,17 +194,18 @@ test "strict mode: byte strings type as []uint8" {
   expect_checked("b\"abc\"[0]", "97", "bytes index")
   expect_checked("string(b\"abc\")", "97,98,99", "string of bytes")
   expect_checked("filter(b\"abc\", # > 97)", "98,99", "filter over bytes")
-  // compile-mode mismatches mirror expr (Go type name []uint8)
-  expect_checked(
-    "b\"a\" + b\"b\"", "ERR:invalid operation: + (mismatched types []uint8 and []uint8)",
-    "bytes + bytes",
+  // compile-mode mismatches mirror expr (Go type name []uint8, caret
+  // on the operator)
+  expect_checked_err(
+    "b\"a\" + b\"b\"", "invalid operation: + (mismatched types []uint8 and []uint8) (1:6)",
+    5, "bytes + bytes",
   )
-  expect_checked(
-    "b\"a\" == \"a\"", "ERR:invalid operation: == (mismatched types []uint8 and string)",
-    "bytes vs string",
+  expect_checked_err(
+    "b\"a\" == \"a\"", "invalid operation: == (mismatched types []uint8 and string) (1:6)",
+    5, "bytes vs string",
   )
-  expect_checked(
-    "b\"a\" < b\"b\"", "ERR:invalid operation: < (mismatched types []uint8 and []uint8)",
-    "bytes ordering",
+  expect_checked_err(
+    "b\"a\" < b\"b\"", "invalid operation: < (mismatched types []uint8 and []uint8) (1:6)",
+    5, "bytes ordering",
   )
 }

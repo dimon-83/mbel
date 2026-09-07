@@ -57,10 +57,35 @@ pub fn compile_expr_checked_limited(
       )
   }
   check(node) catch {
-    CheckErr(msg) => raise @evaluator.EvalErr(msg)
+    CheckErr(msg, line, col) =>
+      raise @evaluator.EvalErr(positioned(msg, line, col, source))
   }
   let lowered = lower(node) catch {
     LowerErr(msg) => raise @evaluator.EvalErr(msg)
   }
   Some(lowered)
+}
+
+///|
+/// Formats a positioned compile-mode error the way expr's FileError
+/// does: "msg (L:C)" plus the source line and a caret column:
+///
+///   invalid operation: + (mismatched types int and string) (1:3)
+///    | 1 + "a"
+///    | ..^
+fn positioned(msg : String, line : Int, col : Int, source : String) -> String {
+  let lines = source.split("\n").map(fn(v) { v.to_owned() }).to_array()
+  let idx = line - 1
+  let mut out = msg + " (" + line.to_string() + ":" + col.to_string() + ")"
+  if idx >= 0 && idx < lines.length() {
+    // tabs render as spaces in expr's snippet
+    let src_line = lines[idx].replace(old="\t", new=" ")
+    out = out + "\n | " + src_line + "\n | "
+    let mut dots = ""
+    for _ in 0..<(col - 1) {
+      dots = dots + "."
+    }
+    out = out + dots + "^"
+  }
+  out
 }

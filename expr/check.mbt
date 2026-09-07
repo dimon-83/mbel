@@ -16,7 +16,10 @@
 
 ///|
 pub(all) suberror CheckError {
-  CheckErr(String)
+  // position of the offending construct (1-based line/col; EBinary =
+  // its operator token), formatted by the checked entry with expr's
+  // "msg (L:C)\n | src\n | ^" layout
+  CheckErr(String, Int, Int)
 }
 
 ///|
@@ -88,28 +91,28 @@ fn scope_get(scope : Scope, name : String) -> Nature? {
 /// Infers the static nature of a node under a let scope.
 fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
   match n {
-    ENil => NilN
-    EBool(_) => BoolN
-    EInt(_) => IntN
-    EFloat(_) => FloatN
-    EStr(_) => StringN
-    EBytes(_) => BytesN
-    EIdent(name) =>
+    ENil(_, _) => NilN
+    EBool(_, _, _) => BoolN
+    EInt(_, _, _) => IntN
+    EFloat(_, _, _) => FloatN
+    EStr(_, _, _) => StringN
+    EBytes(_, _, _) => BytesN
+    EIdent(name, _, _) =>
       match scope_get(scope, name) {
         Some(t) => t
         None => UnknownN
       }
-    EPointer(_) => UnknownN
-    EMember(base, _, _) => {
+    EPointer(_, _, _) => UnknownN
+    EMember(base, _, _, _, _) => {
       ignore(infer(base, scope))
       UnknownN
     }
-    EIndex(base, idx) => {
+    EIndex(base, idx, _, _) => {
       ignore(infer(base, scope))
       ignore(infer(idx, scope))
       UnknownN
     }
-    ESlice(base, f, t) => {
+    ESlice(base, f, t, _, _) => {
       ignore(infer(base, scope))
       match f {
         Some(x) => ignore(infer(x, scope))
@@ -121,7 +124,7 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       }
       UnknownN
     }
-    EArray(items) => {
+    EArray(items, _, _) => {
       let mut elem = UnknownN
       let mut first = true
       for x in items {
@@ -135,7 +138,7 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       }
       ArrN(elem)
     }
-    EMap(pairs) => {
+    EMap(pairs, _, _) => {
       let mut vt = UnknownN
       let mut first = true
       for kv in pairs {
@@ -150,15 +153,16 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       }
       MapN(vt)
     }
-    ECall(callee, args) => {
+    ECall(callee, args, line, col) => {
       let callee_name = match callee {
-        EIdent(f) => f
+        EIdent(f, _, _) => f
         _ => ""
       }
-      // static argument checks for the core builtins (expr messages)
+      // static argument checks for the core builtins (expr messages);
+      // expr points the caret at the call start
       if callee_name != "" && args.length() > 0 {
         let arg0 = infer(args[0], scope)
-        check_builtin_arg(callee_name, arg0)
+        check_builtin_arg(callee_name, arg0, line, col)
       }
       ignore(infer(callee, scope))
       for a in args {
@@ -166,8 +170,8 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       }
       UnknownN
     }
-    EPred(inner) => infer(inner, scope)
-    EUnary(op, x) => {
+    EPred(inner, _, _) => infer(inner, scope)
+    EUnary(op, x, line, col) => {
       let t = infer(x, scope)
       match op {
         "not" | "!" =>
@@ -178,6 +182,8 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
                 "invalid operation: ! (mismatched type " +
                 nature_name(other) +
                 ")",
+                line,
+                col,
               )
           }
         "-" | "+" =>
@@ -189,13 +195,15 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
                 "invalid operation: - (mismatched type " +
                 nature_name(other) +
                 ")",
+                line,
+                col,
               )
           }
         _ => UnknownN
       }
     }
-    EBinary(op, l, r) => check_binary(op, l, r, scope)
-    ECond(t, c, a) => {
+    EBinary(op, l, r, line, col) => check_binary(op, l, r, scope, line, col)
+    ECond(t, c, a, _, _) => {
       let tt = infer(t, scope)
       match tt {
         BoolN | UnknownN => ()
@@ -204,6 +212,8 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
             "non-bool expression (type " +
             nature_name(other) +
             ") used as condition",
+            node_line(t),
+            node_col(t),
           )
       }
       match c {
@@ -216,7 +226,7 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       }
       UnknownN
     }
-    ELet(name, v, rest) => {
+    ELet(name, v, rest, _, _) => {
       let vt = infer(v, scope)
       // shadowing replaces the binding (Eval-mode lets redeclare)
       let scope2 = scope.copy()
@@ -233,7 +243,7 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       }
       infer(rest, scope2)
     }
-    ESeq(items) => {
+    ESeq(items, _, _) => {
       let mut last = UnknownN
       for x in items {
         // each item is self-contained: parse_let wraps its whole rest
@@ -247,7 +257,12 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
 ///|
 /// Static argument checks for the core builtins (expr compile-mode
 /// messages).
-fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
+fn check_builtin_arg(
+  name : String,
+  t : Nature,
+  line : Int,
+  col : Int,
+) -> Unit raise CheckError {
   match name {
     "len" =>
       match t {
@@ -255,6 +270,8 @@ fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
         other =>
           raise CheckError::CheckErr(
             "invalid argument for len (type " + nature_name(other) + ")",
+            line,
+            col,
           )
       }
     "int" =>
@@ -263,6 +280,8 @@ fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
         other =>
           raise CheckError::CheckErr(
             "invalid argument for int (type " + nature_name(other) + ")",
+            line,
+            col,
           )
       }
     "float" =>
@@ -271,6 +290,8 @@ fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
         other =>
           raise CheckError::CheckErr(
             "invalid argument for float (type " + nature_name(other) + ")",
+            line,
+            col,
           )
       }
     "abs" | "ceil" | "floor" | "round" =>
@@ -283,6 +304,8 @@ fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
             " (type " +
             nature_name(other) +
             ")",
+            line,
+            col,
           )
       }
     "upper" | "lower" | "trim" | "repeat" | "indexOf" | "lastIndexOf" =>
@@ -295,6 +318,8 @@ fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
             " (type " +
             nature_name(other) +
             ")",
+            line,
+            col,
           )
       }
     "filter"
@@ -321,6 +346,8 @@ fn check_builtin_arg(name : String, t : Nature) -> Unit raise CheckError {
             " (type " +
             nature_name(other) +
             ")",
+            line,
+            col,
           )
       }
     _ => ()
@@ -333,6 +360,8 @@ fn check_binary(
   l : ENode,
   r : ENode,
   scope : Scope,
+  op_line : Int,
+  op_col : Int,
 ) -> Nature raise CheckError {
   let lt = infer(l, scope)
   let rt = infer(r, scope)
@@ -347,6 +376,8 @@ fn check_binary(
       " and " +
       rname +
       ")",
+      op_line,
+      op_col,
     )
   }
   match op {
