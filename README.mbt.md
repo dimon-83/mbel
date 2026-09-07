@@ -82,6 +82,46 @@ $ moon run cmd/main -- "5|dbl|dbl"
 20
 ```
 
+## Playground (browser WASM)
+
+A zero-install browser test page ships with the repo — the same engine
+as the CLI and library, compiled to wasm-gc and wired to the three
+dialect/mode entries with plain JS strings:
+
+```text
+cd playground && python3 -m http.server 8000   # then open http://localhost:8000
+```
+
+The page offers three dialect/mode selectors plus ready-made examples:
+
+- **expr · Eval mode** — recommended; the expr front end with typed
+  runtime errors (aligned with expr-lang v1.17.8).
+- **expr · Compile mode (strict)** — the static checker runs first.
+- **jexl (legacy)** — the v0.2 JS-semantics dialect; corpus-locked and
+  receiving no new features.
+
+Real AST (parse tree), bytecode (disassembly) and debug views sit next
+to the result panel. The examples double as a dialect comparison:
+`items[.price <= 2].name` is Jexl syntax and runs in the jexl mode,
+while expr expresses the same filter as `filter(items, .price <= 2)`.
+Because dialects differ by design, an expression such as `1 + "a"`
+errors under expr (typed), errors statically under strict, and yields
+`"1a"` under jexl (JS semantics).
+
+Rebuild the shipped wasm (wasm-gc release) with:
+
+```text
+moon build --target wasm-gc --release
+cp _build/wasm-gc/release/build/playground/web/web.wasm playground/mbel.wasm
+```
+
+The browser entry lives in `playground/web` and exports
+`eval_expr`/`eval_jexl`/`eval_checked`/`disassemble`/`dump_ast` — all
+callable with plain JS strings via the js-string builtins integration
+(no glue code). Requirements: Chrome/Edge 130+, Firefox 134+, Safari
+18.4+; serve over HTTP, never `file://`. Build and interop details:
+AGENTS.md "Playground (browser WASM)".
+
 ## User documentation
 
 Mirroring the expr-lang docs, in English and Chinese:
