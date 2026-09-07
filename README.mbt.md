@@ -1,19 +1,21 @@
 # mbel — Expression Engine for MoonBit
 
-mbel is a native MoonBit expression-language engine that started as a
-full port of [Jexl](https://github.com/TomFrost/Jexl) and is evolving,
-stage by stage, toward the semantic richness of
-[expr-lang/expr](https://github.com/expr-lang/expr). The end goal is a
-safe, reliable, high-performance expression engine suited to rules
-engines, dynamic configuration, low-code platforms, and workflow
-orchestration.
+mbel is a native MoonBit expression-language engine for rules engines,
+dynamic configuration, low-code platforms, and workflow orchestration.
+It ships two expression dialects — a modern **standard dialect** with
+typed semantics and static checking, and a locked **classic dialect
+(legacy)** with JS-style dynamic semantics — evaluated by dual
+execution engines (a walk-tree interpreter and a bytecode VM) under
+safety budgets.
 
-Current status: the complete **Jexl language and API surface** is
-ported and verified byte-for-byte against the real Jexl runtime;
-expr-style resource budgets, a builtin function library, `??`/`..`/
-`matches` operators, and compile-time constant folding are in place.
-The expr-alignment roadmap is tracked in
-[docs/expr-gap-analysis.md](docs/expr-gap-analysis.md).
+Current status: the **classic dialect's** full language and API surface
+is locked and verified byte-for-byte by a 3,360+ expression
+differential corpus; the **standard dialect** covers the modern syntax
+family with typed runtime semantics, a static checker (Compile mode),
+resource budgets, a builtin function library, `??`/`..`/`matches`
+operators, and compile-time constant folding. The close-out roadmap is
+tracked in [docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) (status)
+and [docs/expr-gap-analysis.md](docs/expr-gap-analysis.md) (rationale).
 
 ## Quick start (CLI)
 
@@ -46,7 +48,7 @@ $ moon run cmd/main -- "items[.price <= 2].name" \
 "apple"
 ```
 
-expr-style predicate aggregates work on both engines:
+Predicate aggregates work on both engines:
 
 ```text
 $ moon run cmd/main -- "map(nums, # * 2)" '{"nums": [1, 2, 3, 4, 5]}'
@@ -94,19 +96,20 @@ cd playground && python3 -m http.server 8000   # then open http://localhost:8000
 
 The page offers three dialect/mode selectors plus ready-made examples:
 
-- **expr · Eval mode** — recommended; the expr front end with typed
-  runtime errors (aligned with expr-lang v1.17.8).
-- **expr · Compile mode (strict)** — the static checker runs first.
-- **jexl (legacy)** — the v0.2 JS-semantics dialect; corpus-locked and
-  receiving no new features.
+- **standard dialect · Eval mode** — recommended; typed runtime
+  semantics.
+- **standard dialect · Compile mode (strict)** — the static checker
+  runs first.
+- **classic dialect (legacy)** — the v0.2 JS-semantics dialect;
+  corpus-locked and receiving no new features.
 
 Real AST (parse tree), bytecode (disassembly) and debug views sit next
 to the result panel. The examples double as a dialect comparison:
-`items[.price <= 2].name` is Jexl syntax and runs in the jexl mode,
-while expr expresses the same filter as `filter(items, .price <= 2)`.
+
 Because dialects differ by design, an expression such as `1 + "a"`
-errors under expr (typed), errors statically under strict, and yields
-`"1a"` under jexl (JS semantics).
+errors under the standard dialect (typed), errors statically under
+strict checking, and yields `"1a"` under the classic dialect (JS
+semantics).
 
 Rebuild the shipped wasm (wasm-gc release) with:
 
@@ -124,7 +127,7 @@ AGENTS.md "Playground (browser WASM)".
 
 ## User documentation
 
-Mirroring the expr-lang docs, in English and Chinese:
+User documentation, in English and Chinese:
 
 - English: docs/en (getting-started, environment & configuration,
   custom functions, visitor, patch, language definition)
@@ -171,7 +174,7 @@ let doubled = try {
   @engine.EngineErr(msg) => abort(msg)
 } // NumVal(42.0)
 
-// expr-style resource budgets: nodes at parse time, depth + steps at
+// resource budgets: nodes at parse time, depth + steps at
 // eval time (0 disables a limit)
 @engine.Engine::set_limits(inst, 10000, 10000, 1000000)
 ```
@@ -211,32 +214,30 @@ budgets behave identically on both engines.
 
 ### Dialects and evaluation modes (stage 4.4.5)
 
-The engine separates the legacy Jexl dialect from the expr-lang
-front-end, and expr's two execution modes:
+The engine separates the classic dialect (legacy) from the
+standard-dialect front end, which has two evaluation modes:
 
-- `Engine::eval(inst, src, ctx)` — **Jexl legacy dialect**: the
-  original Jexl grammar, JS dynamic semantics (numbers are doubles,
-  loose `==`, substring `in`), locked by the Jexl differential corpus
-  and the legacy test suites.
-- `Engine::eval_expr(inst, src, ctx)` — **expr-lang front end, Eval
-  mode** (expr's `expr.Eval`): full expr syntax, typed runtime
-  semantics — integer literals and integer arithmetic are typed
-  `IntVal` (int64, Go wrap), `/` is always float division
-  (`7/2 = 3.5`, `1/0 = +Inf`), `%` is integer-only, cross-kind
-  comparisons/`+` raise `invalid operation: ...` at runtime. No
-  static checks, exactly like expr's Eval.
-- `Engine::eval_expr_checked(inst, src, ctx)` — **expr front end,
-  Compile mode** (expr's `expr.Compile`): runs the stage-4.4.4
-  phase-1 checker first; statically-known type violations surface
-  expr's compile-mode messages (`invalid operation: + (mismatched
-  types int and string)`, `non-bool expression (type int) used as
-  condition`).
+- `Engine::eval(inst, src, ctx)` — **classic dialect (legacy)**: the
+  v0.2 grammar, JS dynamic semantics (numbers are doubles, loose `==`,
+  substring `in`), locked by the compatibility differential corpus and
+  the legacy test suites.
+- `Engine::eval_expr(inst, src, ctx)` — **standard dialect, Eval
+  mode**: full modern syntax, typed runtime semantics — integer
+  literals and integer arithmetic are typed `IntVal` (int64, Go wrap),
+  `/` is always float division (`7/2 = 3.5`, `1/0 = +Inf`), `%` is
+  integer-only, cross-kind comparisons/`+` raise
+  `invalid operation: ...` at runtime. No static checks.
+- `Engine::eval_expr_checked(inst, src, ctx)` — **standard dialect,
+  Compile mode**: runs the static checker first; statically-known type
+  violations surface compile-mode messages (`invalid operation: +
+  (mismatched types int and string)`, `non-bool expression (type int)
+  used as condition`).
 
 All three entries run on either engine (Walk or Vm) with identical
-results, and all honor `set_limits` budgets (the expr front end
+results, and all honor `set_limits` budgets (the standard dialect
 applies `max_nodes` at parse time).
 
-## Current capabilities (Jexl parity)
+## Current capabilities (classic dialect)
 
 - **Literals**: numbers, single/double-quoted strings with escapes,
   booleans; **array** and **object** literals (`{a: 1, "b": 2}`).
@@ -250,20 +251,20 @@ applies `max_nodes` at parse time).
   function calls `f(x)`.
 - **Extensibility**: `add_transform`, `add_function`, `add_binary_op`
   (incl. manual/lazy operand evaluation), `add_unary_op`, `remove_op`,
-  `get_transform` / `get_function` — each Jexl instance owns an
+  `get_transform` / `get_function` — each engine instance owns an
   isolated grammar (elements can be added and removed per instance).
 - **Safety**: configurable node limit (default 10 000), sub-expression
-  nesting limit, eval depth and shared step budgets — the expr-style
-  protections that plain Jexl lacks.
-- **Verification**: 111 MoonBit tests mirror the Jexl Jest suites
+  nesting limit, eval depth and shared step budgets — safety protections
+  beyond the classic baseline.
+- **Verification**: 111 MoonBit tests mirror the original Jest suites
   (lexer/parser/evaluator/API), and a differential harness runs 3 300+
   expressions (hand-written corpus, generated fuzz, JSON-context
-  corpus) through both mbel and the real Jexl, requiring byte-identical
-  output (`tools/`, `docs/parity-contract.md`).
+  corpus) against the original JavaScript implementation, requiring
+  byte-identical output (`tools/`, `docs/parity-contract.md`).
 
-## expr-lang builtins already available
+## Builtins already available
 
-Stage 4.2 seeded the engine with expr-style builtins (registered on
+The engine is seeded with builtins (registered on
 every instance, callable as plain functions): `abs ceil floor round
 max min mean median`, `trim trimPrefix trimSuffix upper lower split
 splitAfter replace repeat join indexOf lastIndexOf hasPrefix hasSuffix
@@ -271,9 +272,9 @@ string`, `len first last get take keys values reverse uniq concat
 flatten sort`, `int float string type toJSON fromJSON toBase64
 fromBase64 toPairs fromPairs`, `bitand bitor bitxor bitnand bitnot
 bitshl bitshr bitushr`, plus minimal `now duration date timezone`.
-Three expr operators work too: `??` (nil coalescing), `..` (range:
+Three standard-dialect operators work too: `??` (nil coalescing), `..` (range:
 `1..3 == [1,2,3]`), and `matches`. Constant subtrees are folded at
-compile time (expr-style `fold`).
+compile time (constant folding).
 
 Examples:
 
@@ -291,49 +292,27 @@ $ moon run cmd/main -- "sort([3,1,2]) | first"
 1
 ```
 
-## Roadmap — aligning with expr-lang
+## Roadmap
 
-The reference material below is the target blueprint, staged in
-[docs/expr-gap-analysis.md](docs/expr-gap-analysis.md) (stage 4,
-estimated 75–105 person-days; stages 4.1 done — resource budgets).
+Stage 4 (the standard-dialect language layer) is in its close-out
+phase. Remaining items — the verifiable list lives in
+[docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) §6.2 item 8:
 
-Remaining roadmap items (see
-[docs/coverage-vs-expr.md](docs/coverage-vs-expr.md) for the full
-matrix):
+- **4.4 close-out**: byte-string evaluation, position-carrying checker
+  errors (`行:列` with caret), classic-package physical split, Options
+  alignment (env whitelist, AsBool), and the reference TestExpr
+  167-line want-table transcription.
+- **4.5**: full regex for `matches` (the MoonBit core regex is
+  literal-only), full time objects/timezones, and implicit time-string
+  arithmetic (`request.Time - resource.Age < duration("24h")`).
 
-- **Language front-end (4.4 remainder)**: `{expr}` brace-wrapped
-  predicate blocks, `if/else` blocks, `let` declarations + sequences,
-  slices `[:]`, optional chaining `?.`, chained comparisons, `not in`,
-  right-assoc `**`, hex/oct/binary/exponent literals, raw strings and
-  byte strings, comments, `$env`, int/float type system + static type
-  checker with `行:列` error locations.
-- **Dependencies (4.5)**: full RE2-style regex for `matches` (the
-  MoonBit core regex is literal-only), full time objects/timezones.
-- **Vm v2 remainder**: `let` variable slots, slice/optional-chain
-  instructions, disassembler output.
-- **Strings**: `trim`, `upper/lower`, `split`, `replace`, `repeat`,
-  `indexOf`, `hasPrefix/hasSuffix`, and regex matching `matches`.
-- **Date & time**: `now()`, `duration()`, `date()` (multiple layouts,
-  timezones), `timezone()`, date arithmetic and comparison.
-- **Numbers**: `max/min/abs`, `ceil/floor/round`, array statistics
-  `sum/mean/median`.
-- **Arrays & collections**: predicates `all/any/one/none`,
-  `map/filter`, `find/findIndex/...`, `groupBy`, `count`, `concat`,
-  `flatten`, `uniq`, `join`, `reduce`, `sort/sortBy`, `reverse`,
-  `first/last/take`. — DELIVERED 4.4.2 (57/64 builtins total).
-- **Maps**: `keys`, `values`, `toPairs/fromPairs`.
-- **Type & encoding**: `type()`, `int/float/string` conversions,
-  `toJSON/fromJSON`, `toBase64/fromBase64`.
-- **Bitwise**: `bitand/bitor/bitxor/bitnand/bitnot/bitshl/bitshr/
-  bitushr`.
-- **Variables & scope**: `let` declarations, `$env`, predicate
-  expressions with `#` / `#acc` / `#index`.
-
-Stages 4.2+ will deliver the pure-computation builtins, a bytecode VM
-with an optimizer, and — after a review gate — the expr-language
-front-end (lexer/parser/AST/type checker). Items that cannot map 1:1
-to MoonBit (Go-reflection struct environments, the Go `time`/`regexp`
-dependencies) are tracked as explicit cut items in the gap document.
+Already delivered: the standard-dialect syntax layer (4.4.1/4.4.2),
+typed value model (4.4.3), static checker with the Compile-mode entry
+(4.4.4), locked dialect/mode API (4.4.5 surface), dual-engine parity,
+safety budgets, builtin library, and the browser playground. Items
+that cannot map 1:1 to MoonBit (Go-reflection struct environments, the
+Go `time`/`regexp` dependencies) are tracked as explicit cut items in
+[docs/expr-gap-analysis.md](docs/expr-gap-analysis.md).
 
 ## Performance & stability report (Walk vs Vm)
 
@@ -384,14 +363,15 @@ independent safety nets guard behavior: 168 unit/parity tests (green
 on native, wasm-gc and js), the internal Walk-vs-Vm parity corpus (207
 expressions, results and error messages byte-equal — genuinely green
 since f37f10d restored the Vm dispatch), and the external
-Jexl differential harness (3,360+ expressions, byte-identical).
+differential harness against the original implementation (3,360+
+expressions, byte-identical).
 
 ## Development
 
 ```text
 moon test                       # 168 unit/parity tests (add --target native|js)
 moon run cmd/main -- "2+2"      # expression runner
-./tools/run_diff.sh tools/corpus.txt      # differential check vs Jexl
+./tools/run_diff.sh tools/corpus.txt      # differential check vs original runtime
 ./tools/run_diff.sh tools/corpus_ctx.txt  # JSON-context corpus
 ```
 

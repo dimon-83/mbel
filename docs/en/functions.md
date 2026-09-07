@@ -1,9 +1,8 @@
 # Custom functions
 
-Counterpart of expr-lang's [Functions](https://expr-lang.org/docs/functions)
 page.
 
-In expr, custom functions come from the environment (struct methods or map
+In the reference language, custom functions come from the environment (struct methods or map
 values) or from `expr.Function(name, fn, ...type hints)`. mbel has no Go
 functions and no reflection, so the equivalent is **registration on the
 engine instance**: functions, transforms, and operators are MoonBit
@@ -55,7 +54,7 @@ apply to operators; your function may return `@ast.IntVal` to stay integer
 ## Transforms (pipes)
 
 `add_transform(name, fn)` registers a pipeline function for the `|` syntax
-in both dialects (legacy Jexl pipes and expr pipes desugar into a call with
+in both dialects (classic-dialect pipes and standard-dialect pipes desugar into a call with
 the left side as the first argument):
 
 ```moonbit
@@ -70,7 +69,7 @@ Batch registration: `add_functions([...])`, `add_transforms([...])`; lookup:
 
 ## Custom operators
 
-The legacy Jexl grammar is extensible per instance:
+The classic-dialect grammar is extensible per instance:
 
 - `add_binary_op(operator, precedence, f)` — eager operands (both sides are
   values).
@@ -79,14 +78,14 @@ The legacy Jexl grammar is extensible per instance:
 - `add_unary_op(operator, f)` — unary operator (precedence fixed very high).
 - `remove_op(operator)` — remove an element/operator from this instance.
 
-The expr front end's operator set is fixed (see
+The standard dialect's operator set is fixed (see
 [Language definition](language-definition.md) → Operators); custom
 operators are a legacy-dialect facility.
 
 ## Builtins
 
 The instance is seeded with the builtin library (56 functions) plus 15
-predicate aggregates; see the README's "expr-lang builtins" section and
+predicate aggregates; see the README's builtins section and
 [Language definition](language-definition.md) → Functions for the full
 lists.
 
@@ -113,7 +112,7 @@ a plain function and pass a pre-computed array, or open an issue.
 
 ## Calling convention notes
 
-- A function name in the functions pool is callable in both the expr front
+- A function name in the functions pool is callable in both the standard
   end and the legacy dialect.
 - Aggregate names are intercepted before pool lookup — do not shadow them
   with `add_function` (registering e.g. `"map"` will not affect aggregate

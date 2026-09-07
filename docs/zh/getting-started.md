@@ -1,6 +1,6 @@
 # 快速上手
 
-本文是 [expr-lang Getting Started](https://expr-lang.org/docs/getting-started) 的 mbel 对应版。mbel 在 MoonBit 中求值 expr 方言(另有 legacy Jexl 方言)的表达式,提供两个可互换引擎与严格资源预算。求值完全同步:`eval` 与 `evalSync` 是同一操作(这是对 Jexl Promise API 的有意偏离,已在 parity-contract 文档化)。
+mbel 在 MoonBit 中求值标准方言(另有经典方言(legacy))的表达式,提供两个可互换引擎与严格资源预算。求值完全同步:`eval` 与 `evalSync` 是同一操作(求值仅提供同步形式,这是有意的设计偏离,已在 parity-contract 文档化)。
 
 ## 安装
 
@@ -44,7 +44,7 @@ $ moon run cmd/main -- "reduce(nums, #acc + #, 100)" '{"nums": [1, 2, 3, 4, 5]}'
 115
 ```
 
-CLI 默认解析 legacy Jexl 方言;注册了演示 transform `dbl`、`first`、`concatWith`,因此管道可用:
+CLI 默认解析经典方言(legacy);注册了演示 transform `dbl`、`first`、`concatWith`,因此管道可用:
 
 ```text
 $ moon run cmd/main -- "5|dbl|dbl"
@@ -80,9 +80,11 @@ let v = try {
 
 | 入口 | 方言/模式 | 行为 |
 |---|---|---|
-| `Engine::eval` | legacy Jexl | JS 动态语义,Jexl corpus 锁定 |
-| `Engine::eval_expr` | expr,**Eval 模式** | 类型化运行时语义,无静态检查 |
-| `Engine::eval_expr_checked` | expr,**Compile 模式** | 先跑静态 checker(类型错误、未知名) |
+| `Engine::eval` | 经典方言(legacy) | JS 动态语义,兼容语料锁定 |
+| `Engine::eval_expr` | 标准方言,**Eval 模式** | 类型化运行时语义,无静态检查 |
+| `Engine::eval_expr_checked` | 标准方言,**Compile 模式** | 先跑静态 checker(类型错误、未知名) |
+
+术语说明:**标准方言**指现代表达式语法(类型化语义,规格见[语言定义](language-definition.md));**经典方言(legacy)**指 v0.2 起锁定的兼容语法(JS 弱类型语义),只修不增。两种方言都可在两种执行引擎(walk-tree 树遍历解释器 / 字节码 VM)上求值,结果一致。
 
 每个入口都可在两种引擎上运行——`Walk`(参考 tree-walk,默认)或 `Vm`(字节码)——结果与错误消息完全一致,并受实例预算约束(见[环境与配置](environment.md)→ 预算):
 
@@ -93,7 +95,7 @@ let v = try {
 
 ## 编译一次,多次求值
 
-与 expr 相同,编译可与求值分离:
+编译可与求值分离:
 
 ```moonbit
 let e = @engine.Engine::compile(inst, "user.age * 2") catch {
@@ -110,4 +112,4 @@ let r = @engine.Expression::eval(e, ctx) catch {
 
 - [环境与配置](environment.md) — 上下文、`$env`、预算。
 - [自定义函数](functions.md) — 注册函数、transform、运算符。
-- [语言定义](language-definition.md) — mbel 中的 expr 方言。
+- [语言定义](language-definition.md) — mbel 的标准方言。

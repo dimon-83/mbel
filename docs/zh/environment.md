@@ -1,6 +1,5 @@
 # 环境与配置
 
-对应 expr-lang 的 [Environment](https://expr-lang.org/docs/environment) 与 [Configuration](https://expr-lang.org/docs/configuration) 页面。
 
 在 expr 中,"环境"是带类型的(Go struct 或 map),配置是编译期选项集合。mbel 只有**一种数据环境**——普通的 `@ast.Value`,通常是对象;配置放在引擎实例上。文末对照表给出 expr 各选项在 mbel 的状态。
 
@@ -70,7 +69,7 @@ let b = @engine.new()
 
 | 预算 | 执行点 | 失败消息 |
 |---|---|---|
-| `max_nodes` | 解析期:表达式节点/token 上限(legacy 与 expr 前端;expr 前端按 AST 节点计,另有递归/嵌套护栏) | `expression is too large (more than N nodes)` / `expression is too deeply nested` |
+| `max_nodes` | 解析期:表达式节点/token 上限(经典方言与标准方言;标准方言按 AST 节点计,另有递归/嵌套护栏) | `expression is too large (more than N nodes)` / `expression is too deeply nested` |
 | `max_depth` | 求值期,**两引擎一致**(tree-walk 递归;字节码携带逐指令源 AST 深度) | `expression is too deep (more than N levels)` |
 | `max_steps` | 求值期分配点(数组、对象、range、切片、过滤器) | `memory budget exceeded` |
 

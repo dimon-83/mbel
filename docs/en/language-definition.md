@@ -1,16 +1,16 @@
 # Language definition
 
-Counterpart of expr-lang's
-[Language Definition](https://expr-lang.org/docs/language-definition) page,
-describing the expr dialect as implemented by mbel (baseline: expr v1.17.8,
-docs commit 4b31df3). Where mbel deviates from expr, the deviation is
+Defines the standard dialect as implemented by mbel (semantic baseline: the
+reference language, v1.17.8 — the engineering alignment matrix lives in
+docs/coverage-vs-expr.md). Where mbel deviates from the reference, the
+deviation is
 marked. The machine-checked coverage matrix lives in docs/coverage-vs-expr.md.
 
 Two notes up front:
 
 - **Modes.** Everything below describes `Engine::eval_expr` (Eval mode —
   dynamic env, typed runtime) and `Engine::eval_expr_checked` (Compile mode
-  — the same language plus static type errors). The legacy Jexl dialect
+  — the same language plus static type errors). The classic dialect (legacy)
   (`Engine::eval`) has different, JS-flavored semantics.
 - **Values.** Runtime values are `BoolVal`, `IntVal` (int64), `NumVal`
   (float64), `StrVal`, `ArrayVal`, `ObjectVal`, `NullVal`, `UndefVal`.
@@ -128,7 +128,7 @@ nums | map(# * 2)
 users | filter(.age >= 18) | map(.name) | first()
 ```
 
-mbel additionally accepts the Jexl bracket predicate `items[.price <= 2]`
+mbel additionally accepts the classic-dialect bracket predicate `items[.price <= 2]`
 (filters per element, chainable like any value) — expr has no bracket form
 and rejects a bare `.` after `[` (documented extension, see
 docs/expr-gap-analysis.md §6).
@@ -165,7 +165,7 @@ transforms are registered per engine instance (no reflection — see
 - Env is data only: no struct envs, no methods on values (reflection cut);
   method-call syntax parses but raises at lowering.
 - `type()` of floats returns `"number"` (legacy lock) instead of `"float"`.
-- String `in` (legacy dialect) is substring semantics; the expr front end
+- String `in` (classic dialect) is substring semantics; the standard dialect
   rejects nothing statically there (Eval mode follows legacy substring
   behavior for strings — divergence documented in coverage matrix).
 - String slices are character-based; regex is literal-only; `upper`/`lower`
@@ -173,8 +173,9 @@ transforms are registered per engine instance (no reflection — see
   doubles (integers above 2^53 lose exactness in context data; literals
   and `toJSON` of int64 are exact).
 - `//` is a comment (expr parity), not floor division.
-- Bracket predicates `items[.expr]` are accepted (Jexl compatibility);
-  expr-lang has no bracket form and rejects a bare `.` after `[`.
+- Bracket predicates `items[.expr]` are accepted (classic-dialect
+  compatibility);
+  the reference language has no bracket form and rejects a bare `.` after `[`.
 
 Machine-checked status for every row of the expr language definition is in
 docs/coverage-vs-expr.md; cut items and rationale in docs/expr-gap-analysis.md.

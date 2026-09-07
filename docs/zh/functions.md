@@ -1,6 +1,5 @@
 # 自定义函数
 
-对应 expr-lang 的 [Functions](https://expr-lang.org/docs/functions) 页面。
 
 在 expr 中,自定义函数来自环境(struct 方法或 map 值)或 `expr.Function(name, fn, ...类型提示)`。mbel 没有 Go 函数与反射,因此等价物是**在引擎实例上注册**:函数、transform、运算符都是按名字注册的 MoonBit 闭包。没有类型提示——参数以动态类型 `@ast.Value` 到达,由回调自行转换。
 
@@ -40,7 +39,7 @@
 
 ## Transforms(管道)
 
-`add_transform(name, fn)` 为 `|` 语法注册管道函数(legacy Jexl 管道与 expr 管道都会 desugar 成"左侧作首参"的调用):
+`add_transform(name, fn)` 为 `|` 语法注册管道函数(经典方言管道与标准方言管道都会 desugar 成"左侧作首参"的调用):
 
 ```moonbit
 @engine.Engine::add_transform(inst, "dbl", fn(args) {
@@ -53,18 +52,18 @@
 
 ## 自定义运算符
 
-legacy Jexl grammar 可逐实例扩展:
+经典方言的 grammar 可逐实例扩展:
 
 - `add_binary_op(operator, precedence, f)` — 急切操作数(两侧都是值)。
 - `add_binary_op_manual(operator, precedence, f)` — 惰性操作数(`(Lazy, Lazy) -> Value`),用于短路运算符。
 - `add_unary_op(operator, f)` — 一元运算符(优先级固定为极高)。
 - `remove_op(operator)` — 从该实例移除元素/运算符。
 
-expr 前端的运算符集合是固定的(见[语言定义](language-definition.md)→ 运算符);自定义运算符是 legacy 方言能力。
+标准方言的运算符集合是固定的(见[语言定义](language-definition.md)→ 运算符);自定义运算符是 legacy 方言能力。
 
 ## 内置库
 
-实例创建时已种子化内置库(56 个函数)+ 15 个谓词聚合;完整清单见 README 的 "expr-lang builtins" 一节与[语言定义](language-definition.md)→ 函数。
+实例创建时已种子化内置库(56 个函数)+ 15 个谓词聚合;完整清单见 README 的内置函数一节与[语言定义](language-definition.md)→ 函数。
 
 - 数学(8):abs ceil floor round max min mean median
 - 字符串(15):trim trimPrefix trimSuffix upper lower split splitAfter replace repeat join indexOf lastIndexOf hasPrefix hasSuffix string
@@ -80,6 +79,6 @@ expr 前端的运算符集合是固定的(见[语言定义](language-definition.
 
 ## 调用约定注意事项
 
-- 函数池中的名字在 expr 前端与 legacy 方言中都可调用。
+- 函数池中的名字在标准方言与经典方言中都可调用。
 - 聚合名在池查找之前被拦截——不要用 `add_function` 遮蔽(例如注册 `"map"` 不会影响聚合分发)。
 - 回调在一次求值内同步执行;回调必须终止(预算只对分配计费,不计回调 CPU 时间),且不得并发重入同一实例(并行请用不同实例)。

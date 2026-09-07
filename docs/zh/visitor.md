@@ -1,6 +1,5 @@
 # Visitor
 
-对应 expr-lang 的 [Visitor](https://expr-lang.org/docs/visitor) 页面。
 
 expr 提供 `ast.Walk(node, visitor)` —— 单个 `Visit(*ast.Node)` 回调会为解析后 AST 的每个节点调用,典型用途是编译前后做分析(收集标识符、静态检查)。
 
@@ -71,12 +70,12 @@ fn collect_idents(n : @expr.ENode) -> Array[String] {
 }
 ```
 
-节点集合与 expr 一致:字面量(`ENil`、`EBool`、`EInt`、`EFloat`、`EStr`、`EBytes`)、`EIdent`、`EMember`、`EIndex`、`ESlice`、`ECall`、`EPred`、`EArray`、`EMap`、`EUnary`、`EBinary`、`ECond`(三元、elvis、if/else)、`ELet`、`ESeq`、`EPointer`。
+节点集合与标准方言一致:字面量(`ENil`、`EBool`、`EInt`、`EFloat`、`EStr`、`EBytes`)、`EIdent`、`EMember`、`EIndex`、`ESlice`、`ECall`、`EPred`、`EArray`、`EMap`、`EUnary`、`EBinary`、`ECond`(三元、elvis、if/else)、`ELet`、`ESeq`、`EPointer`。
 
 把分析接入管线:用 `@expr.parse_limited(src, max_tokens)` 解析(token 预算守护资源),在 lower 前遍历 `ENode`。
 
 ## 注意:lower 后 AST ≠ expr AST
 
-expr 前端会把 `ENode` *lower* 成引擎执行的 legacy AST(`@ast.AstNode`)。遍历 lower 树可行,但节点类型不同(`@ast.BinaryExpressionNode`、`@ast.FilterExpressionNode`、`@ast.FunctionCallNode`,以及 expr 新增的 `SequenceNode`、`VariableDeclaratorNode`、`SliceNode`)。若分析针对源码语法,遍历 `ENode`;若针对执行形态,遍历 lower 树或反汇编输出。
+标准方言前端会把 `ENode` *lower* 成引擎执行的 legacy AST(`@ast.AstNode`)。遍历 lower 树可行,但节点类型不同(`@ast.BinaryExpressionNode`、`@ast.FilterExpressionNode`、`@ast.FunctionCallNode`,以及标准方言新增的 `SequenceNode`、`VariableDeclaratorNode`、`SliceNode`)。若分析针对源码语法,遍历 `ENode`;若针对执行形态,遍历 lower 树或反汇编输出。
 
 通用 visitor/walker API(镜像 `ast.Walk`)是可能的未来增强;上面内容已覆盖当前需求,无需新 API。

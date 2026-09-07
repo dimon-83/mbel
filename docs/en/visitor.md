@@ -1,6 +1,5 @@
 # Visitor
 
-Counterpart of expr-lang's [Visitor](https://expr-lang.org/docs/visitor)
 page.
 
 expr exposes `ast.Walk(node, visitor)` — a single `Visit(*ast.Node)` callback
@@ -95,7 +94,7 @@ then walk the resulting `ENode` before lowering with `@expr.lower`.
 
 ## Caveat: lowered AST vs expr AST
 
-The expr front end *lowers* `ENode` into the legacy AST (`@ast.AstNode`)
+The standard-dialect front end *lowers* `ENode` into the legacy AST (`@ast.AstNode`)
 that the engines execute. Walking the lowered tree is possible but its node
 types differ (`@ast.BinaryExpressionNode`, `@ast.FilterExpressionNode`,
 `@ast.FunctionCallNode`, plus the expr additions `SequenceNode`,

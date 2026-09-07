@@ -1,6 +1,6 @@
 # 语言定义
 
-对应 expr-lang 的 [Language Definition](https://expr-lang.org/docs/language-definition) 页面,描述 mbel 实现的 expr 方言(基线:expr v1.17.8,docs commit 4b31df3)。凡与 expr 有偏离处均已标注;可机检的覆盖矩阵见 docs/coverage-vs-expr.md。
+本页定义 mbel 实现的标准方言(语义基线:参考语言 v1.17.8——工程对齐矩阵见 docs/coverage-vs-expr.md)。凡与参考语义有偏离处均已标注。
 
 开头两点说明:
 
@@ -78,7 +78,7 @@ nums | map(# * 2)
 users | filter(.age >= 18) | map(.name) | first()
 ```
 
-mbel 额外接受 Jexl 方括号谓词 `items[.price <= 2]`(逐元素过滤,可继续链式访问)——expr 无方括号形式,`[` 后的裸 `.` 直接 parse error(已文档化的扩展,见 docs/expr-gap-analysis.md §6)。
+mbel 额外接受经典方言的方括号谓词 `items[.price <= 2]`(逐元素过滤,可继续链式访问)——参考语义无方括号形式,`[` 后的裸 `.` 直接 parse error(已文档化的扩展,见 docs/expr-gap-analysis.md §6)。
 
 谓词聚合(15 个):`all none any one filter map count sum find findIndex findLast findLastIndex groupBy sortBy reduce`。
 
@@ -89,17 +89,17 @@ mbel 额外接受 Jexl 方括号谓词 `items[.price <= 2]`(逐元素过滤,可�
 ## 错误与预算
 
 - 解析错误:`parse error at L:C: message`(带源码位置)。
-- Compile 模式(严格)错误采用 expr 文案与 expr FileError 布局——"msg
+- Compile 模式(严格)错误采用参考语义的错误文案与布局——"msg
   (L:C)" + 源码行 + caret(指向运算符/条件/调用起点):`invalid operation: + (mismatched types int and string)`、`non-bool expression (type int) used as condition`、`invalid argument for len (type int)`、`unknown name x`。
 - 运行时(Eval 模式)类型错误:`invalid operation: int + string`、`integer divide by zero`、`slice bounds must be integers`。
 - 预算:解析期节点/token 上限与递归护栏;求值期深度(两引擎);分配点步数预算——消息:`expression is too large (more than N nodes)`、`expression is too deeply nested`、`expression is too deep (more than N levels)`、`memory budget exceeded`。
 
-## 与 expr 的已知差异(摘要)
+## 与参考语义的已知差异(摘要)
 
 - 环境只能是数据:无 struct 环境、值上无方法(反射裁剪);方法调用语法可解析但在 lowering 时报错。
 - `type()` 对浮点返回 `"number"`(legacy 锁定)而非 `"float"`。
-- legacy 方言中字符串 `in` 是子串语义(expr 前端 Eval 模式对字符串沿用该行为——差异已在覆盖矩阵记录)。
+- 经典方言中字符串 `in` 是子串语义(标准方言 Eval 模式对字符串沿用该行为——差异已在覆盖矩阵记录)。
 - 字符串切片按字符;正则仅字面量;`upper`/`lower` 仅 ASCII;时间是最小 UTC/ISO 子集;JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。
-- 方括号谓词 `items[.expr]` 被接受(Jexl 兼容);expr-lang 无方括号形式,`[` 后的裸 `.` 直接报错。
+- 方括号谓词 `items[.expr]` 被接受(经典方言兼容);参考语义无方括号形式,`[` 后的裸 `.` 直接报错。
 
 expr 语言定义每一行的可机检状态见 docs/coverage-vs-expr.md;裁剪项与理由见 docs/expr-gap-analysis.md。

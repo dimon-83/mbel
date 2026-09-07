@@ -1,11 +1,9 @@
 # Getting started
 
 This is the mbel counterpart of
-[expr-lang's Getting Started](https://expr-lang.org/docs/getting-started).
-mbel evaluates expressions written in the expr dialect (plus a legacy Jexl
-dialect) in MoonBit, with two interchangeable engines and strict resource
+mbel evaluates expressions written in the standard dialect (plus a classic dialect (legacy)) in MoonBit, with two interchangeable engines and strict resource
 budgets. Evaluation is fully synchronous: `eval` and `evalSync` are the same
-operation (a deliberate, documented divergence from Jexl's Promise API).
+operation (a deliberate, documented divergence: evaluation is synchronous only).
 
 ## Installation
 
@@ -51,7 +49,7 @@ $ moon run cmd/main -- "reduce(nums, #acc + #, 100)" '{"nums": [1, 2, 3, 4, 5]}'
 115
 ```
 
-The CLI parses the legacy Jexl dialect by default; the demo transforms
+The CLI parses the classic dialect (legacy) by default; the demo transforms
 `dbl`, `first` and `concatWith` are registered, so pipes work:
 
 ```text
@@ -88,9 +86,16 @@ Three evaluation entries exist (see [Environment](environment.md)):
 
 | Entry | Dialect / mode | Behavior |
 |---|---|---|
-| `Engine::eval` | legacy Jexl | JS dynamic semantics, locked by the Jexl corpus |
-| `Engine::eval_expr` | expr, **Eval mode** | typed runtime semantics, no static checks |
-| `Engine::eval_expr_checked` | expr, **Compile mode** | runs the static checker first (type errors, unknown names) |
+| `Engine::eval` | classic dialect (legacy) | JS dynamic semantics, locked by the compatibility corpus |
+| `Engine::eval_expr` | standard dialect, **Eval mode** | typed runtime semantics, no static checks |
+| `Engine::eval_expr_checked` | standard dialect, **Compile mode** | runs the static checker first (type errors, unknown names) |
+
+Naming: the **standard dialect** is the modern expression syntax with typed
+semantics (spec: the [language definition](language-definition.md)); the
+**classic dialect (legacy)** is the v0.2-compatible syntax with JS-style
+dynamic semantics — locked, fixes only. Both dialects evaluate on either
+execution engine (the walk-tree interpreter or the bytecode VM) with
+identical results.
 
 Every entry runs on either engine — `Walk` (reference tree-walk, default)
 or `Vm` (bytecode) — with identical results and error messages, and honors
@@ -103,7 +108,7 @@ the instance budgets (see [Environment](environment.md) → Budgets):
 
 ## Compile once, evaluate many
 
-As in expr, compilation is separable from evaluation:
+Compilation is separable from evaluation:
 
 ```moonbit
 let e = @engine.Engine::compile(inst, "user.age * 2") catch {
@@ -123,4 +128,4 @@ are fully isolated — see the stability contract in the repository tests.
 
 - [Environment & configuration](environment.md) — contexts, `$env`, budgets.
 - [Custom functions](functions.md) — registering functions, transforms, operators.
-- [Language definition](language-definition.md) — the expr dialect in mbel.
+- [Language definition](language-definition.md) — the standard dialect in mbel.

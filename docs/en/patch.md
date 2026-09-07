@@ -1,6 +1,5 @@
 # Patch
 
-Counterpart of expr-lang's [Patch](https://expr-lang.org/docs/patch) page.
 
 expr lets you *modify an expression before compilation*: `ast.Patch(node,
 newNode)` replaces a node in place during an `ast.Walk`, wired in through
@@ -73,7 +72,7 @@ Expected disassembly shapes are asserted in `expr_test/opcode_test.mbt`.
 ## Operator overloading?
 
 expr's `expr.Operator("+", "add")` redirects an operator to a function.
-mbel has no typed operator overloading; in the legacy Jexl dialect you can
+mbel has no typed operator overloading; in the classic dialect you can
 redefine an operator *globally per instance* with `add_binary_op` /
 `remove_op` (see [Functions](functions.md) → Custom operators). In the expr
 front end the operator set and its typed semantics are fixed.

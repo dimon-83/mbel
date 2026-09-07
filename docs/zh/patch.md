@@ -1,6 +1,5 @@
 # Patch
 
-对应 expr-lang 的 [Patch](https://expr-lang.org/docs/patch) 页面。
 
 expr 允许*在编译前修改表达式*:`ast.Patch(node, newNode)` 在 `ast.Walk` 期间就地替换节点,通过 `expr.Patch(visitor)` 编译选项接入——用于把变量替换成常量、把运算符改写成函数调用,或实现运算符重载(`expr.Operator("+", "add")`)。
 
@@ -53,4 +52,4 @@ println(@evaluator.disassemble(prog))
 
 ## 运算符重载?
 
-expr 的 `expr.Operator("+", "add")` 把运算符重定向到函数。mbel 没有类型化运算符重载;在 legacy Jexl 方言中可以用 `add_binary_op`/`remove_op` 在实例内全局重定义运算符(见[自定义函数](functions.md)→ 自定义运算符)。在 expr 前端,运算符集合与类型化语义固定。
+参考语言通过 `expr.Operator("+", "add")` 把运算符重定向到函数。mbel 没有类型化运算符重载;在经典方言中可以用 `add_binary_op`/`remove_op` 在实例内全局重定义运算符(见[自定义函数](functions.md)→ 自定义运算符)。在标准方言中,运算符集合与类型化语义固定。

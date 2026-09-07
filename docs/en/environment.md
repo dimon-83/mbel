@@ -1,8 +1,5 @@
 # Environment and configuration
 
-Counterpart of expr-lang's
-[Environment](https://expr-lang.org/docs/environment) and
-[Configuration](https://expr-lang.org/docs/configuration) pages.
 
 In expr the "environment" is typed (a Go struct or a map) and configuration
 is a set of compile options. mbel has **one data environment** — a plain
@@ -98,7 +95,7 @@ Defaults: nodes 10000, depth 10000, steps 1000000.
 
 | Budget | Where enforced | On failure |
 |---|---|---|
-| `max_nodes` | parse time: expression node/token ceiling (legacy and expr front end; expr front end counts AST nodes, plus a recursion/nesting guard) | `expression is too large (more than N nodes)` / `expression is too deeply nested` |
+| `max_nodes` | parse time: expression node/token ceiling (classic and standard dialects; the standard dialect counts AST nodes, plus a recursion/nesting guard) | `expression is too large (more than N nodes)` / `expression is too deeply nested` |
 | `max_depth` | evaluation, **on both engines** (tree-walk recursion; bytecode carries per-instruction source-AST depths) | `expression is too deep (more than N levels)` |
 | `max_steps` | evaluation at allocation points (arrays, objects, ranges, slices, filters) | `memory budget exceeded` |
 
