@@ -179,6 +179,30 @@ let doubled = try {
 @engine.Engine::set_limits(inst, 10000, 10000, 1000000)
 ```
 
+### Expression-defined user functions (JSON)
+
+Functions can also be defined **as data** — the body is an expression
+source string compiled by the standard-dialect front end, loaded from a
+JSON file (the playground's 🧩 card) or built directly:
+
+```moonbit nocheck
+// params omitted: auto-extracted from the body's free identifiers
+let resolved = @engine.Engine::add_expression_functions(
+  inst,
+  [{ name: "tax", params: None, body: "price * rate" }],
+  Some(ctx), // unpassed params fall back to same-named env keys
+)
+// resolved == [("tax", ["price", "rate"])] — usable as tax(…), x | tax(),
+// and (classic dialect) x|tax; pass None instead for purely lexical params
+```
+
+Names must be valid identifiers and may not shadow aggregates;
+validation is atomic; bodies run on the instance's current engine with
+a per-function Vm program cache. File format v1, validation rules and
+persistence semantics (the wasm is stateless — hosts persist the JSON):
+see [docs/en/functions.md](docs/en/functions.md) →
+"Expression-defined functions".
+
 ### Choosing an engine: Walk (tree-walk) or Vm (bytecode)
 
 mbel ships two execution engines that share one semantic layer, so

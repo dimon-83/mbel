@@ -4,6 +4,35 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [Unreleased]
+
+### Added
+
+- **Expression-defined user functions**: register functions whose body
+  is an expression source string — `Engine::add_expression_functions(defs,
+  defaults)` (both pools, so `f(x)`, standard pipes and classic pipes
+  all resolve), standalone `user_function_params(name, body)`, and the
+  `UserFunctionDef { name, params?, body }` shape. `params` may be
+  omitted: free identifiers are auto-extracted from the (compiled,
+  folded) body in first-appearance order. `defaults` (typically the
+  evaluation env) provides fallback bindings for unpassed parameters;
+  explicit arguments win. Names are validated atomically (identifiers,
+  not keywords/aggregates/`$env`, unique); ordinary builtins may be
+  overridden via upsert. Vm bytecode is cached per function; recursion
+  is bounded by the host stack (budgets restart per call).
+- **Playground custom-functions card**: loads a functions file
+  (format v1: `{version, functions:[{name, params?, body,
+  description?}], env?}`) via file picker/editor, renders resolved
+  signatures as chips, persists in localStorage, restores on reload.
+  New wasm exports `eval_with_functions(code, env, funcs_json, mode,
+  engine)` (mode ∈ eval/checked/legacy; env doubles as the functions'
+  default bindings) and `describe_functions(funcs_json)`; the
+  `env` key is a page-level example environment filled into the env
+  box on load. Example file `playground/functions.example.json`.
+- Test suite grown to 228 tests × 3 targets (engine-level userfunc
+  suites on both engines: calls, pipes, strict-mode whitelist, env
+  fallback, recursion, mutual references, validation error paths).
+
 ## [0.3.1] — 2026-09-07
 
 Stage-4 close-out patch: the remaining 4.4 items landed, together with

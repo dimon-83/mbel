@@ -50,6 +50,59 @@
 
 批量注册:`add_functions([...])`、`add_transforms([...])`;查询:`get_function(name) -> Fn?`、`get_transform(name) -> Fn?`。
 
+## 表达式定义函数(JSON 文件)
+
+闭包注册要求你能写 MoonBit;**表达式定义函数**把这一能力开放给数据:函数体本身是一段表达式源码,从结构化定义(JSON 文件)加载注册。
+
+```moonbit nocheck
+// params 省略时,自动从函数体抽取自由标识符作为参数表
+let resolved = @engine.Engine::add_expression_functions(
+  inst,
+  [{ name: "tax", params: None, body: "price * rate" }],
+  None,
+)
+// resolved == [("tax", ["price", "rate"])]
+
+@engine.Engine::eval_expr(inst, "tax(100, 0.13)", @ast.ObjectVal([]))
+@engine.Engine::eval_expr(inst, "100 | tax()", @ast.ObjectVal([])) // 标准管道
+@engine.Engine::eval(inst, "100|tax", @ast.ObjectVal([]))          // 经典管道
+```
+
+- **双池注册**:`f(x)`、标准管道 `x | f()`、经典管道 `x | f` 三种写法都可用。
+- **参数自动抽取**(引擎助手 `user_function_params(name, body)` 可单独调用):函数体经标准方言前端编译并常量折叠后,收集自由标识符——排除 let 绑定名、调用 callee、成员下钻根(`a.b` 的 `a`)、相对谓词标识符(`.price`)与 `$env`,按首现顺序去重。
+- **env 缺省回退**:第三参 `defaults` 传对象(通常是本次求值的 env)时,函数体上下文 = defaults 键值 + 位置实参按参数名覆盖——env `{price:200, rate:0.5}` 下 `tax()` 得 `100`,`tax(80)` 得 `40`;传 `None` 则参数纯词法,未传即 undefined。
+- **校验原子**:名字必须是合法标识符(禁 13 个关键字、禁 `$env`)、禁与 15 个聚合同名(聚合分发先于函数池,同名注册永远调不到)、定义内重名拒绝;body 编译错误带 `function "名":` 前缀。任何一处失败则什么都不注册。普通内置名允许覆盖(upsert,同 `add_function`)。
+- **求值语义**:函数体在注册它的实例上按当前引擎(Walk/Vm)求值,Vm 字节码按函数缓存;错误带 `function "名":` 前缀上抛。每次调用的深度/步数预算重新计数(与闭包注册一致),因此递归只受宿主栈限制——请自行保证终止。
+
+### 函数文件格式 v1(playground)
+
+playground「🧩 自定义函数」卡片加载 UTF-8 JSON(示例见 `playground/functions.example.json`):
+
+```json
+{
+  "version": 1,
+  "functions": [
+    { "name": "double", "params": ["x"], "body": "x * 2", "description": "翻倍" },
+    { "name": "tax", "body": "price * rate", "description": "params 省略,自动抽取" }
+  ],
+  "env": { "price": 200, "rate": 0.5 }
+}
+```
+
+| 字段 | 规则 |
+| --- | --- |
+| `version` | 必填,仅接受 `1` |
+| `functions` | 必填数组(可为空) |
+| `functions[].name` | 必填,合法标识符,非关键字/聚合/`$env`,文件内唯一 |
+| `functions[].params` | 可省略(自动抽取);字符串数组,元素为合法非关键字标识符且不重复 |
+| `functions[].body` | 必填,标准方言表达式 |
+| `functions[].description` | 可选,展示在函数卡片提示里 |
+| `env` | 可选对象,**页面级示例环境**:载入文件时由页面填进「环境变量」框,引擎本身忽略 |
+
+未知字段一律拒绝(防笔误);校验失败不产生半注册状态,错误消息带 `functions[i]` 索引定位。
+
+**持久化语义**:wasm 无状态——每次导出调用都新建引擎,应用重启后自定义函数**不会**自动加载。playground 把文件内容存入 localStorage 并在页面加载时自动恢复;嵌入 mbel.wasm 的应用需自行持久化该 JSON,并在每次调用 `eval_with_functions(code, env, funcs_json, mode, engine)` 时随请求传入(`mode` ∈ `eval`/`checked`/`legacy`)。使用 MoonBit API 的宿主没有这个问题:Engine 实例常驻,注册一次长期有效。
+
 ## 自定义运算符
 
 经典方言的 grammar 可逐实例扩展:

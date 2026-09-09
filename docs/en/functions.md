@@ -67,6 +67,93 @@ the left side as the first argument):
 Batch registration: `add_functions([...])`, `add_transforms([...])`; lookup:
 `get_function(name) -> Fn?`, `get_transform(name) -> Fn?`.
 
+## Expression-defined functions (JSON file)
+
+Closure registration requires writing MoonBit. **Expression-defined
+functions** open the same capability to data: the function body is an
+expression source string, loaded from a structured (JSON) definition.
+
+```moonbit nocheck
+// params omitted: free identifiers are auto-extracted from the body
+let resolved = @engine.Engine::add_expression_functions(
+  inst,
+  [{ name: "tax", params: None, body: "price * rate" }],
+  None,
+)
+// resolved == [("tax", ["price", "rate"])]
+
+@engine.Engine::eval_expr(inst, "tax(100, 0.13)", @ast.ObjectVal([]))
+@engine.Engine::eval_expr(inst, "100 | tax()", @ast.ObjectVal([])) // standard pipe
+@engine.Engine::eval(inst, "100|tax", @ast.ObjectVal([]))          // classic pipe
+```
+
+- **Both pools**: `f(x)`, standard pipes `x | f()`, and classic pipes
+  `x | f` all resolve.
+- **Auto-extracted params** (the standalone helper
+  `user_function_params(name, body)` is also available): the body is
+  compiled with the standard-dialect front end and constant-folded,
+  then free identifiers are collected — let-bound names, call callees,
+  member drill-down roots (`a` in `a.b`), relative predicate
+  identifiers (`.price`) and `$env` are excluded — in first-appearance
+  order, deduplicated.
+- **env-default fallback**: the third argument `defaults` takes an
+  object (typically the evaluation env); the body context is the
+  defaults pairs overridden by the positional arguments' parameter
+  names — under env `{price: 200, rate: 0.5}`, `tax()` yields `100`
+  and `tax(80)` yields `40`. Pass `None` for purely lexical parameters
+  (unpassed parameters evaluate as undefined).
+- **Atomic validation**: names must be valid identifiers (no keywords,
+  no `$env`), must not collide with the 15 aggregates (aggregate
+  dispatch intercepts before the pool lookup — such a registration
+  could never be called), and duplicate names are rejected; body
+  compile errors carry a `function "name":` prefix. Any failure
+  registers nothing. Ordinary builtin names may be overridden (upsert,
+  like `add_function`).
+- **Evaluation semantics**: bodies run on the registering instance's
+  current engine (Walk/Vm; the Vm caches one program per function);
+  errors carry a `function "name":` prefix. Depth/step budgets restart
+  per call (like native registered callbacks), so recursion is bounded
+  only by the host stack — make sure your functions terminate.
+
+### Functions file format v1 (playground)
+
+The playground's "🧩 Custom functions" card loads UTF-8 JSON (see
+`playground/functions.example.json`):
+
+```json
+{
+  "version": 1,
+  "functions": [
+    { "name": "double", "params": ["x"], "body": "x * 2", "description": "Doubles" },
+    { "name": "tax", "body": "price * rate", "description": "params omitted, auto-extracted" }
+  ],
+  "env": { "price": 200, "rate": 0.5 }
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `version` | required, only `1` accepted |
+| `functions` | required array (may be empty) |
+| `functions[].name` | required, valid identifier, not a keyword / aggregate / `$env`, unique in the file |
+| `functions[].params` | optional (auto-extracted); array of strings, each a valid non-keyword identifier, unique |
+| `functions[].body` | required, standard-dialect expression |
+| `functions[].description` | optional, shown in the card tooltip |
+| `env` | optional object, **page-level example environment**: the page fills the env box on load; the engine ignores it |
+
+Unknown fields are rejected (typo protection); validation is atomic and
+errors carry the `functions[i]` index.
+
+**Persistence semantics**: the wasm is stateless — every export call
+builds a fresh engine, and restarting the host does **not** reload
+custom functions. The playground stores the file in localStorage and
+restores it on page load; applications embedding mbel.wasm must persist
+the JSON themselves and pass it on every
+`eval_with_functions(code, env, funcs_json, mode, engine)` call
+(`mode` ∈ `eval`/`checked`/`legacy`). Hosts using the MoonBit API
+directly are unaffected: a long-lived Engine instance keeps its
+registrations.
+
 ## Custom operators
 
 The classic-dialect grammar is extensible per instance:
