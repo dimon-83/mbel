@@ -614,7 +614,15 @@ if ok {
       statusEl.innerHTML = '✅ WASM 已就绪 <span class="ready">●</span>';
       evalBtn.disabled = false;
     } catch (err) {
-      statusEl.innerHTML = `❌ 加载失败: ${err.message} <span class="error">●</span>`;
+      // dynamic error text via textContent only (never innerHTML)
+      statusEl.textContent = '';
+      statusEl.append(
+        document.createTextNode('❌ 加载失败: ' + err.message + ' '),
+      );
+      const dot = document.createElement('span');
+      dot.className = 'error';
+      dot.textContent = '●';
+      statusEl.append(dot);
       evalBtn.disabled = true;
       console.error('WASM load error:', err);
     }
