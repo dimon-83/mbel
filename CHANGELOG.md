@@ -4,7 +4,11 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
-## [Unreleased]
+## [0.3.2] — 2026-09-09
+
+Custom user-function extension (expression-defined functions, JSON
+function files, playground drawer UI) plus the security hardening pass
+(resource-exhaustion guards from the sandbox assessment).
 
 ### Added
 
@@ -19,19 +23,23 @@ All notable changes to mbel are documented here. The format follows
   explicit arguments win. Names are validated atomically (identifiers,
   not keywords/aggregates/`$env`, unique); ordinary builtins may be
   overridden via upsert. Vm bytecode is cached per function; recursion
-  is bounded by the host stack (budgets restart per call).
-- **Playground custom-functions card**: loads a functions file
-  (format v1: `{version, functions:[{name, params?, body,
-  description?}], env?}`) via file picker/editor, renders resolved
-  signatures as chips, persists in localStorage, restores on reload.
-  New wasm exports `eval_with_functions(code, env, funcs_json, mode,
-  engine)` (mode ∈ eval/checked/legacy; env doubles as the functions'
-  default bindings) and `describe_functions(funcs_json)`; the
-  `env` key is a page-level example environment filled into the env
-  box on load. Example file `playground/functions.example.json`.
-- Test suite grown to 228 tests × 3 targets (engine-level userfunc
-  suites on both engines: calls, pipes, strict-mode whitelist, env
-  fallback, recursion, mutual references, validation error paths).
+  is capped by an instance-wide depth counter (see Security).
+- **Playground custom functions**: a 🧩 drawer (right-side popup, opened
+  from the control row) loads a functions file (format v1:
+  `{version, functions:[{name, params?, body, description?}], env?}`)
+  via file picker or a pretty-printed editor, renders resolved
+  signatures as chips and persists in localStorage (restored on
+  reload); the file's `env` example fills the environment box. New wasm
+  exports `eval_with_functions(code, env, funcs_json, mode, engine)`
+  (mode ∈ eval/checked/legacy; env doubles as the functions' default
+  bindings) and `describe_functions(funcs_json)`. Layout regrouped:
+  dialect/engine selectors and buttons span one row above the
+  expression; the env JSON is a large pretty-printed textarea; quick
+  examples and the advanced view stack under the result card. Example
+  file `playground/functions.example.json`.
+- Engine-level userfunc suites on both engines: calls, pipes,
+  strict-mode whitelist, env fallback, recursion, mutual references and
+  validation error paths.
 
 ### Security (resource-exhaustion hardening)
 
