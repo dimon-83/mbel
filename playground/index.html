@@ -244,6 +244,94 @@
       cursor: help;
     }
 
+    /* Page columns: left = expression, right = result stack */
+    .page-col {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      min-width: 0;
+    }
+
+    /* Control row above the expression */
+    .controls-row {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      margin-bottom: 0.75rem;
+    }
+    .controls-row .ctl {
+      flex: 1 1 160px;
+      min-width: 150px;
+    }
+    .controls-row .ctl label {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    .controls-row .ctl-btns {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    /* Right-side drawer for custom functions */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 40;
+    }
+    .drawer-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100vh;
+      width: min(540px, 94vw);
+      background: #1a1d27;
+      border-left: 1px solid #2d313a;
+      box-shadow: -10px 0 28px rgba(0, 0, 0, 0.4);
+      transform: translateX(103%);
+      transition: transform 0.22s ease;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header {
+      padding: 0.7rem 1rem;
+      background: #222631;
+      border-bottom: 1px solid #2d313a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: #e2e8f0;
+    }
+    .drawer-close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 1rem;
+      cursor: pointer;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+    }
+    .drawer-close:hover { color: #e2e8f0; background: #2d313a; }
+    .drawer-body {
+      padding: 1rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
     /* AST Viewer */
     .ast-viewer {
       background: #0f1117;
@@ -315,81 +403,115 @@
     <div class="status" id="status">⏳ 正在加载 WASM ...</div>
   </div>
 
-  <!-- Main -->
-  <div class="main-grid">
+  <!-- Main:左列 = 表达式;右列 = 结果 + 示例 + 高级视图 -->
+  <div class="main-grid" style="margin-top:1.25rem;">
     <!-- Left: Input -->
-    <div class="card">
-      <div class="card-header">
-        <span>📐 表达式</span>
-        <span style="font-size:0.7rem;color:#64748b;">Ctrl+Enter 执行</span>
-      </div>
-      <div class="card-body">
-        <textarea id="exprInput" rows="3" placeholder='例如: 6 + x * 2 > 10 ? "big" : "small"'>user.age >= 18 ? "成人" : "未成年"</textarea>
-
-        <div style="margin-top:0.75rem;">
-          <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:0.25rem;">📦 环境变量 (JSON)</label>
-          <input id="envInput" type="text" placeholder='{"user": {"age": 25}}' value='{"user": {"age": 25}}' />
+    <div class="page-col">
+      <div class="card">
+        <div class="card-header">
+          <span>📐 表达式</span>
+          <span style="font-size:0.7rem;color:#64748b;">Ctrl+Enter 执行</span>
         </div>
+        <div class="card-body">
+          <div class="controls-row">
+            <div class="ctl">
+              <label>📐 方言 / 求值模式</label>
+              <select id="versionSelect">
+                <option value="expr">标准方言 · Eval(动态求值)</option>
+                <option value="checked">标准方言 · Compile(严格检查)</option>
+                <option value="jexl">经典方言(legacy)</option>
+              </select>
+            </div>
+            <div class="ctl">
+              <label>🗂 执行引擎</label>
+              <select id="engineSelect">
+                <option value="walk">walk-tree(树遍历解释器,默认)</option>
+                <option value="vm">bytecode VM(字节码虚拟机)</option>
+              </select>
+            </div>
+            <div class="ctl-btns">
+              <button class="btn btn-primary" id="evalBtn">▶ 执行</button>
+              <button class="btn btn-outline" id="clearBtn">清空</button>
+              <button class="btn btn-outline" id="fnOpenBtn">🧩 自定义函数</button>
+            </div>
+          </div>
 
-        <div class="row" style="margin-top:0.75rem;">
-          <div class="col">
-            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:0.25rem;">📐 方言 / 求值模式</label>
-            <select id="versionSelect" style="width:100%;">
-              <option value="expr">标准方言 · Eval(动态求值)</option>
-              <option value="checked">标准方言 · Compile(严格检查)</option>
-              <option value="jexl">经典方言(legacy)</option>
-            </select>
+          <textarea id="exprInput" rows="3" placeholder='例如: 6 + x * 2 > 10 ? "big" : "small"'>user.age >= 18 ? "成人" : "未成年"</textarea>
+
+          <div style="margin-top:0.75rem;">
+            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:0.25rem;">📦 环境变量 (JSON)</label>
+            <textarea id="envInput" rows="10" placeholder='{}'>{"user": {"age": 25}}</textarea>
           </div>
-          <div class="col">
-            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:0.25rem;">🗂 执行引擎</label>
-            <select id="engineSelect" style="width:100%;">
-              <option value="walk">walk-tree(树遍历解释器,默认)</option>
-              <option value="vm">bytecode VM(字节码虚拟机)</option>
-            </select>
+
+          <div style="margin-top:0.5rem;font-size:0.72rem;color:#64748b;line-height:1.5;">
+            <b>术语</b>:<b>标准方言</b> —— 现代表达式语法,类型化语义(规格见 <a style="color:#60a5fa;" href="../docs/zh/language-definition.md" target="_blank">语言定义</a>);<b>经典方言(legacy)</b> —— v0.2 起锁定的兼容语法,JS 弱类型语义(如 <code>1 + "a"</code> → <code>"1a"</code>),只修不增。<b>Eval</b> = 动态求值(类型化运行时错误);<b>Compile</b> = 先静态类型检查。<b>执行引擎</b>:两种方言都可在 walk-tree 解释器或字节码 VM 上求值,同一语义层,结果一致(行为由一致性套件锁定)。差异是设计使然,不是 bug。
           </div>
-          <div class="col" style="display:flex;align-items:flex-end;gap:0.5rem;flex-wrap:wrap;">
-            <button class="btn btn-primary" id="evalBtn">▶ 执行</button>
-            <button class="btn btn-outline" id="clearBtn">清空</button>
-          </div>
-        </div>
-        <div style="margin-top:0.5rem;font-size:0.72rem;color:#64748b;line-height:1.5;">
-          <b>术语</b>:<b>标准方言</b> —— 现代表达式语法,类型化语义(规格见 <a style="color:#60a5fa;" href="../docs/zh/language-definition.md" target="_blank">语言定义</a>);<b>经典方言(legacy)</b> —— v0.2 起锁定的兼容语法,JS 弱类型语义(如 <code>1 + "a"</code> → <code>"1a"</code>),只修不增。<b>Eval</b> = 动态求值(类型化运行时错误);<b>Compile</b> = 先静态类型检查。<b>执行引擎</b>:两种方言都可在 walk-tree 解释器或字节码 VM 上求值,同一语义层,结果一致(行为由一致性套件锁定)。差异是设计使然,不是 bug。
         </div>
       </div>
     </div>
 
-    <!-- Right: Result -->
-    <div class="card">
-      <div class="card-header">
-        <span>📋 执行结果</span>
-        <span id="timerDisplay" style="font-size:0.7rem;color:#64748b;"></span>
+    <!-- Right: Result + Examples + Advanced -->
+    <div class="page-col">
+      <div class="card">
+        <div class="card-header">
+          <span>📋 执行结果</span>
+          <span id="timerDisplay" style="font-size:0.7rem;color:#64748b;"></span>
+        </div>
+        <div class="card-body">
+          <div id="resultBox" class="result-box">等待执行...</div>
+          <div class="stats">
+            <span>⏱ 耗时: <strong id="execTime">—</strong></span>
+            <span>📊 结果类型: <strong id="resultType">—</strong></span>
+            <span>🔢 表达式长度: <strong id="exprLen">—</strong></span>
+          </div>
+        </div>
       </div>
-      <div class="card-body">
-        <div id="resultBox" class="result-box">等待执行...</div>
-        <div class="stats">
-          <span>⏱ 耗时: <strong id="execTime">—</strong></span>
-          <span>📊 结果类型: <strong id="resultType">—</strong></span>
-          <span>🔢 表达式长度: <strong id="exprLen">—</strong></span>
+
+      <div class="card">
+        <div class="card-header"><span>⚡ 快速示例</span></div>
+        <div class="card-body">
+          <div class="examples" id="examplesContainer"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span>🔬 高级视图</span></div>
+        <div class="card-body">
+          <div class="tabs" id="tabHeaders">
+            <button class="active" data-tab="ast">🌳 AST</button>
+            <button data-tab="bytecode">⚙️ 字节码</button>
+            <button data-tab="debug">🐛 Debug</button>
+          </div>
+          <div id="tabAst" class="tab-content active">
+            <div class="ast-viewer" id="astViewer">执行表达式后此处显示 AST</div>
+          </div>
+          <div id="tabBytecode" class="tab-content">
+            <div class="ast-viewer" id="bytecodeViewer">执行表达式后此处显示字节码</div>
+          </div>
+          <div id="tabDebug" class="tab-content">
+            <div class="ast-viewer" id="debugViewer">执行表达式后此处显示调试信息</div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Custom functions -->
-  <div class="card" style="margin-top:1.25rem;">
-    <div class="card-header">
-      <span>🧩 自定义函数</span>
-      <span id="fnStatus" style="font-size:0.7rem;color:#64748b;">未加载</span>
+  <!-- 自定义函数:右侧抽屉 -->
+  <div class="drawer-overlay" id="fnOverlay"></div>
+  <aside class="drawer" id="fnDrawer">
+    <div class="drawer-header">
+      <span>🧩 自定义函数&nbsp;<span id="fnStatus" style="font-size:0.7rem;color:#64748b;font-weight:400;">未加载</span></span>
+      <button class="drawer-close" id="fnCloseBtn" title="关闭 (Esc)">✕</button>
     </div>
-    <div class="card-body">
-      <textarea id="fnInput" rows="5" placeholder='{
+    <div class="drawer-body">
+      <textarea id="fnInput" rows="16" placeholder='{
   "version": 1,
   "functions": [
     { "name": "tax", "body": "price * rate", "description": "税率计算;params 省略时自动从 body 抽取 (price, rate)" }
   ],
   "env": { "price": 100, "rate": 0.13 }
 }'></textarea>
-      <div style="margin-top:0.6rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <div style="margin-top:0.6rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" id="fnApplyBtn">✅ 应用</button>
         <input type="file" id="fnFile" accept=".json,application/json" style="display:none;" />
         <button class="btn btn-outline btn-sm" id="fnFileBtn">📂 打开文件…</button>
@@ -402,39 +524,7 @@
         加载后三种模式都可调用:<code>f(x)</code>、<code>x | f()</code>(经典方言 <code>x | f</code>)。<code>params</code> 可省略 —— 按函数体自由标识符自动抽取;调用时<b>未传实参的参数回退取环境变量同名键</b>(显式实参优先)。文件格式见 <a style="color:#60a5fa;" href="../docs/zh/functions.md" target="_blank">自定义函数文档</a>。函数保存在浏览器 localStorage,重启页面自动恢复。
       </div>
     </div>
-  </div>
-
-  <!-- Examples & Advanced -->
-  <div class="main-grid" style="margin-top:1.25rem;">
-    <!-- Examples -->
-    <div class="card">
-      <div class="card-header"><span>⚡ 快速示例</span></div>
-      <div class="card-body">
-        <div class="examples" id="examplesContainer"></div>
-      </div>
-    </div>
-
-    <!-- Advanced Tabs: AST / Bytecode -->
-    <div class="card">
-      <div class="card-header"><span>🔬 高级视图</span></div>
-      <div class="card-body">
-        <div class="tabs" id="tabHeaders">
-          <button class="active" data-tab="ast">🌳 AST</button>
-          <button data-tab="bytecode">⚙️ 字节码</button>
-          <button data-tab="debug">🐛 Debug</button>
-        </div>
-        <div id="tabAst" class="tab-content active">
-          <div class="ast-viewer" id="astViewer">执行表达式后此处显示 AST</div>
-        </div>
-        <div id="tabBytecode" class="tab-content">
-          <div class="ast-viewer" id="bytecodeViewer">执行表达式后此处显示字节码</div>
-        </div>
-        <div id="tabDebug" class="tab-content">
-          <div class="ast-viewer" id="debugViewer">执行表达式后此处显示调试信息</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  </aside>
 
   <div style="margin-top:1rem;font-size:0.72rem;color:#64748b;">
     mbel · WASM 构建 (wasm-gc + js-string builtins):需要 Chrome/Edge 130+、Firefox 134+、Safari 18.4+。请通过 HTTP 访问本目录(例如 <code>python3 -m http.server</code>),勿用 file:// 打开。AST 与字节码视图基于标准方言;字节码为字节码 VM 实际执行(常量折叠后)的指令序列。
@@ -697,10 +787,43 @@ if ok {
   const fnFileBtn = document.getElementById('fnFileBtn');
   const fnExampleBtn = document.getElementById('fnExampleBtn');
   const fnClearBtn = document.getElementById('fnClearBtn');
+  const fnOpenBtn = document.getElementById('fnOpenBtn');
+  const fnDrawer = document.getElementById('fnDrawer');
+  const fnOverlay = document.getElementById('fnOverlay');
+  const fnCloseBtn = document.getElementById('fnCloseBtn');
   let activeFuncsJson = null;
   let fnLoadedCount = 0;
   // 模式选择器 → eval_with_functions 的 mode 参数
   const MODE_TO_PARAM = { expr: 'eval', jexl: 'legacy', checked: 'checked' };
+
+  // ---------- JSON 排版与抽屉 ----------
+  // 有效 JSON 一律 pretty 展示;无效则原样返回(交给「应用」时报错)。
+  function prettyJson(text) {
+    try { return JSON.stringify(JSON.parse(text), null, 2); } catch (_) { return text; }
+  }
+  function openFnDrawer() {
+    fnDrawer.classList.add('open');
+    fnOverlay.classList.add('open');
+  }
+  function closeFnDrawer() {
+    fnDrawer.classList.remove('open');
+    fnOverlay.classList.remove('open');
+  }
+  fnOpenBtn.addEventListener('click', openFnDrawer);
+  fnCloseBtn.addEventListener('click', closeFnDrawer);
+  fnOverlay.addEventListener('click', closeFnDrawer);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeFnDrawer();
+  });
+  // 失焦时自动排版(仅当仍是合法 JSON;非法留给「应用」报错)
+  fnInput.addEventListener('blur', () => {
+    const v = fnInput.value.trim();
+    if (v) fnInput.value = prettyJson(v);
+  });
+  envInput.addEventListener('blur', () => {
+    const v = envInput.value.trim();
+    if (v) envInput.value = prettyJson(v);
+  });
 
   function setFnError(msg) {
     if (msg) {
@@ -745,6 +868,7 @@ if ok {
     renderFnChips(sigs, jsonText);
     setFnError(null);
     fnStatus.innerHTML = '✅ 已加载 ' + sigs.length + ' 个函数';
+    fnOpenBtn.textContent = '🧩 自定义函数 (' + sigs.length + ')';
     if (opts.fillEnv) {
       try {
         const f = JSON.parse(jsonText);
@@ -763,15 +887,20 @@ if ok {
     fnChips.innerHTML = '';
     setFnError(null);
     fnStatus.textContent = '未加载';
+    fnOpenBtn.textContent = '🧩 自定义函数';
   }
 
   function loadFunctionsText(text) {
-    fnInput.value = text;
-    applyFunctions(text, { fillEnv: true });
+    const pretty = prettyJson(text);
+    fnInput.value = pretty;
+    applyFunctions(pretty, { fillEnv: true });
   }
 
   fnApplyBtn.addEventListener('click', () => {
-    applyFunctions(fnInput.value.trim());
+    const text = fnInput.value.trim();
+    if (applyFunctions(text)) {
+      fnInput.value = prettyJson(text);
+    }
   });
   fnFileBtn.addEventListener('click', () => fnFile.click());
   fnFile.addEventListener('change', () => {
@@ -815,7 +944,7 @@ if ok {
       btn.title = `${ex.expr}  →  ${ex.env}` + (ex.note ? `\n${ex.note}` : '');
       btn.addEventListener('click', () => {
         exprInput.value = ex.expr;
-        envInput.value = ex.env;
+        envInput.value = prettyJson(ex.env);
         // 每个示例重置到自己的方言/模式:带 mode 的切过去,其余回默认,
         // 避免上一个示例(如 Jexl 过滤)遗留的模式造成误解。
         versionSelect.value = ex.mode || 'expr';
@@ -852,13 +981,15 @@ if ok {
 
   // ---------- 启动 ----------
   renderExamples();
+  envInput.value = prettyJson(envInput.value);
   loadWasm().then(() => {
     // 恢复上次加载的自定义函数(wasm 就绪后才能校验)
     let saved = null;
     try { saved = localStorage.getItem(FN_STORAGE_KEY); } catch (_) {}
     if (saved) {
-      fnInput.value = saved;
-      applyFunctions(saved);
+      const pretty = prettyJson(saved);
+      fnInput.value = pretty;
+      applyFunctions(pretty);
     }
     if (exprInput.value.trim()) runEval();
   });
