@@ -230,6 +230,20 @@
       color: #e2e8f0;
     }
 
+    /* Function chips */
+    .fn-chip {
+      display: inline-block;
+      background: #222631;
+      border: 1px solid #2d313a;
+      border-radius: 14px;
+      padding: 0.1rem 0.7rem;
+      font-size: 0.7rem;
+      font-family: monospace;
+      color: #86efac;
+      margin: 0 0.25rem 0.25rem 0;
+      cursor: help;
+    }
+
     /* AST Viewer */
     .ast-viewer {
       background: #0f1117;
@@ -357,6 +371,35 @@
           <span>📊 结果类型: <strong id="resultType">—</strong></span>
           <span>🔢 表达式长度: <strong id="exprLen">—</strong></span>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom functions -->
+  <div class="card" style="margin-top:1.25rem;">
+    <div class="card-header">
+      <span>🧩 自定义函数</span>
+      <span id="fnStatus" style="font-size:0.7rem;color:#64748b;">未加载</span>
+    </div>
+    <div class="card-body">
+      <textarea id="fnInput" rows="5" placeholder='{
+  "version": 1,
+  "functions": [
+    { "name": "tax", "body": "price * rate", "description": "税率计算;params 省略时自动从 body 抽取 (price, rate)" }
+  ],
+  "env": { "price": 100, "rate": 0.13 }
+}'></textarea>
+      <div style="margin-top:0.6rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-primary btn-sm" id="fnApplyBtn">✅ 应用</button>
+        <input type="file" id="fnFile" accept=".json,application/json" style="display:none;" />
+        <button class="btn btn-outline btn-sm" id="fnFileBtn">📂 打开文件…</button>
+        <button class="btn btn-outline btn-sm" id="fnExampleBtn">📥 载入示例(含示例 env)</button>
+        <button class="btn btn-outline btn-sm" id="fnClearBtn">🗑 清除</button>
+      </div>
+      <div class="examples" id="fnChips" style="margin-top:0.6rem;"></div>
+      <div id="fnError" style="margin-top:0.4rem;font-size:0.75rem;color:#fca5a5;display:none;"></div>
+      <div style="margin-top:0.4rem;font-size:0.72rem;color:#64748b;line-height:1.5;">
+        加载后三种模式都可调用:<code>f(x)</code>、<code>x | f()</code>(经典方言 <code>x | f</code>)。<code>params</code> 可省略 —— 按函数体自由标识符自动抽取;调用时<b>未传实参的参数回退取环境变量同名键</b>(显式实参优先)。文件格式见 <a style="color:#60a5fa;" href="../docs/zh/functions.md" target="_blank">自定义函数文档</a>。函数保存在浏览器 localStorage,重启页面自动恢复。
       </div>
     </div>
   </div>
@@ -560,6 +603,7 @@ if ok {
       '[Debug Info]',
       '方言/模式: ' + (MODE_NAMES[mode] || mode),
       '执行引擎: ' + (ENGINE_NAMES[engine] || engine),
+      '自定义函数: ' + (activeFuncsJson ? '已加载 ' + fnLoadedCount + ' 个(🧩 卡片,env 作为缺省参数)' : '无'),
       '表达式: ' + expr,
       '环境变量: ' + env,
       '结果: ' + (res.error ? 'Error — ' + res.error : res.value),
@@ -594,9 +638,13 @@ if ok {
     setTimeout(() => {
       const mode = versionSelect.value;
       const engine = engineSelect.value;
-      const evalName = ENGINE_EXPORTS[mode] || 'eval_expr';
+      // 有自定义函数时统一走 eval_with_functions(mode: eval/checked/legacy),
+      // 否则保持原有三个导出,行为不变。
+      const doCall = () => activeFuncsJson
+        ? callExport('eval_with_functions', [expr, env, activeFuncsJson, MODE_TO_PARAM[mode] || 'eval', engine])
+        : callExport(ENGINE_EXPORTS[mode] || 'eval_expr', [expr, env, engine]);
 
-      const call = callExport(evalName, [expr, env, engine]);
+      const call = doCall();
       const res = call.error ? call : parseOut(call.value);
 
       // 单次求值常在宿主时钟分辨率(1ms 粗化)之下,直接读数只会是 0 或
@@ -610,7 +658,7 @@ if ok {
       } else {
         const t1 = nsClock.now();
         while (runs < 20000 && Number(nsClock.now() - t1) < 40_000_000) {
-          callExport(evalName, [expr, env, engine]);
+          doCall();
           runs += 1;
         }
         elapsedNs = Math.round(Number(nsClock.now() - t1) / runs);
@@ -634,6 +682,117 @@ if ok {
       debugViewer.textContent = debugInfo(mode, engine, expr, env, res, elapsedNs, runs);
     }, 10);
   }
+
+  // ---------- 自定义函数 ----------
+  // 函数文件格式 v1:{version:1, functions:[{name, params?, body, description?}], env?}
+  // wasm 侧 eval_with_functions / describe_functions 负责权威校验;
+  // env 键是页面级示例环境,由本页在载入时填进环境变量框。
+  const FN_STORAGE_KEY = 'mbel.userFunctions';
+  const fnInput = document.getElementById('fnInput');
+  const fnStatus = document.getElementById('fnStatus');
+  const fnChips = document.getElementById('fnChips');
+  const fnError = document.getElementById('fnError');
+  const fnFile = document.getElementById('fnFile');
+  const fnApplyBtn = document.getElementById('fnApplyBtn');
+  const fnFileBtn = document.getElementById('fnFileBtn');
+  const fnExampleBtn = document.getElementById('fnExampleBtn');
+  const fnClearBtn = document.getElementById('fnClearBtn');
+  let activeFuncsJson = null;
+  let fnLoadedCount = 0;
+  // 模式选择器 → eval_with_functions 的 mode 参数
+  const MODE_TO_PARAM = { expr: 'eval', jexl: 'legacy', checked: 'checked' };
+
+  function setFnError(msg) {
+    if (msg) {
+      fnError.textContent = '❌ ' + msg;
+      fnError.style.display = 'block';
+    } else {
+      fnError.style.display = 'none';
+    }
+  }
+
+  function renderFnChips(sigs, rawJson) {
+    fnChips.innerHTML = '';
+    const bodies = {};
+    try {
+      (JSON.parse(rawJson).functions || []).forEach(f => { bodies[f.name] = f.body || ''; });
+    } catch (_) {}
+    sigs.forEach(s => {
+      const chip = document.createElement('span');
+      chip.className = 'fn-chip';
+      chip.textContent = s.name + '(' + (s.params || []).join(', ') + ')';
+      const body = bodies[s.name] || '';
+      chip.title = (s.description ? s.description + '\n' : '') +
+        (body ? 'body: ' + body + '\n' : '') +
+        '未传实参的参数回退 env 同名键;显式实参优先';
+      fnChips.appendChild(chip);
+    });
+  }
+
+  // 校验并激活函数文件;成功返回 true。任何错误显示在卡片内,不弹窗。
+  function applyFunctions(jsonText, opts) {
+    opts = opts || {};
+    if (!jsonText) { setFnError('请先粘贴函数 JSON 或打开 .json 文件'); return false; }
+    const call = callExport('describe_functions', [jsonText]);
+    if (call.error) { setFnError(call.error); return false; }
+    const out = parseOut(call.value);
+    if (out.error) { setFnError(out.error); return false; }
+    let sigs;
+    try { sigs = JSON.parse(out.value); } catch (_) { setFnError('无法解析签名输出'); return false; }
+    activeFuncsJson = jsonText;
+    fnLoadedCount = sigs.length;
+    try { localStorage.setItem(FN_STORAGE_KEY, jsonText); } catch (_) {}
+    renderFnChips(sigs, jsonText);
+    setFnError(null);
+    fnStatus.innerHTML = '✅ 已加载 ' + sigs.length + ' 个函数';
+    if (opts.fillEnv) {
+      try {
+        const f = JSON.parse(jsonText);
+        if (f && f.env && typeof f.env === 'object') {
+          envInput.value = JSON.stringify(f.env, null, 2);
+        }
+      } catch (_) {}
+    }
+    return true;
+  }
+
+  function clearFunctions() {
+    activeFuncsJson = null;
+    fnLoadedCount = 0;
+    try { localStorage.removeItem(FN_STORAGE_KEY); } catch (_) {}
+    fnChips.innerHTML = '';
+    setFnError(null);
+    fnStatus.textContent = '未加载';
+  }
+
+  function loadFunctionsText(text) {
+    fnInput.value = text;
+    applyFunctions(text, { fillEnv: true });
+  }
+
+  fnApplyBtn.addEventListener('click', () => {
+    applyFunctions(fnInput.value.trim());
+  });
+  fnFileBtn.addEventListener('click', () => fnFile.click());
+  fnFile.addEventListener('change', () => {
+    const file = fnFile.files && fnFile.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => loadFunctionsText(String(reader.result || ''));
+    reader.onerror = () => setFnError('读取文件失败');
+    reader.readAsText(file);
+    fnFile.value = '';
+  });
+  fnExampleBtn.addEventListener('click', async () => {
+    try {
+      const resp = await fetch('./functions.example.json');
+      if (!resp.ok) { setFnError('HTTP ' + resp.status + ' — functions.example.json 不存在'); return; }
+      loadFunctionsText(await resp.text());
+    } catch (err) {
+      setFnError('载入示例失败: ' + (err.message || err));
+    }
+  });
+  fnClearBtn.addEventListener('click', clearFunctions);
 
   // ---------- Tab 切换 ----------
   document.querySelectorAll('#tabHeaders button').forEach(btn => {
@@ -694,6 +853,13 @@ if ok {
   // ---------- 启动 ----------
   renderExamples();
   loadWasm().then(() => {
+    // 恢复上次加载的自定义函数(wasm 就绪后才能校验)
+    let saved = null;
+    try { saved = localStorage.getItem(FN_STORAGE_KEY); } catch (_) {}
+    if (saved) {
+      fnInput.value = saved;
+      applyFunctions(saved);
+    }
     if (exprInput.value.trim()) runEval();
   });
 })();

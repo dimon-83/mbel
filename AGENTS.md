@@ -140,10 +140,24 @@ You can browse and install extra skills here:
 - `playground/` is a self-contained browser test page: `index.html` plus the
   built `mbel.wasm`. The wasm entry is the `playground/web` package, which
   exports `eval_expr`, `eval_jexl`, `eval_checked` (each `(expr, env,
-  engine)` where `engine` is `"walk"` or `"vm"`), `disassemble` and
+  engine)` where `engine` is `"walk"` or `"vm"`), `eval_with_functions`
+  (`(code, env, funcs_json, mode, engine)` — `mode` is `"eval"`,
+  `"checked"` or `"legacy"`; the env doubles as the custom functions'
+  default bindings), `describe_functions` (`(funcs_json)` → resolved
+  signature list), `disassemble` and
   `dump_ast` — all taking and returning native JS strings. `web.mbt` mirrors
   `cmd/main`'s canonical serializer and env parsing (kept in sync by hand;
   main packages cannot be imported).
+
+- Custom functions file (format v1: `{version, functions: [{name,
+  params?, body, description?}], env?}`) is loaded by the page's 🧩
+  card; `params` may be omitted (auto-extracted from the body), `env`
+  is a page-level example environment the engine ignores. Validation is
+  authoritative on the wasm side (`parse_user_functions` + engine
+  checks, atomic); the page persists the file in localStorage and
+  restores it on load — the wasm is stateless, so embedding hosts must
+  pass the JSON on every call. See docs/{en,zh}/functions.md →
+  "Expression-defined functions" and `playground/functions.example.json`.
 
 - Rebuild and deploy the wasm (wasm-gc release):
 

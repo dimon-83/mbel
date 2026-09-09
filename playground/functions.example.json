@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "functions": [
+    {
+      "name": "double",
+      "params": ["x"],
+      "body": "x * 2",
+      "description": "翻倍:double(21) → 42;管道 21 | double() 亦可(经典方言 21|double)"
+    },
+    {
+      "name": "clamp",
+      "params": ["v", "lo", "hi"],
+      "body": "max(min(v, hi), lo)",
+      "description": "把 v 限制在 [lo, hi]:clamp(5, 1, 3) → 3"
+    },
+    {
+      "name": "tax",
+      "body": "price * rate",
+      "description": "税率:params 省略,自动从 body 抽取 (price, rate)。未传实参回退 env:tax() → 100,tax(80) → 40,tax(80, 0.25) → 20"
+    }
+  ],
+  "env": {
+    "price": 200,
+    "rate": 0.5,
+    "items": [
+      { "name": "apple", "price": 1.5 },
+      { "name": "pear", "price": 3 }
+    ]
+  }
+}

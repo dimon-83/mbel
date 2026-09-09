@@ -227,3 +227,252 @@ fn hex4(code : Int) -> String {
   }
   out.to_string()
 }
+
+///|
+/// A user function parsed from a functions file (format v1).
+struct UserFnSpec {
+  name : String
+  params : Array[String]?
+  body : String
+  description : String
+}
+
+///|
+/// Validates a functions file (format v1) and returns the parsed
+/// specs. Known top-level keys: `version` (must be 1), `functions`
+/// (array), `env` (object — a page-level example, ignored by the
+/// engine). Known function keys: `name`, `params`, `body`,
+/// `description`; unknown keys are rejected as likely typos. Errors
+/// carry the `functions[i]` index.
+fn parse_user_functions(j : Json) -> Result[Array[UserFnSpec], String] {
+  let obj = match j {
+    Object(m) => m
+    _ => return Err("functions file must be a JSON object")
+  }
+  let mut version = 0.0
+  let mut seen_version = false
+  let mut funcs : Array[Json] = []
+  let mut seen_funcs = false
+  for kv in obj.to_array() {
+    let (k, v) = kv
+    match k {
+      "version" =>
+        match v {
+          Number(d, ..) => {
+            version = d
+            seen_version = true
+          }
+          _ => return Err("functions file: \"version\" must be a number")
+        }
+      "functions" =>
+        match v {
+          Array(xs) => {
+            funcs = xs
+            seen_funcs = true
+          }
+          _ => return Err("functions file: \"functions\" must be an array")
+        }
+      // page-level example environment; the engine ignores it
+      "env" =>
+        match v {
+          Object(_) => ()
+          _ => return Err("functions file: \"env\" must be an object")
+        }
+      _ => return Err("functions file: unknown field \"" + k + "\"")
+    }
+  }
+  if !seen_version {
+    return Err("functions file: missing \"version\"")
+  }
+  if version != 1.0 {
+    return Err("functions file: unsupported version " + version.to_string())
+  }
+  if !seen_funcs {
+    return Err("functions file: missing \"functions\"")
+  }
+  let specs : Array[UserFnSpec] = []
+  for i in 0..<funcs.length() {
+    let fo = match funcs[i] {
+      Object(m) => m
+      _ => return Err("functions[" + i.to_string() + "]: must be an object")
+    }
+    let mut name = ""
+    let mut params : Array[String]? = None
+    let mut body = ""
+    let mut description = ""
+    let mut has_name = false
+    let mut has_body = false
+    for kv in fo.to_array() {
+      let (k, v) = kv
+      match k {
+        "name" =>
+          match v {
+            String(s) => {
+              name = s
+              has_name = true
+            }
+            _ =>
+              return Err(
+                "functions[" + i.to_string() + "]: \"name\" must be a string",
+              )
+          }
+        "params" =>
+          match v {
+            Array(xs) => {
+              let ps : Array[String] = []
+              for pi in 0..<xs.length() {
+                match xs[pi] {
+                  String(s) => ps.push(s)
+                  _ =>
+                    return Err(
+                      "functions[" +
+                      i.to_string() +
+                      "]: \"params\" must be an array of strings",
+                    )
+                }
+              }
+              params = Some(ps)
+            }
+            _ =>
+              return Err(
+                "functions[" +
+                i.to_string() +
+                "]: \"params\" must be an array of strings",
+              )
+          }
+        "body" =>
+          match v {
+            String(s) => {
+              body = s
+              has_body = true
+            }
+            _ =>
+              return Err(
+                "functions[" + i.to_string() + "]: \"body\" must be a string",
+              )
+          }
+        "description" =>
+          match v {
+            String(s) => description = s
+            _ =>
+              return Err(
+                "functions[" +
+                i.to_string() +
+                "]: \"description\" must be a string",
+              )
+          }
+        _ =>
+          return Err(
+            "functions[" + i.to_string() + "]: unknown field \"" + k + "\"",
+          )
+      }
+    }
+    if !has_name {
+      return Err("functions[" + i.to_string() + "]: missing \"name\"")
+    }
+    if !has_body {
+      return Err("functions[" + i.to_string() + "]: missing \"body\"")
+    }
+    specs.push({ name, params, body, description })
+  }
+  Ok(specs)
+}
+
+///|
+/// Validates a functions file and returns the resolved signature list
+/// `[{"name":...,"params":[...],"description":...}]` — params are the
+/// explicit list or auto-extracted from the body (first-appearance
+/// order). Page-facing: used to render the function chips.
+pub fn describe_functions(funcs_json : String) -> String {
+  let fj = @json.parse(funcs_json) catch {
+    _ => return error_out("functions file is not valid JSON")
+  }
+  let specs = match parse_user_functions(fj) {
+    Ok(specs) => specs
+    Err(msg) => return error_out(msg)
+  }
+  let out = StringBuilder::new()
+  out.write_string("[")
+  let mut first = true
+  for sp in specs {
+    if !first {
+      out.write_string(",")
+    }
+    first = false
+    let ps = match sp.params {
+      Some(ps) => ps
+      None =>
+        @engine.user_function_params(sp.name, sp.body) catch {
+          @engine.EngineErr(m) => return error_out(m)
+        }
+    }
+    out.write_string("{\"name\":")
+    out.write_string(canon_str(sp.name))
+    out.write_string(",\"params\":[")
+    out.write_string(ps.map(fn(p) { canon_str(p) }).join(","))
+    out.write_string("],\"description\":")
+    out.write_string(canon_str(sp.description))
+    out.write_string("}")
+  }
+  out.write_string("]")
+  out.to_string()
+}
+
+///|
+/// Evaluates with user functions loaded from a functions file (format
+/// v1). `mode` selects the dialect entry — "eval" (standard, default),
+/// "checked" (standard, strict), "legacy" (classic); `engine` selects
+/// "walk" (default) or "vm". The evaluation env doubles as the
+/// functions' default bindings: unpassed parameters fall back to
+/// same-named env keys, explicit arguments win. All failures (file
+/// format, registration, evaluation) return {"$error": "..."}.
+pub fn eval_with_functions(
+  expr : String,
+  env : String,
+  funcs_json : String,
+  mode : String,
+  engine : String,
+) -> String {
+  let ctx = json_to_value(@json.parse(env)) catch {
+    _ => return error_out("env is not valid JSON")
+  }
+  let fj = @json.parse(funcs_json) catch {
+    _ => return error_out("functions file is not valid JSON")
+  }
+  let specs = match parse_user_functions(fj) {
+    Ok(specs) => specs
+    Err(msg) => return error_out(msg)
+  }
+  let inst = @engine.new()
+  register_demo_transforms(inst)
+  if engine == "vm" {
+    @engine.Engine::set_engine(inst, Vm)
+  }
+  let defs : Array[@engine.UserFunctionDef] = []
+  for sp in specs {
+    defs.push({ name: sp.name, params: sp.params, body: sp.body })
+  }
+  // non-object envs simply provide no default bindings
+  let defaults : @ast.Value? = match ctx {
+    @ast.ObjectVal(_) => Some(ctx)
+    _ => None
+  }
+  let registered = @engine.Engine::add_expression_functions(
+    inst, defs, defaults,
+  ) catch {
+    @engine.EngineErr(m) => return error_out(m)
+  }
+  ignore(registered)
+  let v = try {
+    if mode == "checked" {
+      @engine.Engine::eval_expr_checked(inst, expr, ctx)
+    } else if mode == "legacy" {
+      @engine.Engine::eval(inst, expr, ctx)
+    } else {
+      @engine.Engine::eval_expr(inst, expr, ctx)
+    }
+  } catch {
+    @engine.EngineErr(m) => return error_out(m)
+  }
+  canon(v)
+}

@@ -16,6 +16,8 @@ options(
         "eval_jexl",
         "eval_expr",
         "eval_checked",
+        "eval_with_functions",
+        "describe_functions",
         "disassemble",
         "dump_ast",
       ],
