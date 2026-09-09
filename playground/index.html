@@ -254,11 +254,11 @@
 
     /* Control row above the expression */
     .controls-row {
+      grid-column: 1 / -1;
       display: flex;
       gap: 0.6rem;
       flex-wrap: wrap;
       align-items: flex-end;
-      margin-bottom: 0.75rem;
     }
     .controls-row .ctl {
       flex: 1 1 160px;
@@ -405,6 +405,29 @@
 
   <!-- Main:左列 = 表达式;右列 = 结果 + 示例 + 高级视图 -->
   <div class="main-grid" style="margin-top:1.25rem;">
+    <div class="controls-row">
+      <div class="ctl">
+        <label>📐 方言 / 求值模式</label>
+        <select id="versionSelect">
+          <option value="expr">标准方言 · Eval(动态求值)</option>
+          <option value="checked">标准方言 · Compile(严格检查)</option>
+          <option value="jexl">经典方言(legacy)</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>🗂 执行引擎</label>
+        <select id="engineSelect">
+          <option value="walk">walk-tree(树遍历解释器,默认)</option>
+          <option value="vm">bytecode VM(字节码虚拟机)</option>
+        </select>
+      </div>
+      <div class="ctl-btns">
+        <button class="btn btn-primary" id="evalBtn">▶ 执行</button>
+        <button class="btn btn-outline" id="clearBtn">清空</button>
+        <button class="btn btn-outline" id="fnOpenBtn">🧩 自定义函数</button>
+      </div>
+    </div>
+
     <!-- Left: Input -->
     <div class="page-col">
       <div class="card">
@@ -413,29 +436,6 @@
           <span style="font-size:0.7rem;color:#64748b;">Ctrl+Enter 执行</span>
         </div>
         <div class="card-body">
-          <div class="controls-row">
-            <div class="ctl">
-              <label>📐 方言 / 求值模式</label>
-              <select id="versionSelect">
-                <option value="expr">标准方言 · Eval(动态求值)</option>
-                <option value="checked">标准方言 · Compile(严格检查)</option>
-                <option value="jexl">经典方言(legacy)</option>
-              </select>
-            </div>
-            <div class="ctl">
-              <label>🗂 执行引擎</label>
-              <select id="engineSelect">
-                <option value="walk">walk-tree(树遍历解释器,默认)</option>
-                <option value="vm">bytecode VM(字节码虚拟机)</option>
-              </select>
-            </div>
-            <div class="ctl-btns">
-              <button class="btn btn-primary" id="evalBtn">▶ 执行</button>
-              <button class="btn btn-outline" id="clearBtn">清空</button>
-              <button class="btn btn-outline" id="fnOpenBtn">🧩 自定义函数</button>
-            </div>
-          </div>
-
           <textarea id="exprInput" rows="3" placeholder='例如: 6 + x * 2 > 10 ? "big" : "small"'>user.age >= 18 ? "成人" : "未成年"</textarea>
 
           <div style="margin-top:0.75rem;">
