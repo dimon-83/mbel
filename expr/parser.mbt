@@ -65,6 +65,18 @@ pub fn parse_limited(
   source : String,
   max_tokens : Int,
 ) -> ENode raise ParseErrorExpr {
+  // Source-length cap: tokenization materializes the whole token array
+  // (and a single huge string literal is ONE token), so node budgets
+  // cannot bound lexer memory. 0 disables the budget, hence the cap.
+  if max_tokens > 0 && source.length().to_int64() > max_tokens.to_int64() * 16L {
+    raise ParseErrorExpr::ParseErrExpr(
+      "expression is too large (more than " +
+      (max_tokens.to_int64() * 16L).to_string() +
+      " characters)",
+      1,
+      1,
+    )
+  }
   let toks = tokenize(source) catch {
     LexErr(msg, line, col) => raise ParseErrorExpr::ParseErrExpr(msg, line, col)
   }

@@ -234,7 +234,13 @@ fn str_bin_op(
 
 ///|
 /// expr's `..` range: both bounds must be integers; the element count
-/// is charged against the step budget so `1..100000000` fails fast.
+/// is capped before materialization (mirrors expr's DefaultMemoryBudget
+/// of 1e6 elements), so a huge range fails fast — with no allocation.
+/// The span is computed in Int64: the 32-bit `hi - lo` subtraction used
+/// to wrap for extreme bounds ((-2^31)..(2^31-1) → -1), letting the
+/// ~2^32-push loop run uncharged. Operator fns sit behind an opaque
+/// callback boundary and cannot reach the evaluator's step budget, so
+/// the cap is absolute rather than budget-relative.
 fn range_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   let x = to_number(a)
   let y = to_number(b)
@@ -243,7 +249,7 @@ fn range_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   }
   let lo = x.to_int()
   let hi = y.to_int()
-  if hi - lo > 1000000 {
+  if hi.to_int64() - lo.to_int64() > 1000000L {
     // Mirrors expr's DefaultMemoryBudget (1e6 elements).
     raise EvalError::EvalErr("memory budget exceeded")
   }
@@ -409,11 +415,13 @@ fn power(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 /// JS `==` / `!=` — loose equality (typed/expr equality when an
 /// IntVal is involved: numerics promote, cross-kind is false).
 fn eq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  guard_value_nesting(a, b)
   @ast.BoolVal(if typed_bin(a, b) { typed_eq(a, b) } else { loose_eq(a, b) })
 }
 
 ///|
 fn neq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  guard_value_nesting(a, b)
   @ast.BoolVal(if typed_bin(a, b) { !typed_eq(a, b) } else { !loose_eq(a, b) })
 }
 
@@ -421,6 +429,7 @@ fn neq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 /// JS `in`: substring check on strings, strict element match on arrays,
 /// false for anything else.
 fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
+  guard_value_nesting(a, b)
   match b {
     @ast.StrVal(s) => @ast.BoolVal(index_of(s, to_string(a)) != -1)
     @ast.ArrayVal(xs) => {
@@ -434,6 +443,61 @@ fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
       @ast.BoolVal(found)
     }
     _ => @ast.BoolVal(false)
+  }
+}
+
+///|
+/// Iterative maximum container-nesting depth of a value (no host
+/// recursion), the probe used before structural equality and
+/// serialization: env data nested deeper than the cap would overflow
+/// the host stack inside the recursive comparator/serializer, so the
+/// raising entries reject it first with a clean error.
+pub fn value_nesting_depth(root : @ast.Value) -> Int {
+  let vals : Array[@ast.Value] = [root]
+  let depths : Array[Int] = [1]
+  let mut max = 0
+  let mut i = 0
+  while i < vals.length() {
+    let d = depths[i]
+    if d > max {
+      max = d
+    }
+    match vals[i] {
+      @ast.ArrayVal(xs) =>
+        for x in xs {
+          vals.push(x)
+          depths.push(d + 1)
+        }
+      @ast.ObjectVal(ps) =>
+        for kv in ps {
+          let (_, v) = kv
+          vals.push(v)
+          depths.push(d + 1)
+        }
+      _ => ()
+    }
+    i += 1
+  }
+  max
+}
+
+///|
+/// Deep-nesting cap for structural equality and serialization — mirrors
+/// core json's parser limit; 1024 recursion frames sit far below every
+/// target's host stack.
+pub fn max_value_nesting() -> Int {
+  1024
+}
+
+///|
+fn guard_value_nesting(a : @ast.Value, b : @ast.Value) -> Unit raise EvalError {
+  if value_nesting_depth(a) > max_value_nesting() ||
+    value_nesting_depth(b) > max_value_nesting() {
+    raise EvalError::EvalErr(
+      "value nesting too deep (more than " +
+      max_value_nesting().to_string() +
+      " levels)",
+    )
   }
 }
 
@@ -710,7 +774,8 @@ pub fn default_max_depth() -> Int {
 }
 
 ///|
-/// Default max evaluation steps (an eval-node visit), mirroring
+/// Default max evaluation steps (charged at allocation points only —
+/// array/object literals, ranges, relative filters), mirroring
 /// expr's memory budget magnitude. 0 disables the limit.
 pub fn default_max_steps() -> Int {
   1000000
@@ -803,8 +868,8 @@ pub fn new_relative_evaluator(
 ///|
 /// Evaluates an AST node, returning its value. Mirrors Jexl's
 /// `handlers[ast.type]` dispatch, wrapped in step/depth accounting:
-/// every eval visit draws from the shared step budget, and recursion
-/// depth is capped (mirroring expr's node + memory budgets).
+/// recursion depth is capped (mirroring expr's node + memory budgets);
+/// the step budget is charged at allocation points only (below).
 pub fn Evaluator::eval(
   self : Evaluator,
   ast : @ast.AstNode,

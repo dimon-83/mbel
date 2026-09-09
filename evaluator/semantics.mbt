@@ -201,6 +201,15 @@ pub fn nan() -> Double {
 /// JS ToString for primitives — numbers use shortest formatting, which
 /// MoonBit's Double::to_string matches for the values Jexl uses.
 pub fn to_string(v : @ast.Value) -> String {
+  to_string_depth(v, 0)
+}
+
+///|
+/// Depth-carrying ToString: arrays nested deeper than the deep-value
+/// cap render as "…" instead of recursing off the host stack (legacy
+/// JS itself RangeErrors on deep arrays; mbel truncates). Depth is
+/// bounded by max_value_nesting (1024), far below every host stack.
+fn to_string_depth(v : @ast.Value, depth : Int) -> String {
   match v {
     @ast.BoolVal(b) => if b { "true" } else { "false" }
     @ast.NumVal(d) => d.to_string()
@@ -208,7 +217,7 @@ pub fn to_string(v : @ast.Value) -> String {
     @ast.StrVal(s) => s
     @ast.NullVal => "null"
     @ast.UndefVal => "undefined"
-    @ast.ArrayVal(xs) => arr_to_string(xs)
+    @ast.ArrayVal(xs) => arr_to_string_depth(xs, depth)
     // Byte values print as their decimal content, comma-joined like
     // arrays (expr's string() would print Go's "[97 98 99]" — mbel
     // keeps its own array convention; see builtin type/string tests).
@@ -233,7 +242,15 @@ pub fn to_string(v : @ast.Value) -> String {
 /// JS Array.prototype.toString — elements joined with "," after
 /// ToString coercion.
 fn arr_to_string(xs : Array[@ast.Value]) -> String {
-  let parts = xs.map(to_string)
+  arr_to_string_depth(xs, 0)
+}
+
+///|
+fn arr_to_string_depth(xs : Array[@ast.Value], depth : Int) -> String {
+  if depth > 1024 {
+    return "…"
+  }
+  let parts = xs.map(fn(x) { to_string_depth(x, depth + 1) })
   let mut out = ""
   let mut first = true
   for p in parts {

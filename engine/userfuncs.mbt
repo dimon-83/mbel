@@ -296,11 +296,24 @@ fn userfn_context(
 }
 
 ///|
+/// User-function call-depth cap. Each user-function call raises the
+/// instance's userfn_depth by one and restores it on return, so
+/// recursion — direct, mutual, or across registration batches — stops
+/// with a clean error well below the host stack limit on every target
+/// (the js target's stack is the smallest; 256 nested closure +
+/// evaluator frames stay comfortably under it).
+fn userfn_max_call_depth() -> Int {
+  256
+}
+
+///|
 /// The registered callback: rebuilds the body context per call and
 /// dispatches on the instance's current engine mode, exactly like
 /// Expression::eval — Walk runs a fresh limited tree-walk evaluator;
 /// Vm compiles the folded body to bytecode once (one-slot cache) and
 /// reuses the program. Errors carry the function name as prefix.
+/// Recursion is bounded by the instance-wide userfn_depth counter
+/// (evaluator budgets reset per call, so depth is the recursion guard).
 fn make_userfn_closure(
   engine : Engine,
   name : String,
@@ -313,6 +326,14 @@ fn make_userfn_closure(
   // reference), compiled against the instance grammar at first call.
   let program_cache : Array[@evaluator.Program] = []
   fn(args : Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError {
+    if engine.userfn_depth >= userfn_max_call_depth() {
+      raise @evaluator.EvalError::EvalErr(
+        "function call depth exceeded (more than " +
+        userfn_max_call_depth().to_string() +
+        " levels)",
+      )
+    }
+    engine.userfn_depth = engine.userfn_depth + 1
     let ctx = userfn_context(params, args, defaults)
     let result = try {
       match engine.engine {
@@ -343,9 +364,12 @@ fn make_userfn_closure(
         }
       }
     } catch {
-      @evaluator.EvalErr(msg) =>
+      @evaluator.EvalErr(msg) => {
+        engine.userfn_depth = engine.userfn_depth - 1
         raise @evaluator.EvalError::EvalErr("function \"" + name + "\": " + msg)
+      }
     }
+    engine.userfn_depth = engine.userfn_depth - 1
     result
   }
 }

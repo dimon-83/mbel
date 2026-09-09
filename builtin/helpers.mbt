@@ -395,7 +395,17 @@ pub fn all_ints(vs : Array[@ast.Value]) -> Bool {
 /// Go's json.Marshal; Json::number would round beyond 2^53). Object
 /// keys keep insertion order; strings escape `"` `\` and control
 /// chars; NaN/Infinity become null (Jexl parity, per the review).
-pub fn to_json_string(v : @ast.Value) -> String {
+pub fn to_json_string(v : @ast.Value) -> String raise @evaluator.EvalError {
+  // Deep-nesting pre-probe: write_json recurses per container level,
+  // so attacker-deep env data would overflow the host stack first.
+  // (1024 recursive frames sit far below every target's stack.)
+  if @evaluator.value_nesting_depth(v) > @evaluator.max_value_nesting() {
+    raise @evaluator.EvalErr(
+      "value nesting too deep (more than " +
+      @evaluator.max_value_nesting().to_string() +
+      " levels)",
+    )
+  }
   let b = StringBuilder::new()
   write_json(b, v)
   b.to_string()

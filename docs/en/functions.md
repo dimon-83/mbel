@@ -154,6 +154,38 @@ the JSON themselves and pass it on every
 directly are unaffected: a long-lived Engine instance keeps its
 registrations.
 
+## Security model
+
+The engine confines both "code" and "data" to a **pure-evaluation
+sandbox**: it depends only on core, with no FFI/host access, no
+eval-of-eval, no reflection; classic-dialect calls are pool lookups of
+registered closures. Expressions therefore cannot reach the host
+system — the danger is not code escape but **resource exhaustion
+(DoS)**, defended in two layers:
+
+1. **A functions file is code — load it only from trusted sources.**
+   Custom-function bodies are expression source, constrained by the
+   same parser and budgets as direct evaluation; names/params are pool
+   lookup keys and are never re-parsed. In the playground, a loaded
+   .json has the same power as your expression.
+2. **Resource budgets are enforced inside the engine** (0 disables):
+
+| Guard | Cap | When |
+| --- | --- | --- |
+| parse node budget (both dialects) | max_nodes = 10000 | at parse |
+| parse frames / AST depth | 1000 / 1000 | expr parse |
+| **source-length cap** | max_nodes × 16 chars | before tokenizing (a single huge string literal is one token) |
+| eval depth / steps | 10000 / 1000000 (charged at allocations) | at eval (both engines) |
+| range literal `..` | ≤ 1e6 elements (Int64 span, no 32-bit wrap) | before materializing |
+| repeat output | ≤ 1e6 chars (amplification: `repeat(long, 1e6)` rejected) | before building |
+| **user-function recursion depth** | 256 levels (instance-wide counter; mutual and cross-batch recursion included) | per call |
+| deep-nested values (== / toJSON / to_string / flatten) | 1024 levels | before comparison/serialization |
+
+Exceeding any cap raises a clean evaluation error (e.g. `function call
+depth exceeded (more than 256 levels)`, `value nesting too deep (more
+than 1024 levels)`) instead of crashing the host. Hosts evaluating
+third-party expressions keep these budgets on by default.
+
 ## Custom operators
 
 The classic-dialect grammar is extensible per instance:

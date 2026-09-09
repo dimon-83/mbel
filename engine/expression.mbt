@@ -22,6 +22,18 @@ pub struct Expression {
 /// multiple times — useful when the owning instance's grammar
 /// changes. Mirrors `Expression.compile`.
 pub fn Expression::compile(self : Expression) -> Unit raise EngineError {
+  // Source-length cap (see expr/parser.mbt parse_limited): the legacy
+  // lexer tokenizes the whole input — and a huge string literal is one
+  // token — before the node budget applies, so bound lexer memory
+  // here. 0 disables the budget, hence the cap.
+  let maxn = self.engine.max_nodes
+  if maxn > 0 && self.expr_str.length().to_int64() > maxn.to_int64() * 16L {
+    raise EngineError::EngineErr(
+      "expression is too large (more than " +
+      (maxn.to_int64() * 16L).to_string() +
+      " characters)",
+    )
+  }
   let toks = match @lexer.tokenize_with(self.expr_str, self.engine.elements) {
     Ok(t) => t
     Err(msg) => raise EngineError::EngineErr(msg)

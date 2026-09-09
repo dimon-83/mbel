@@ -33,6 +33,32 @@ All notable changes to mbel are documented here. The format follows
   suites on both engines: calls, pipes, strict-mode whitelist, env
   fallback, recursion, mutual references, validation error paths).
 
+### Security (resource-exhaustion hardening)
+
+- **User-function recursion cap**: expression-defined functions are
+  bounded by an instance-wide 256-level call-depth counter (direct,
+  mutual, and cross-batch recursion), raising
+  `function call depth exceeded (more than 256 levels)` instead of
+  overflowing the host stack.
+- **Range span computed in Int64**: `(-2147483648)..2147483647` used to
+  wrap the 32-bit `hi - lo` check and attempt a ~2^32-push materialization;
+  the 1e6-element cap now holds for extreme bounds too.
+- **Source-length cap**: both dialect entries reject input longer than
+  max_nodes × 16 characters before tokenizing (a single huge string
+  literal is one token, so node budgets could not bound lexer memory).
+- **repeat output cap**: the output size (len × count) is capped at 1e6
+  characters, closing the `repeat(long, 1e6)` amplification.
+- **Deep-nesting guards**: structural equality (`==`/`!=`/`in`),
+  `toJSON` and flatten reject or truncate values nested deeper than
+  1024 levels (`value nesting too deep (more than 1024 levels)`); the
+  flatten guard moved below the smallest host stack; array
+  stringification truncates with "…" instead of recursing off the
+  stack. Core-json's own 1024 parser depth already bounds `fromJSON`.
+- **Playground**: the one dynamic `innerHTML` (WASM load error message)
+  now renders via textContent nodes.
+- Test suite grown to 235 tests × 3 targets; every guard is asserted on
+  both engines and all three targets (native/wasm-gc/js).
+
 ## [0.3.1] — 2026-09-07
 
 Stage-4 close-out patch: the remaining 4.4 items landed, together with

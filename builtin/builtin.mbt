@@ -242,6 +242,14 @@ fn string_functions() -> Array[(String, @evaluator.FnA)] {
         if n < 0.0 || n != n.floor() || n > 1000000.0 {
           raise @evaluator.EvalErr("repeat: invalid count")
         }
+        // Builtin callbacks sit behind an opaque boundary with no
+        // access to the evaluator's step budget, so the OUTPUT size is
+        // capped absolutely too: repeat(<long string>, 1e6) would
+        // otherwise build len(s) x 1e6 bytes uncharged. Same 1e6
+        // magnitude as expr's DefaultMemoryBudget.
+        if s.length().to_int64() * n.to_int64() > 1000000L {
+          raise @evaluator.EvalErr("repeat: invalid count")
+        }
         let out = StringBuilder::new()
         for _ in 0..<n.to_int() {
           out.write_string(s)
@@ -527,12 +535,15 @@ fn collection_functions() -> Array[(String, @evaluator.FnA)] {
 }
 
 ///|
-/// expr's flatten with MaxDepth protection (10000).
+/// expr's flatten with MaxDepth protection. The guard must sit well
+/// below the smallest host stack (the js target): 10000 recursive
+/// frames would overflow it BEFORE this check fired, so the cap
+/// mirrors the deep-value limit (1024).
 fn flatten_value(
   v : @ast.Value,
   depth : Int,
 ) -> Array[@ast.Value] raise @evaluator.EvalError {
-  if depth > 10000 {
+  if depth > 1024 {
     raise @evaluator.EvalErr("cannot flatten nested array: max depth reached")
   }
   match v {
@@ -598,7 +609,8 @@ fn conversion_functions() -> Array[(String, @evaluator.FnA)] {
       "toJSON",
       fn(args) {
         @ast.StrVal(
-          // exact int64 digits (expr/Go json); NaN/Inf -> null
+          // exact int64 digits (expr/Go json); NaN/Inf -> null;
+          // the deep-nesting pre-probe lives inside to_json_string
           to_json_string(arg(args, 0, "toJSON")),
         )
       },

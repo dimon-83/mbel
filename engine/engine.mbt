@@ -45,6 +45,11 @@ pub struct Engine {
   mut max_depth : Int
   mut max_steps : Int
   mut engine : EngineMode
+  // Expression-defined user-function call depth (userfuncs.mbt):
+  // incremented per user-function call on this instance so recursion
+  // across any registration batch raises instead of overflowing the
+  // host stack.
+  mut userfn_depth : Int
 }
 
 ///|
@@ -63,6 +68,7 @@ pub fn new() -> Engine {
     max_depth: @evaluator.default_max_depth(),
     max_steps: @evaluator.default_max_steps(),
     engine: Walk,
+    userfn_depth: 0,
   }
 }
 
