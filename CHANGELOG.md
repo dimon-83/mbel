@@ -4,6 +4,27 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [0.3.3] — 2026-09-10
+
+Documentation patch: the user-facing docs are synced to the 0.3.2
+feature set (no code changes; the mooncakes package page picks up the
+current README with this release).
+
+### Changed
+
+- `docs/{zh,en}/functions.md`: the expression-defined-function page now
+  describes the 256-level instance-wide recursion cap (the
+  "bounded only by the host stack" note predated the hardening) and
+  calls the playground UI a drawer, matching the shipped page.
+- `README`: the playground section lists `eval_with_functions(code,
+  env, funcs_json, mode, engine)` and `describe_functions(funcs_json)`
+  with their signatures, mentions the custom-functions drawer, and
+  documents the stateless-wasm persistence contract for embedders.
+- `docs/{zh,en}/language-definition.md`: the errors/budgets section
+  adds the 0.3.2 resource guards (source-length cap, user-function
+  recursion 256, deep nesting 1024, range ≤ 1e6 elements, repeat output
+  ≤ 1e6 chars) and links the full table in "Security model".
+
 ## [0.3.2] — 2026-09-09
 
 Custom user-function extension (expression-defined functions, JSON
