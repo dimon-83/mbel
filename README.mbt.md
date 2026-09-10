@@ -94,7 +94,10 @@ dialect/mode entries with plain JS strings:
 cd playground && python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-The page offers three dialect/mode selectors plus ready-made examples:
+The page offers three dialect/mode selectors, a 🧩 custom-functions
+drawer (load a functions `.json` file — format v1, see
+[docs/en/functions.md](docs/en/functions.md) → "Expression-defined
+functions"), plus ready-made examples:
 
 - **standard dialect · Eval mode** — recommended; typed runtime
   semantics.
@@ -119,10 +122,15 @@ cp _build/wasm-gc/release/build/playground/web/web.wasm playground/mbel.wasm
 ```
 
 The browser entry lives in `playground/web` and exports
-`eval_expr`/`eval_jexl`/`eval_checked`/`disassemble`/`dump_ast` — all
+`eval_expr`/`eval_jexl`/`eval_checked` (each `(expr, env, engine)`),
+`eval_with_functions` `(code, env, funcs_json, mode, engine)` — the env
+doubles as the loaded functions' default bindings — `describe_functions`
+(funcs_json → resolved signature list), `disassemble`/`dump_ast`; all
 callable with plain JS strings via the js-string builtins integration
 (no glue code). Requirements: Chrome/Edge 130+, Firefox 134+, Safari
-18.4+; serve over HTTP, never `file://`. Build and interop details:
+18.4+; serve over HTTP, never `file://`. The wasm is stateless —
+custom functions persist on the page (localStorage) and embedding hosts
+must pass the funcs JSON on every call. Build and interop details:
 AGENTS.md "Playground (browser WASM)".
 
 ## User documentation

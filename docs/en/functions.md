@@ -112,13 +112,16 @@ let resolved = @engine.Engine::add_expression_functions(
 - **Evaluation semantics**: bodies run on the registering instance's
   current engine (Walk/Vm; the Vm caches one program per function);
   errors carry a `function "name":` prefix. Depth/step budgets restart
-  per call (like native registered callbacks), so recursion is bounded
-  only by the host stack — make sure your functions terminate.
+  per call (like native registered callbacks); recursion is capped by
+  an **instance-wide 256-level counter** (mutual and cross-batch
+  recursion included), raising
+  `function call depth exceeded (more than 256 levels)` — see the
+  Security model below.
 
 ### Functions file format v1 (playground)
 
-The playground's "🧩 Custom functions" card loads UTF-8 JSON (see
-`playground/functions.example.json`):
+The playground's "🧩 Custom functions" drawer (opened from the control
+row) loads UTF-8 JSON (see `playground/functions.example.json`):
 
 ```json
 {

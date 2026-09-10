@@ -72,11 +72,11 @@ let resolved = @engine.Engine::add_expression_functions(
 - **参数自动抽取**(引擎助手 `user_function_params(name, body)` 可单独调用):函数体经标准方言前端编译并常量折叠后,收集自由标识符——排除 let 绑定名、调用 callee、成员下钻根(`a.b` 的 `a`)、相对谓词标识符(`.price`)与 `$env`,按首现顺序去重。
 - **env 缺省回退**:第三参 `defaults` 传对象(通常是本次求值的 env)时,函数体上下文 = defaults 键值 + 位置实参按参数名覆盖——env `{price:200, rate:0.5}` 下 `tax()` 得 `100`,`tax(80)` 得 `40`;传 `None` 则参数纯词法,未传即 undefined。
 - **校验原子**:名字必须是合法标识符(禁 13 个关键字、禁 `$env`)、禁与 15 个聚合同名(聚合分发先于函数池,同名注册永远调不到)、定义内重名拒绝;body 编译错误带 `function "名":` 前缀。任何一处失败则什么都不注册。普通内置名允许覆盖(upsert,同 `add_function`)。
-- **求值语义**:函数体在注册它的实例上按当前引擎(Walk/Vm)求值,Vm 字节码按函数缓存;错误带 `function "名":` 前缀上抛。每次调用的深度/步数预算重新计数(与闭包注册一致),因此递归只受宿主栈限制——请自行保证终止。
+- **求值语义**:函数体在注册它的实例上按当前引擎(Walk/Vm)求值,Vm 字节码按函数缓存;错误带 `function "名":` 前缀上抛。每次调用的深度/步数预算重新计数(与闭包注册一致);递归由**实例级计数器封顶(256 层**,覆盖互递归与跨批次注册),超限报 `function call depth exceeded (more than 256 levels)`——见下方安全模型。
 
 ### 函数文件格式 v1(playground)
 
-playground「🧩 自定义函数」卡片加载 UTF-8 JSON(示例见 `playground/functions.example.json`):
+playground「🧩 自定义函数」抽屉(控件行按钮弹出)加载 UTF-8 JSON(示例见 `playground/functions.example.json`):
 
 ```json
 {

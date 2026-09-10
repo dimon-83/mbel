@@ -93,6 +93,7 @@ mbel 额外接受经典方言的方括号谓词 `items[.price <= 2]`(逐元素�
   (L:C)" + 源码行 + caret(指向运算符/条件/调用起点):`invalid operation: + (mismatched types int and string)`、`non-bool expression (type int) used as condition`、`invalid argument for len (type int)`、`unknown name x`。
 - 运行时(Eval 模式)类型错误:`invalid operation: int + string`、`integer divide by zero`、`slice bounds must be integers`。
 - 预算:解析期节点/token 上限与递归护栏;求值期深度(两引擎);分配点步数预算——消息:`expression is too large (more than N nodes)`、`expression is too deeply nested`、`expression is too deep (more than N levels)`、`memory budget exceeded`。
+- 资源护栏(0.3.2 加固):源长度上限(节点预算 × 16 字符,`expression is too large (more than N characters)`)、自定义函数递归 256 层(`function call depth exceeded (more than 256 levels)`)、深嵌套值 1024 层(`value nesting too deep (more than 1024 levels)`)、range ≤ 1e6 元素、repeat 输出 ≤ 1e6 字符。完整预算表见[自定义函数](functions.md)→ 安全模型。
 
 ## 与参考语义的已知差异(摘要)
 

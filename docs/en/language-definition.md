@@ -159,6 +159,14 @@ transforms are registered per engine instance (no reflection — see
   `expression is too large (more than N nodes)`, `expression is too deeply
   nested`, `expression is too deep (more than N levels)`, `memory budget
   exceeded`.
+- Resource guards (0.3.2 hardening): a source-length cap (node budget ×
+  16 chars, `expression is too large (more than N characters)`),
+  user-function recursion capped at 256 levels
+  (`function call depth exceeded (more than 256 levels)`), deep-nested
+  values at 1024 levels (`value nesting too deep (more than 1024
+  levels)`), ranges ≤ 1e6 elements and repeat output ≤ 1e6 chars. The
+  full guard table lives in [Custom functions](functions.md) →
+  Security model.
 
 ## Known divergences from expr (summary)
 
