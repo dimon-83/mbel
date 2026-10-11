@@ -4,6 +4,19 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [Unreleased]
+
+### Added
+
+- `THIRD_PARTY_NOTICES.md`: the MIT copyright and full license text for
+  the expr-lang/expr test fixtures transcribed into
+  `expr_test/want_table_test.mbt` and `expr_test/checker_ok_test.mbt`,
+  with the covered scope and the exact upstream revision
+  (`4b31df3`, tag v1.17.8 plus eight commits). Both files now declare
+  `SPDX-License-Identifier: Apache-2.0 AND MIT` and point at the notice;
+  the surrounding MoonBit harness remains Apache-2.0. The root file is
+  included in the `moon package` source package.
+
 ## [0.3.3] — 2026-09-10
 
 Documentation patch: the user-facing docs are synced to the 0.3.2

@@ -1,7 +1,14 @@
-// SPDX-License-Identifier: Apache-2.0
-// GENERATED from expr-lang v1.17.8's official TestExpr want table
-// (test/expr_test.go, 167 rows) — the stage-4.4 gate acceptance
-// artifact (docs/coverage-vs-expr.md §6.3 item ⑤).
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2018 Anton Medvedev
+//
+// Transcribed from expr-lang/expr's official TestExpr want table
+// (expr_test.go, 167 rows at commit 4b31df3, i.e. tag v1.17.8 plus
+// eight commits) — the stage-4.4 gate acceptance artifact
+// (docs/coverage-vs-expr.md §6.3 item ⑤). The expression sources and
+// expected values are upstream MIT material, copyrighted above; see
+// THIRD_PARTY_NOTICES.md at the repository root for the full upstream
+// MIT text. The MoonBit harness around the rows is original mbel work
+// under Apache-2.0.
 //
 // Environment: mock.Env's data fields mirrored as engine Values; the
 // env's Go functions (Add/GetInt/Variadic) are registered per the

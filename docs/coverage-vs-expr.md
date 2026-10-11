@@ -223,6 +223,14 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
 **parser TestParse 143 行(Go AST want → mbel dump 翻译)与 optimizer
 表抽样未完成**——gate 达标前需补。4.5 后 builtin_test 904 行对齐。
 
+> 转写来源与许可:两张转写表取自 expr-lang/expr 的
+> commit `4b31df3`(即 tag v1.17.8 + 8;v1.17.8 tag 本身的
+> TestExpr 为 163 行,167 是 `4b31df3` 的数字),上游为 MIT
+> (Copyright (c) 2018 Anton Medvedev)。上游版权与完整 MIT 文本见仓库根部
+> [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md);两个测试文件的
+> 文件级声明为 `Apache-2.0 AND MIT`,周边 MoonBit 测试骨架仍为
+> Apache-2.0。
+
 ## 7. 双引擎实测:性能与稳定性对比(2026-09-06,f37f10d 后)
 
 同批采集,`moon bench -p engine_test`(wasm-gc)/`--target js`/

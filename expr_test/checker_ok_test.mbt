@@ -1,9 +1,17 @@
-// SPDX-License-Identifier: Apache-2.0
-// GENERATED from expr-lang v1.17.8 checker_test.go TestCheck — the
-// "must compile cleanly" table (112 rows). mbel's strict entry must
-// accept every program expr's checker accepts; the rows are compiled
-// (check + lower), never executed. Env fields are bound as null
-// (dynamic/unknown) values.
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2018 Anton Medvedev
+//
+// Transcribed from expr-lang/expr's checker TestCheck table
+// (checker/checker_test.go, 112 rows at commit 4b31df3, i.e. tag
+// v1.17.8 plus eight commits) — the "must compile cleanly" table. The
+// expression sources are upstream MIT material, copyrighted above; see
+// THIRD_PARTY_NOTICES.md at the repository root for the full upstream
+// MIT text. The MoonBit harness around the rows is original mbel work
+// under Apache-2.0.
+//
+// mbel's strict entry must accept every program expr's checker accepts;
+// the rows are compiled (check + lower), never executed. Env fields are
+// bound as null (dynamic/unknown) values.
 //
 // Skipped rows (5/112), each with its documented reason:
 //   row 019: trailing-dot float literal (2.) not lexed — lexer gap, recorded
