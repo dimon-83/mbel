@@ -5,3 +5,7 @@ target
 .mooncakes/
 .moonagent/
 .zcode/
+
+# Generated repo-local diagrams — not part of the published module.
+architecture.html
+architecture-dialect-engine.html

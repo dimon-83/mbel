@@ -4,7 +4,7 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
-## [Unreleased]
+## [0.3.4] — 2026-10-11
 
 ### Added
 
@@ -16,6 +16,15 @@ All notable changes to mbel are documented here. The format follows
   `SPDX-License-Identifier: Apache-2.0 AND MIT` and point at the notice;
   the surrounding MoonBit harness remains Apache-2.0. The root file is
   included in the `moon package` source package.
+
+### Changed
+
+- `docs/coverage-vs-expr.md` §6.3 records the transcription provenance;
+  the earlier "v1.17.8, 167 rows" note conflated the tag (163 TestExpr
+  rows) with the transcribed revision.
+- Generated repo-local diagrams (`architecture.html`,
+  `architecture-dialect-engine.html`) are gitignored so they stay out of
+  the published source package.
 
 ## [0.3.3] — 2026-09-10
 
