@@ -206,10 +206,10 @@ You can browse and install extra skills here:
   counters. Budget *messages* are contract-locked and must not gain extra
   text — expose new detail through the stats, never by editing the message.
 
-- Compile only validates the pattern; nothing else in the engine is
-  LLM-generated at runtime. An embedder that feeds unbounded dynamic
-  `matches` patterns should call `Engine::clear_caches()` periodically; the
-  pattern caches are capacity-bounded as a backstop, not as a policy.
+- An embedder that feeds unbounded dynamic `matches` patterns should call
+  `Engine::clear_caches()` on its own schedule; the pattern caches are
+  capacity-bounded (256 compiled / 64 failed) as a backstop, not as a
+  retention policy.
 
 - API changes (public signatures, new entry points) must: run `moon info`
   and review the `.mbti` diff before committing; update README and
