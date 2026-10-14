@@ -4,6 +4,38 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [Unreleased]
+
+### Fixed
+
+- **`matches` now compiles real regex patterns.** `grammar_regex_match`
+  called `@string.Regex::string`, which builds a *literal* matcher — the
+  pattern was matched as plain text — so `matches` behaved like
+  `contains` (`"hello" matches "^h.*o$"` was `false`). It now uses
+  `@string.Regex::Regex`, the core pattern parser: anchors, `.`,
+  character classes, quantifiers, groups and alternation work, and a
+  malformed pattern raises `invalid regex: …` instead of silently
+  returning `false`. That error path already existed in the code but was
+  unreachable, which is why this reads as a wrong-constructor bug rather
+  than a deliberate cut.
+
+### Changed
+
+- The documentation claim that the MoonBit core regex is "literal-only"
+  was wrong. `docs/en/language-definition.md`,
+  `docs/zh/language-definition.md`, `docs/expr-gap-analysis.md`,
+  `docs/coverage-vs-expr.md`, `docs/review-roadmap-2026-09-06.md` and the
+  README roadmap now describe the real behavior and list the remaining
+  gaps against Go RE2: no `\d`/`\w`/`\s` class escapes (use POSIX classes
+  such as `[[:digit:]]`), `.` matches newline, and case-insensitivity is
+  written `(?i:…)`.
+- TestExpr want-table rows 033/034 — the two rows skipped as a "regex
+  cut" — are now transcribed and asserted on both engines (150
+  transcribed + 17 documented skips). `builtin_test` gains real-regex
+  cases plus an invalid-pattern case, and the VM parity suite asserts
+  regex values and the invalid-pattern error message agree across
+  engines.
+
 ## [0.3.4] — 2026-10-11
 
 ### Added

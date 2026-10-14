@@ -51,7 +51,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 切片 [1:3] [:3] [3:] | ✅ | eval_test(双引擎) | expr 语义:负边界 len+x、越界 clamp、from>to 为空;数组+字符串(字符串按字符,mbel 注:expr 按字节,非 ASCII 差异记录) |
 | 可选链 ?. /?.[ | ✅ | parser_test, eval_test `user?.name` | 求值走 nil-safe drill(与 mbel drill 语义一致) |
 | 链式比较 a<b<c | ✅ | parser_test(结构) | `< > <= >=` 合取;`==`/`!=` 不链 |
-| matches 正则 | 🟡 | builtin_test | MoonBit core regex=字面量;完整 RE2 → 4.5 |
+| matches 正则 | ✅ | builtin_test(双引擎), want 表 033/034 | core 正则引擎真实解析(锚点/`.`/字符类/量词/分组/交替;非法模式运行时报错)。残留差异:无 `\d`/`\w`/`\s` 类转义(用 POSIX 类)、`.` 匹配换行、大小写不敏感为 `(?i:…)` |
 | contains/startsWith/endsWith 运算符 | ✅ | eval_test, parser_test | expr 语义是**运算符**(非函数):infix、nil-safe(空操作数=false),双引擎注册 |
 | 管道 \| | ✅ | parser_test, eval_test | expr 管道:`x\|f(a)` desugar 为 `f(x,a)`;RHS 必须是调用(`1\|2` 解析报错);需宿主注册函数/转换 |
 | 一元 -/!(优先级) | ✅ | parser_test, eval_test | expr:一元 -/+ 90、not/! 50、幂 100 → `-2**2`=-(2**2)、`2**-2` 合法;Jexl legacy 词法负号保留 |
@@ -197,13 +197,14 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
 6. **✅ 已交付(4.4.2,2026-09-06)**:谓词聚合 15——filter/map/all/… 与
    groupBy/sortBy/reduce 已以共享驱动+注入 runner 交付(tree-walk 每元素
    求值器 / VM 子 Program+单子 VM 复用),见 §4 行与 §7 实测。
-7. **4.5 依赖(P2/P3,评审修订)**:正则——"RE2 全特性"措辞修正(RE2 本身
-   不支持反向引用;应为"正则全特性"裁剪):范围缩至**字面量/字符类/量词/
-   锚点/非捕获分组**,明确不支持捕获替换、反向引用、Unicode 属性、环视;
-   自实现估计上调至 2000+ 行(含解析/编译/NFA 执行,16-20d);FFI 注入宿主
-   RegExp(js/wasm)为快速路径但牺牲可移植性,API 边界显式化。时间——civil
+7. **4.5 依赖(P2/P3,评审修订)**:正则——原"自实现/FFI 注入"方案已作废:
+   `matches` 现直接使用 MoonBit core 正则引擎(`Regex::Regex`,求值期编译
+   +缓存),锚点/字符类/量词/分组/交替均可用,非法模式报运行时报错;此前
+   误用 `Regex::string` 字面量构造器,等价于子串匹配,已修正。剩余差异是
+   core 的语法缺口(无 `\d`/`\w`/`\s` 类转义、`.` 匹配换行、大小写不敏感
+   写作 `(?i:…)`),见 §2 行与 expr-gap-analysis 差异表。时间——civil
    日历(已有 days_from_civil 基础)+ 固定偏移;完整 tzdata 预留外部文件
-   加载接口,可永不内置。两项均延后至核心稳定。
+   加载接口,可永不内置。时间项仍延后至核心稳定。
 8. **4.4 收尾清单(2026-09-07 起逐项收尾,完成即更新)**:① 文档对齐 ✅(本文);
    ② Bytes 字节串求值 ✅(BytesVal 全链路:相等/len/索引/切片/聚合/toJSON/
    type()/string(),Checker BytesN 类型化,expr 文案 []uint8);③ legacy 物理拆分
@@ -219,7 +220,7 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
 
 ### 6.3 覆盖率目标
 4.4 gate(收尾清单 ⑤,2026-09-07 状态):TestExpr 167 行全量处置 ✅
-(148 转写 + 19 文档化跳过,双引擎);checker TestCheck 107/112 ✅;
+(150 转写 + 17 文档化跳过,双引擎;正则修正后原跳过的 033/034 已转写);checker TestCheck 107/112 ✅;
 **parser TestParse 143 行(Go AST want → mbel dump 翻译)与 optimizer
 表抽样未完成**——gate 达标前需补。4.5 后 builtin_test 904 行对齐。
 

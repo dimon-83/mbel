@@ -143,6 +143,12 @@ test "vm parity: arrays, objects, in, range, matches" {
   expect_parity("len(1..10)", "", "range len")
   expect_parity("\"hello\" matches \"ell\"", "", "matches")
   expect_parity("\"hello\" matches \"xyz\"", "", "matches miss")
+  // Regex semantics must be identical on both engines, including the
+  // error message for a malformed pattern.
+  expect_parity("\"hello\" matches \"^h.*o$\"", "", "matches anchors")
+  expect_parity("\"abc123\" matches \"[0-9]+\"", "", "matches class")
+  expect_parity("\"b\" matches \"a|b\"", "", "matches alternation")
+  expect_parity("\"hello\" matches \"[\"", "", "matches invalid pattern")
 }
 
 ///|

@@ -16,10 +16,8 @@
 // normalized to canonical JSON and compared through the same canon
 // serializer the corpus driver uses, on BOTH engines per row.
 //
-// Skipped rows (19/167), each with its documented reason:
+// Skipped rows (17/167), each with its documented reason:
 //   row 026: in on struct/map membership (legacy JS in-semantics lock)
-//   row 033: matches with regex metachars (mbel regex is literal-only — documented cut)
-//   row 034: matches with dynamic pattern (regex cut)
 //   row 042: Go method call (reflection cut)
 //   row 043: Go method call (reflection cut)
 //   row 049: len counts UTF-16 units vs expr rune count (documented divergence)
@@ -211,6 +209,8 @@ let want_rows : Array[(String, String, String)] = [
   ("r030", "Two not    in 0..1", "true"),
   ("r031", "-1 not in [1]", "true"),
   ("r032", "Int32 in [10, 20]", "false"),
+  ("r033", "String matches \"s.+\"", "true"),
+  ("r034", "String matches (\"^\" + String + \"$\")", "true"),
   ("r035", "'foo' + 'bar' not matches 'foobar'", "false"),
   ("r036", "\"foobar\" contains \"bar\"", "true"),
   ("r037", "\"foobar\" startsWith \"foo\"", "true"),

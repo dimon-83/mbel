@@ -290,7 +290,7 @@ fn grammar_regex_match(
       raise EvalError::EvalErr("invalid regex: " + pattern)
     }
   }
-  let re = @string.Regex::string(pattern) catch {
+  let re = @string.Regex::Regex(pattern) catch {
     _ => {
       g.regex_failed.push(pattern)
       raise EvalError::EvalErr("invalid regex: " + pattern)

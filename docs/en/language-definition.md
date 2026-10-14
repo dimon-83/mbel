@@ -91,8 +91,14 @@ Other syntax:
   `from > to` → empty; works on arrays and strings (string slices are
   character-based in mbel; expr slices bytes — non-ASCII divergence
   documented).
-- `matches` regex: MoonBit core regex is literal-only (documented cut;
-  full regex is a roadmap item). `contains`/`startsWith`/`endsWith` are
+- `matches` regex: the right operand is compiled as a real regex by the
+  MoonBit core engine — anchors, `.`, classes, quantifiers, groups and
+  alternation all work, and a malformed pattern is a runtime error. The
+  core syntax is not Go RE2: `\d`/`\D`/`\s`/`\S`/`\w`/`\W` are
+  unsupported (use POSIX classes such as `[[:digit:]]`), `.` also
+  matches newline, and case-insensitivity is written `(?i:…)` (documented
+  divergences; see docs/coverage-vs-expr.md).
+  `contains`/`startsWith`/`endsWith` are
   operators, nil-safe (nil operand → false).
 - `let x = expr; rest` and `a; b; c` sequences — `let` at precedence-0
   sites (top level, parens, arguments, if-branches); lexical scope,
@@ -176,7 +182,8 @@ transforms are registered per engine instance (no reflection — see
 - String `in` (classic dialect) is substring semantics; the standard dialect
   rejects nothing statically there (Eval mode follows legacy substring
   behavior for strings — divergence documented in coverage matrix).
-- String slices are character-based; regex is literal-only; `upper`/`lower`
+- String slices are character-based; `matches` uses the core regex syntax
+  (no `\d`/`\w`/`\s` class escapes, `.` matches newline); `upper`/`lower`
   are ASCII-only; time is the minimal UTC/ISO subset; JSON numbers are
   doubles (integers above 2^53 lose exactness in context data; literals
   and `toJSON` of int64 are exact).

@@ -41,6 +41,10 @@ VM 剩余指令(let 槽/切片/可选链)与 Disassemble 依赖 Parser AST;建�
 1. 正则:RE2 不支持反向引用,"RE2 全特性"措辞不准,应为"正则全特性";
    800~1200 行估计偏乐观(含解析/编译/NFA/DFA 通常 2000+);范围建议缩至
    字面量/字符类/量词/锚点/分组(非捕获);FFI 方案需明确 API 边界;P2/P3。
+   > 2026-10-11 追记:本条的自实现/FFI 方案已作废——`matches` 改为直接使用
+   > MoonBit core 正则引擎(`Regex::Regex`;此前误用 `Regex::string` 字面量
+   > 构造器)。残留语法差异见 docs/coverage-vs-expr.md §6.2 第 7 项与
+   > docs/expr-gap-analysis.md 差异表。
 2. 时区:UTC+固定偏移降级恰当,完整 tzdata 走外部文件加载接口。
 3. 优化器剩余 pass:非紧急。
 

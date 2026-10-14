@@ -269,13 +269,34 @@ test "range respects the step budget" {
 }
 
 ///|
-test "matches operator (limited regex engine)" {
-  // The MoonBit core regex engine currently behaves as literal
-  // substring matching — full RE2-style patterns are a stage-4.5
-  // follow-up (docs/expr-gap-analysis.md §E.2).
+test "matches operator (regex semantics)" {
+  // `matches` compiles the right operand as a real regex (MoonBit core
+  // regex). Divergences from Go RE2 are documented in
+  // docs/coverage-vs-expr.md: no `\d`/`\w`/`\s` class escapes (use POSIX
+  // classes) and `.` matches newline.
   expect_v("\"hello\" matches \"ell\"", @ast.BoolVal(true), "matches substr")
   expect_v("\"hello\" matches \"xyz\"", @ast.BoolVal(false), "matches miss")
   expect_v("\"hello\" matches \"hello\"", @ast.BoolVal(true), "matches full")
+  // Anchors and the `.` wildcard are regex, not literal text.
+  expect_v("\"hello\" matches \"^h.*o$\"", @ast.BoolVal(true), "matches anchors")
+  expect_v("\"hello\" matches \"h.llo\"", @ast.BoolVal(true), "matches wildcard")
+  expect_v("\"hello\" matches \"^e\"", @ast.BoolVal(false), "matches anchor miss")
+  expect_v("\"hello\" matches \"o$\"", @ast.BoolVal(true), "matches end anchor")
+  // Character classes and quantifiers.
+  expect_v("\"abc123\" matches \"[0-9]+\"", @ast.BoolVal(true), "matches class")
+  expect_v(
+    "\"abc123\" matches \"[[:digit:]]+\"",
+    @ast.BoolVal(true),
+    "matches POSIX class",
+  )
+  expect_v("\"abc\" matches \"^[0-9]+$\"", @ast.BoolVal(false), "matches class miss")
+  // Alternation and groups.
+  expect_v("\"b\" matches \"a|b\"", @ast.BoolVal(true), "matches alternation hit")
+  expect_v("\"x\" matches \"a|b\"", @ast.BoolVal(false), "matches alternation miss")
+  expect_v("\"ab\" matches \"^(a|b)+$\"", @ast.BoolVal(true), "matches grouped alt")
+  expect_v("\"HELLO\" matches \"(?i:hello)\"", @ast.BoolVal(true), "matches (?i:...)")
+  // A malformed pattern is a runtime error, never a silent false.
+  expect_err("\"hello\" matches \"[\"", "invalid regex", "matches invalid pattern")
 }
 
 // --- Constant folding (stage 4.3) ---

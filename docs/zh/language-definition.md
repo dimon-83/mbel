@@ -53,7 +53,7 @@
 - `if cond { seq } else { seq }` —— 两个花括号与 `else` 均必选;分支是完整序列(可含 let);`if` 只能作为表达式起点(内嵌需括号);支持 else-if 链。
 - 可选链 `?.` / `?.[` —— nil 安全成员访问(mbel 下钻默认 nil 安全)。
 - 切片 `a[1:3]`、`a[:2]`、`a[2:]`、负边界(`len + x`)、越界收敛、`from > to` 为空;支持数组与字符串(字符串按字符切片;expr 按字节——非 ASCII 差异已文档化)。
-- `matches` 正则:MoonBit core 正则仅字面量(已文档化裁剪;完整正则在路线图上)。`contains`/`startsWith`/`endsWith` 是运算符,nil 安全(nil 操作数 → false)。
+- `matches` 正则:右操作数由 MoonBit core 正则引擎真实解析(锚点、`.`、字符类、量词、分组、交替均生效;非法模式为运行时报错,不再是静默 false)。core 语法非 Go RE2:`\d`/`\D`/`\s`/`\S`/`\w`/`\W` 不支持(改用 POSIX 类如 `[[:digit:]]`),`.` 也匹配换行,大小写不敏感写作 `(?i:…)`——差异见 docs/coverage-vs-expr.md。`contains`/`startsWith`/`endsWith` 是运算符,nil 安全(nil 操作数 → false)。
 - `let x = expr; rest` 与 `a; b; c` 序列 —— `let` 出现在 prec-0 位置(顶层、括号、实参、if 分支);词法作用域,允许遮蔽(Eval 模式);序列结果为最后一项;序列/谓词代码可读外层 let。
 - `$env` —— 整个上下文作为值(`len($env)`、`keys($env)`、成员访问均可用;不可声明)。
 
@@ -100,7 +100,7 @@ mbel 额外接受经典方言的方括号谓词 `items[.price <= 2]`(逐元素�
 - 环境只能是数据:无 struct 环境、值上无方法(反射裁剪);方法调用语法可解析但在 lowering 时报错。
 - `type()` 对浮点返回 `"number"`(legacy 锁定)而非 `"float"`。
 - 经典方言中字符串 `in` 是子串语义(标准方言 Eval 模式对字符串沿用该行为——差异已在覆盖矩阵记录)。
-- 字符串切片按字符;正则仅字面量;`upper`/`lower` 仅 ASCII;时间是最小 UTC/ISO 子集;JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。
+- 字符串切片按字符;`matches` 走 core 正则语法(无 `\d`/`\w`/`\s` 类转义,`.` 匹配换行);`upper`/`lower` 仅 ASCII;时间是最小 UTC/ISO 子集;JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。
 - 方括号谓词 `items[.expr]` 被接受(经典方言兼容);参考语义无方括号形式,`[` 后的裸 `.` 直接报错。
 
 expr 语言定义每一行的可机检状态见 docs/coverage-vs-expr.md;裁剪项与理由见 docs/expr-gap-analysis.md。

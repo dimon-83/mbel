@@ -16,7 +16,7 @@
 | 谓词 lambda:`filter(xs, {# % 2 == 0})`,`#`/`#acc`/`#index`/省略 `#` 相对访问(parser.go:419-435) | 过滤器 `[.x==1]`(Jexl 语义,非函数式) | parser 重写 | 同上 |
 | 管道接函数 `x\|f()\|g()`(优先级 0) | 管道接 transform(语义不同) | parser+eval | 同上 |
 | `not in/matches/contains/startsWith/endsWith` 后缀否定;链式比较 `a<b<c`(parser.go:907-940) | 无 | parser 重写 | 同上 |
-| `matches` 正则(右端字面量编译期编译,checker.go:461-467) | 无 | 依赖 4.5 | 计入 4.5 |
+| `matches` 正则(右端字面量编译期编译,checker.go:461-467) | core 正则引擎,求值期编译+缓存(已交付) | 残留 RE2 语法差异见差异表 | ✅ |
 | `**`/`^` 幂,右结合,优先级 100;一元 `-` 90(`-2^2` = `-(2^2)`) | `^` 左结合优先级 50 | parser 扩展 | 同上 |
 | 数字字面量:hex/oct/bin/`_` 分隔/指数/`.5`(parser.go:485-524) | 仅十进制 | lexer 扩展 | 4.4.1 3-4d |
 | 字符串:`\u{...}`/`\xNN`/八进制转义;原始反引号串;字节串 `b".."`(lexer utils.go:110-337) | 单双引号 + `\"`/`\\` | lexer 扩展 | 同上 |
@@ -55,12 +55,12 @@
 | 时间 4 | now duration date timezone(含 Go time 方法直调) | MoonBit 无 time — 4.5 | 4-6 |
 | 集合 9 | len first last get take keys values reverse uniq concat flatten sort | 无 | 2-3 |
 | 位运算 8 | bitand bitor bitxor bitnand bitnot bitshl bitshr bitushr | Int64 值模型(4.4.3) | 1-2 |
-| matches/正则 | — | MoonBit 无 regexp — 4.5 | 4-6 |
+| matches/正则 | core 正则引擎(真实模式解析;此前误用字面量构造器已修正) | 剩余 RE2 语法差异见 §E.4 差异表 | 1-2 |
 
 ### E. 架构差异(不可 1:1,需显式裁剪并记录)
 
 1. **反射**:expr 经 Go reflect 访问任意 struct env 的字段/方法(运行时 Field/Method 索引、methodset 缓存)。MoonBit 无反射 → env 收敛为引擎数据模型(Value ObjectVal/ArrayVal);"任意宿主结构体作为 env"裁剪。影响公开 API 形态与 `foo.bar()` 方法调用的宿主扩展方式(改为注册式)。
-2. **time/regexp**:expr 直接依赖 Go time 与 regexp(方法集很大:`.Year() .In(tz) .Seconds()` 等)。MoonBit 核心无 → 4.5 最小自实现或 FFI(wasm/js 后端可注入宿主实现)。最大外部依赖风险。
+2. **time/regexp**:expr 直接依赖 Go time 与 regexp(方法集很大:`.Year() .In(tz) .Seconds()` 等)。regexp 一侧已由 MoonBit core 正则引擎覆盖——`matches` 现为真实模式解析(此前误用 `Regex::string` 字面量构造器,等价于子串匹配;已改用 `Regex::Regex`),残留 RE2 语法差异见差异表;time 一侧核心仍无 → 4.5 最小自实现或 FFI(wasm/js 后端可注入宿主实现)。最大外部依赖风险。
 3. **生成代码**:VM runtime helpers 3718 行 + func_types 370 行为 Go 生成代码;MoonBit 侧以手写特化/泛型替代,不追求同构。
 4. **性能口径**:wasm-gc 与 Go 原生无可比性;验收 = 自身基准 + 复杂度同阶(4.3 内建 bench)。
 5. **错误通道**:expr panic→recover→file.Error;MoonBit checked errors(raise)天然等价,不需 recover。
@@ -77,7 +77,7 @@
 | 4.4.3 | 值模型 Int64/Float 分离 + Nature 标注 | 5-8 | 4.4.2 | checker 前置 |
 | 4.4.4 | checker 类型检查 | 12-18 | 4.4.3 | checker fixture |
 | 4.4.5 | 严格语义引擎(mbel::expr)+ Jexl legacy 并存 | 4-6 | 4.4.4 | expr want 表 167 行 |
-| 4.5 | time/regexp 依赖(最小实现或 FFI) | 5-10 | 可并行 | expr time/regexp fixture |
+| 4.5 | time 依赖(最小实现或 FFI);regexp 已由 core 引擎覆盖 | 5-10 | 可并行 | expr time/regexp fixture |
 | 4.6 | 验证贯穿:fixtures 转写 + (go 可用则)差分 | 8-12 | 各期 | 转写覆盖率 |
 
 **合计 ≈ 75-105 人日(3.5-5 人月)**,低-中置信。单项最大:checker(12-18d)、parser 重写(10-14d)、VM+optimizer(15-20d)。
@@ -101,9 +101,10 @@ byte-identical):
   bitwise 8 (Int64 semantics via the Double value model), time
   minimal set (now/duration/date ISO/timezone=UTC only).
 - **4.2b expr operators**: `??` (nil coalescing, on-demand), `..`
-  (range, memory-budgeted at 1e6 elements), `matches` (limited regex —
-  the MoonBit core regex engine behaves as literal matching; full
-  RE2-style patterns remain future work).
+  (range, memory-budgeted at 1e6 elements), `matches` (patterns compiled
+  by the MoonBit core regex engine; the earlier literal-substring
+  behavior was a wrong-constructor bug, now fixed — remaining Go RE2
+  syntax gaps are listed in the divergence table below).
 - **4.3 partial**: constant-folding optimizer pass (`constant_fold`,
   expr-style `fold`) wired into Expression compile; bytecode VM not
   started.
@@ -113,7 +114,9 @@ New divergences recorded:
 |---|---|---|---|
 | `type(1)` | "int" | "number" | no int/float split until 4.4.3 |
 | `?? mixed with other ops` | parse error | accepted | parser-level check not ported |
-| invalid regex pattern | compile error | no match | MoonBit core regex is literal-only |
+| invalid regex pattern | compile error (check time) | runtime error `invalid regex: <pattern>` | mbel compiles the pattern at eval time, not check time |
+| `\d` `\D` `\s` `\S` `\w` `\W` in a pattern | supported (RE2) | invalid-pattern error | core regex has no class escapes; use POSIX classes (`[[:digit:]]`, `[[:word:]]`, `[[:space:]]`) |
+| `.` | any char except newline | any char including newline | core regex `.` is newline-inclusive |
 | `1..2` (Jexl corpus) | n/a | range | mbel superset; moved to tools/divergence.txt |
 | time objects / timezones | Go time.Time | unix-ms numbers | stage 4.5 cut item |
 

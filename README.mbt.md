@@ -195,9 +195,10 @@ JSON file (the playground's 🧩 card) or built directly:
 
 ```moonbit nocheck
 // params omitted: auto-extracted from the body's free identifiers
+///|
 let resolved = @engine.Engine::add_expression_functions(
   inst,
-  [{ name: "tax", params: None, body: "price * rate" }],
+  [{ name: "tax", params: None, body: "price * rate", }],
   Some(ctx), // unpassed params fall back to same-named env keys
 )
 // resolved == [("tax", ["price", "rate"])] — usable as tax(…), x | tax(),
@@ -334,9 +335,12 @@ phase. Remaining items — the verifiable list lives in
   errors (`行:列` with caret), classic-package physical split, Options
   alignment (env whitelist, AsBool), and the reference TestExpr
   167-line want-table transcription.
-- **4.5**: full regex for `matches` (the MoonBit core regex is
-  literal-only), full time objects/timezones, and implicit time-string
+- **4.5**: full time objects/timezones, and implicit time-string
   arithmetic (`request.Time - resource.Age < duration("24h")`).
+  (`matches` now compiles real regex patterns via the MoonBit core
+  engine; the remaining RE2 syntax gaps — no `\d`/`\w`/`\s` class
+  escapes, `.` matches newline — are listed in
+  [docs/expr-gap-analysis.md](docs/expr-gap-analysis.md).)
 
 Already delivered: the standard-dialect syntax layer (4.4.1/4.4.2),
 typed value model (4.4.3), static checker with the Compile-mode entry
