@@ -75,6 +75,26 @@ let b = @engine.new()
 
 Range 另有 1e6 元素硬上限。解析预算保护 MoonBit 固定 wasm 栈:过深嵌套(括号/一元链)、超大程序、超出 int64 的整数字面量都在解析期被拒绝。
 
+### 观察门禁执行
+
+上面那些失败消息是固定契约,不带计数。用它看门禁是否触发:
+
+```moonbit
+@engine.Engine::budget_stats(inst)        // [("depth", 2), ("nodes", 1)]
+@engine.Engine::reset_budget_stats(inst)  // 采集进监控指标后清零
+```
+
+每项是 `(原因, 次数)`,按首次触发顺序;`原因` 取 `nodes`、`nesting`、`depth`、`steps`、`memory`、`value_nesting`、`flatten_depth`。普通错误(语法、类型、未知名字)不计入。返回的是快照副本。
+
+门禁有两条边界需要明确写出来:
+
+- **宿主注册的回调不在预算内。** 用 `add_function`/`add_transform`/`add_binary_op` 注册的函数、转换、运算符在"不透明回调边界"后执行宿主代码,引擎无法核算其分配与 CPU;而**表达式定义的函数**(`add_expression_functions`)由引擎求值,因此受预算约束。另外 `0` 会完全关闭某一项——把 `set_limits` 暴露给不可信输入时要当心。
+- **`max_steps` 是分配预算,不是 CPU 预算。** 它在分配点(数组、对象、range、切片、过滤器)计费;纯计算型的长表达式不被它计量。
+
+### 回收引擎状态
+
+实例在两次求值之间保留的唯一状态是编译好的 `matches` 模式缓存(用 `Engine::clear_caches()` 清空)。该缓存有容量上限;但如果嵌入方喂入无界的动态 pattern,应自行定期清理。
+
 ## 配置选项:expr vs mbel
 
 expr 选项 | mbel 状态

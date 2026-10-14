@@ -16,9 +16,13 @@ pub fn Engine::eval_expr(
   source : String,
   ctx : @ast.Value,
 ) -> @ast.Value raise EngineError {
-  let node = @expr.compile_expr_limited(source, self.max_nodes) catch {
-    @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
-  }
+  // Parse stage only: evaluation is guarded in `eval_ast`, so a budget
+  // failure is recorded exactly once.
+  let node = self.guard_budget(fn() {
+    @expr.compile_expr_limited(source, self.max_nodes) catch {
+      @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
+    }
+  })
   match node {
     Some(n) => self.eval_ast(n, ctx)
     None => raise EngineError::EngineErr("Cannot evaluate an empty expression")
@@ -31,6 +35,18 @@ pub fn Engine::eval_expr(
 /// Vm mode compiles per call here; program caching rides on
 /// Expression once expr sources flow through it.
 pub fn Engine::eval_ast(
+  self : Engine,
+  node : @ast.AstNode,
+  ctx : @ast.Value,
+) -> @ast.Value raise EngineError {
+  self.guard_budget(fn() { self.eval_ast_inner(node, ctx) })
+}
+
+///|
+/// The evaluation stage proper, split out so the resource guard wraps
+/// exactly this stage: the parse stage has its own guard in `eval_expr`,
+/// so a failure is counted once rather than twice.
+fn Engine::eval_ast_inner(
   self : Engine,
   node : @ast.AstNode,
   ctx : @ast.Value,
@@ -73,9 +89,11 @@ pub fn Engine::eval_expr_checked(
   source : String,
   ctx : @ast.Value,
 ) -> @ast.Value raise EngineError {
-  let node = @expr.compile_expr_checked_limited(source, self.max_nodes) catch {
-    @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
-  }
+  let node = self.guard_budget(fn() {
+    @expr.compile_expr_checked_limited(source, self.max_nodes) catch {
+      @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
+    }
+  })
   match node {
     Some(n) => {
       // Compile-mode env check: identifiers must resolve (ctx keys,

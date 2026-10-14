@@ -191,6 +191,26 @@ You can browse and install extra skills here:
   `fix(...)`, `docs(...)`, `refactor(...)`. Docs/metadata may land directly
   on `main`; functional code does not.
 
+- **Gates.** Two independent gates enforce the above. The commit gate
+  (`.githooks/pre-commit`, installed per clone with
+  `git config core.hooksPath .githooks`) runs `moon check` plus `moon test`
+  on the default target; IT DOES NOTHING UNTIL `core.hooksPath` IS SET, and
+  a fresh clone has no gate. CI (`.github/workflows/ci.yml`) runs the full
+  three-target matrix on every push to `main` and every pull request. Never
+  run `moon fmt` as part of a gate — the pinned toolchain's formatter
+  rewrites unrelated files.
+
+- Resource-gate observability: `Engine::budget_stats()` reports how often
+  each budget was hit (`nodes`, `nesting`, `depth`, `steps`, `memory`,
+  `value_nesting`, `flatten_depth`) and `reset_budget_stats()` clears the
+  counters. Budget *messages* are contract-locked and must not gain extra
+  text — expose new detail through the stats, never by editing the message.
+
+- Compile only validates the pattern; nothing else in the engine is
+  LLM-generated at runtime. An embedder that feeds unbounded dynamic
+  `matches` patterns should call `Engine::clear_caches()` periodically; the
+  pattern caches are capacity-bounded as a backstop, not as a policy.
+
 - API changes (public signatures, new entry points) must: run `moon info`
   and review the `.mbti` diff before committing; update README and
   `CHANGELOG.md` in the same change. Regenerated `.mbti` churn for

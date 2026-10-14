@@ -22,6 +22,14 @@ pub struct Expression {
 /// multiple times — useful when the owning instance's grammar
 /// changes. Mirrors `Expression.compile`.
 pub fn Expression::compile(self : Expression) -> Unit raise EngineError {
+  self.engine.guard_budget(fn() { self.compile_inner() })
+}
+
+///|
+/// The parse stage proper, split out so the resource guard wraps exactly
+/// this stage (evaluation has its own guard in `Expression::eval`, so a
+/// lazy compile failure is counted once, not twice).
+fn Expression::compile_inner(self : Expression) -> Unit raise EngineError {
   // Source-length cap (see expr/parser.mbt parse_limited): the legacy
   // lexer tokenizes the whole input — and a huge string literal is one
   // token — before the node budget applies, so bound lexer memory
@@ -67,6 +75,17 @@ pub fn Expression::eval(
   if self.compiled is None {
     self.compile()
   }
+  // Evaluation stage only — `compile` above carries its own guard.
+  self.engine.guard_budget(fn() { self.eval_compiled(ctx) })
+}
+
+///|
+/// The evaluation stage proper, split out so the resource guard wraps
+/// exactly this stage.
+fn Expression::eval_compiled(
+  self : Expression,
+  ctx : @ast.Value,
+) -> @ast.Value raise EngineError {
   let node = match self.compiled {
     Some(n) => n
     None => raise EngineError::EngineErr("Cannot evaluate an empty expression")

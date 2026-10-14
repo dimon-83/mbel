@@ -4,6 +4,50 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [Unreleased]
+
+### Added
+
+- **Resource-gate observability** — `Engine::budget_stats()` and
+  `Engine::reset_budget_stats()`. The budget failure messages are a locked
+  contract (`expression is too large (more than N nodes)`, …), so they gain
+  no text; the counters are where the outcome of the gate becomes visible.
+  Each counter is `(reason, count)` in first-hit order, with `reason` one of
+  `nodes`, `nesting`, `depth`, `steps`, `memory`, `value_nesting`,
+  `flatten_depth`. Ordinary errors (syntax, type, unknown name) are not
+  counted, and the snapshot is a copy rather than live state. Counters are
+  incremented by per-stage guards around the parse and evaluation stages of
+  each entry point, so one failure counts once — including the expr
+  front-end path, which the tests pin down.
+- **`Engine::clear_caches()`** — drops the compiled `matches` pattern cache,
+  so an embedder fed unbounded dynamic patterns can reclaim that memory on
+  its own schedule instead of waiting for the engine to be dropped.
+- **CI gate** (`.github/workflows/ci.yml`) — the three-target matrix
+  (wasm-gc, js, native) now runs on every push to `main` and every pull
+  request. The repository previously had no automated test gate at all.
+
+### Fixed
+
+- **The `matches` pattern cache is now capacity-bounded.** It grew for the
+  lifetime of an engine: every distinct pattern and its compiled program
+  were retained forever, and the lookup is a linear scan, so both memory and
+  per-match time degraded with the number of distinct patterns seen.
+  Successful patterns are capped at 256 (`regex_cache_capacity()`),
+  remembered failures at 64 (`regex_failed_capacity()`); when full, the
+  oldest half is dropped so inserts stay amortized O(1).
+
+### Changed
+
+- The pre-commit hook now runs `moon check` **and** `moon test` (it ran only
+  `moon check`), and `core.hooksPath` is documented as a required per-clone
+  step. Previously the hook file existed but nothing installed it, so it
+  never ran on any commit. `moon fmt` is deliberately excluded: the pinned
+  toolchain's formatter rewrites unrelated files.
+- `docs/{en,zh}/environment.md` document two boundaries of the gate that were
+  previously implicit: host-registered callbacks (`add_function` /
+  `add_transform` / `add_binary_op`) run outside the budget, and
+  `max_steps` is an allocation budget rather than a CPU budget.
+
 ## [0.3.5] — 2026-10-14
 
 ### Fixed

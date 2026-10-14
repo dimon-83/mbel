@@ -277,12 +277,59 @@ fn range_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 }
 
 ///|
+/// Upper bound on the number of distinct compiled `matches` patterns a
+/// grammar retains. The cache is a linear scan and lives as long as the
+/// engine, so an embedded engine fed dynamic patterns (rule engines,
+/// low-code platforms) would otherwise grow without limit — both in
+/// memory and in per-match scan time. Once full, the oldest half is
+/// dropped, which keeps inserts amortized O(1).
+pub fn regex_cache_capacity() -> Int {
+  256
+}
+
+///|
+/// Upper bound on remembered *failing* patterns. Small on purpose: the
+/// point is to keep repeat failures reporting one consistent message,
+/// not to memoize every bad pattern ever seen.
+pub fn regex_failed_capacity() -> Int {
+  64
+}
+
+///|
+/// Drops the oldest half of `cache` once it is at `cap`, so the retained
+/// set stays bounded without shifting on every insert.
+fn[T] trim_cache(cache : Array[T], cap : Int) -> Unit {
+  if cache.length() < cap {
+    return
+  }
+  let drop = cache.length() / 2
+  let kept : Array[T] = []
+  for i in drop..<cache.length() {
+    kept.push(cache[i])
+  }
+  cache.clear()
+  for x in kept {
+    cache.push(x)
+  }
+}
+
+///|
+/// Empties a grammar's compiled-pattern caches. Provided so a long-lived
+/// embedder can release the retained patterns deterministically instead
+/// of waiting for the whole engine to be dropped.
+pub fn clear_regex_cache(g : Grammar) -> Unit {
+  g.regex_cache.clear()
+  g.regex_failed.clear()
+}
+
+///|
 /// Cached regex match against a grammar's cache.
 ///
 /// The pattern is first translated from RE2 syntax to the core dialect
 /// (regex_translate.mbt) and then compiled. Both outcomes are cached —
 /// including the failure message, so that a repeated evaluation of a bad
-/// pattern reports exactly the same text instead of a shorter one.
+/// pattern reports exactly the same text instead of a shorter one. Both
+/// caches are capacity-bounded (see `regex_cache_capacity`).
 fn grammar_regex_match(
   g : Grammar,
   s : String,
@@ -317,11 +364,13 @@ fn grammar_regex_match(
   }
   match compiled {
     Ok(re) => {
+      trim_cache(g.regex_cache, regex_cache_capacity())
       g.regex_cache.push((pattern, re))
       re.execute(s) is Some(_)
     }
     Err(detail) => {
       let msg = "invalid regex: " + pattern + " (" + detail + ")"
+      trim_cache(g.regex_failed, regex_failed_capacity())
       g.regex_failed.push((pattern, msg))
       raise EvalError::EvalErr(msg)
     }

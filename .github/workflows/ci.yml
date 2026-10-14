@@ -1,0 +1,38 @@
+name: CI
+
+# The three-target safety net required by AGENTS.md ("Version management
+# and releases"): every push to main and every pull request must pass the
+# suite on wasm-gc, js and native. The commit-time hook
+# (.githooks/pre-commit) only covers `moon check` plus the default target;
+# this workflow is the gate that covers all three.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every target's result rather than stopping at the first
+      # failure — a target-specific break is the interesting signal.
+      fail-fast: false
+      matrix:
+        target: [wasm-gc, js, native]
+    name: moon test (${{ matrix.target }})
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+
+      - name: Update MoonBit dependencies
+        run: |
+          moon version --all
+          moon update
+
+      - name: Test (${{ matrix.target }})
+        run: moon test --target ${{ matrix.target }}

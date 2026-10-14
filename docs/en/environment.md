@@ -103,6 +103,41 @@ Ranges are additionally hard-capped at 1e6 elements. Parse budgets protect
 MoonBit's fixed wasm stack: deep nesting (parens/unary chains), oversized
 programs and integer literals beyond int64 are rejected at parse time.
 
+### Observing the gate
+
+The failure messages above are a fixed contract, so they carry no counters.
+Use `Engine::budget_stats()` to see that the gate fired:
+
+```moonbit
+@engine.Engine::budget_stats(inst)        // [("depth", 2), ("nodes", 1)]
+@engine.Engine::reset_budget_stats(inst)  // after scraping into your metrics
+```
+
+Each entry is `(reason, count)`, in first-hit order, with `reason` one of
+`nodes`, `nesting`, `depth`, `steps`, `memory`, `value_nesting`,
+`flatten_depth`. Ordinary errors (syntax, type, unknown name) are not counted.
+The snapshot is a copy.
+
+Two limits of the gate are worth stating explicitly:
+
+- **Host-registered callbacks are outside the budget.** Functions, transforms
+  and operators added with `add_function`/`add_transform`/`add_binary_op` run
+  host code behind an opaque callback boundary; the engine cannot account for
+  their allocations or CPU. Registered *expression* functions
+  (`add_expression_functions`) are evaluated by the engine and therefore are
+  budgeted. `0` disables a limit entirely — expose `set_limits` to untrusted
+  input only with care.
+- **`max_steps` is an allocation budget, not a CPU budget.** It is charged at
+  allocation points (arrays, objects, ranges, slices, filters); a purely
+  computational long expression is not metered by it.
+
+### Reclaiming engine state
+
+The only state an instance keeps between evaluations is its compiled `matches`
+pattern cache (`Engine::clear_caches()` drops it). It is capacity-bounded, but
+an embedder feeding unbounded dynamic patterns should clear it on its own
+schedule.
+
 ## Configuration options: expr vs mbel
 
 expr option | mbel status

@@ -185,6 +185,15 @@ let doubled = try {
 // resource budgets: nodes at parse time, depth + steps at
 // eval time (0 disables a limit)
 @engine.Engine::set_limits(inst, 10000, 10000, 1000000)
+
+// the gate is observable: per-reason counters, since the failure
+// messages themselves are a fixed contract
+let hits = @engine.Engine::budget_stats(inst) // e.g. [("depth", 2)]
+@engine.Engine::reset_budget_stats(inst)
+
+// the only cross-evaluation state is the compiled `matches` pattern
+// cache; it is capacity-bounded, and this releases it eagerly
+@engine.Engine::clear_caches(inst)
 ```
 
 ### Expression-defined user functions (JSON)

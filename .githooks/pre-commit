@@ -1,3 +1,27 @@
 #!/bin/sh
+# Commit gate: block commits that do not compile or do not pass the test
+# suite. Installed per-clone with `git config core.hooksPath .githooks`
+# (see .githooks/README.md) — the hook file alone does nothing until that
+# is set.
+#
+# Scope: `moon check` + the default-target test suite (wasm-gc), which is
+# fast enough for a commit. The full three-target matrix (native, wasm-gc,
+# js) runs in CI (.github/workflows/ci.yml); a commit that needs to skip
+# this gate can use `git commit --no-verify`.
+#
+# Deliberately NOT included: `moon fmt`. The pinned toolchain's formatter
+# rewrites unrelated files (e.g. it migrates `Int` to `Int32`), so running
+# it as a gate would produce large unrelated diffs.
 
+set -e
+
+if ! command -v moon >/dev/null 2>&1; then
+  echo "pre-commit: 'moon' not on PATH; skipping the build/test gate" >&2
+  exit 0
+fi
+
+echo "pre-commit: moon check"
 moon check
+
+echo "pre-commit: moon test (wasm-gc)"
+moon test

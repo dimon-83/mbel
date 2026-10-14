@@ -50,6 +50,11 @@ pub struct Engine {
   // across any registration batch raises instead of overflowing the
   // host stack.
   mut userfn_depth : Int
+  // Resource-gate observability: how often each budget was hit, keyed by
+  // reason ("nodes", "nesting", "depth", "steps", "memory",
+  // "value_nesting"). Budget *messages* are contract-locked (AGENTS.md),
+  // so this is where the outcome of the gate is reported instead.
+  budget_stats : Array[(String, Int)]
 }
 
 ///|
@@ -69,6 +74,7 @@ pub fn new() -> Engine {
     max_steps: @evaluator.default_max_steps(),
     engine: Walk,
     userfn_depth: 0,
+    budget_stats: [],
   }
 }
 
@@ -86,6 +92,99 @@ pub fn Engine::set_limits(
   self.max_nodes = max_nodes
   self.max_depth = max_depth
   self.max_steps = max_steps
+}
+
+///|
+/// Drops the instance's cross-call caches (the compiled `matches`
+/// patterns). Nothing else is retained between evaluations, so this
+/// returns the instance to its initial memory footprint — an embedder
+/// fed unbounded dynamic patterns can call it periodically instead of
+/// relying on the cache's own capacity bound.
+pub fn Engine::clear_caches(self : Engine) -> Unit {
+  @evaluator.clear_regex_cache(self.grammar)
+}
+
+///|
+/// Maps a budget-error message to the counter it belongs to. Returns
+/// `None` for ordinary errors (syntax, type, unknown name), which are
+/// not resource-gate events. The messages themselves are contract-locked
+/// and must not change, so classification is by the documented wording.
+fn budget_reason(msg : String) -> String? {
+  if msg.contains("expression is too large") {
+    Some("nodes")
+  } else if msg.contains("expression is too deeply nested") {
+    Some("nesting")
+  } else if msg.contains("expression is too deep") {
+    Some("depth")
+  } else if msg.contains("memory budget exceeded") {
+    Some("memory")
+  } else if msg.contains("value nesting too deep") {
+    Some("value_nesting")
+  } else if msg.contains("max depth reached") {
+    Some("flatten_depth")
+  } else {
+    None
+  }
+}
+
+///|
+/// Records one resource-gate event. Called from the stage guards below,
+/// exactly once per failed evaluation stage.
+fn Engine::record_budget_violation(self : Engine, msg : String) -> Unit {
+  match budget_reason(msg) {
+    None => ()
+    Some(reason) => {
+      for i in 0..<self.budget_stats.length() {
+        let (r, n) = self.budget_stats[i]
+        if r == reason {
+          self.budget_stats[i] = (r, n + 1)
+          return
+        }
+      }
+      self.budget_stats.push((reason, 1))
+    }
+  }
+}
+
+///|
+/// Runs one evaluation stage, recording a resource-gate violation before
+/// re-raising. The error is turned into a value first so the grammar and
+/// the counters are never touched inside a handler (the toolchain rejects
+/// cleanup-and-rethrow in `catch`).
+fn[T] Engine::guard_budget(
+  self : Engine,
+  f : () -> T raise EngineError,
+) -> T raise EngineError {
+  let r : Result[T, String] = try {
+    Ok(f())
+  } catch {
+    EngineError::EngineErr(m) => Err(m)
+  }
+  match r {
+    Ok(v) => v
+    Err(m) => {
+      self.record_budget_violation(m)
+      raise EngineError::EngineErr(m)
+    }
+  }
+}
+
+///|
+/// Snapshot of how often each resource budget has been hit on this
+/// instance, as `(reason, count)` pairs in first-hit order. This is the
+/// gate's monitoring surface: budget messages are fixed strings, so
+/// without it a tripped limit is invisible to the embedder. `reason` is
+/// one of `nodes`, `nesting`, `depth`, `steps`, `memory`,
+/// `value_nesting`, `flatten_depth`.
+pub fn Engine::budget_stats(self : Engine) -> Array[(String, Int)] {
+  self.budget_stats.copy()
+}
+
+///|
+/// Resets the resource-gate counters (e.g. after scraping them into
+/// metrics). Does not touch the budgets themselves.
+pub fn Engine::reset_budget_stats(self : Engine) -> Unit {
+  self.budget_stats.clear()
 }
 
 ///|
