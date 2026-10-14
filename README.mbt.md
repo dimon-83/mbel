@@ -337,9 +337,11 @@ phase. Remaining items — the verifiable list lives in
   167-line want-table transcription.
 - **4.5**: full time objects/timezones, and implicit time-string
   arithmetic (`request.Time - resource.Age < duration("24h")`).
-  (`matches` now compiles real regex patterns via the MoonBit core
-  engine; the remaining RE2 syntax gaps — no `\d`/`\w`/`\s` class
-  escapes, `.` matches newline — are listed in
+  (`matches` now takes RE2 patterns: an internal translation layer
+  rewrites class shorthands, `.` and inline flags for the MoonBit core
+  engine, verified case-by-case against Go's `regexp`. The constructs
+  with no core equivalent — `\p{…}`, `(?m)`, class-internal
+  `\D`/`\W`/`\S`, `\Q…\E`, `\xHH` — are documented cuts in
   [docs/expr-gap-analysis.md](docs/expr-gap-analysis.md).)
 
 Already delivered: the standard-dialect syntax layer (4.4.1/4.4.2),

@@ -51,9 +51,13 @@ pub(all) struct Grammar {
   on_demand_ops : Array[(String, FnL)]
   unary_ops : Array[(String, FnU)]
   // Compiled-regex cache for the `matches` operator (expr compiles
-  // string literals at check time; we cache at eval time).
+  // string literals at check time; we cache at eval time). Patterns are
+  // first translated from RE2 syntax — see regex_translate.mbt.
   mut regex_cache : Array[(String, @string.Regex)]
-  mut regex_failed : Array[String]
+  // Patterns that failed to compile, with the message to re-raise. The
+  // message is cached (not recomputed) so a repeated evaluation reports
+  // exactly the same text.
+  mut regex_failed : Array[(String, String)]
 }
 
 ///|
@@ -274,6 +278,11 @@ fn range_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 
 ///|
 /// Cached regex match against a grammar's cache.
+///
+/// The pattern is first translated from RE2 syntax to the core dialect
+/// (regex_translate.mbt) and then compiled. Both outcomes are cached —
+/// including the failure message, so that a repeated evaluation of a bad
+/// pattern reports exactly the same text instead of a shorter one.
 fn grammar_regex_match(
   g : Grammar,
   s : String,
@@ -285,19 +294,38 @@ fn grammar_regex_match(
       return re.execute(s) is Some(_)
     }
   }
-  for p in g.regex_failed {
+  for pair in g.regex_failed {
+    let (p, msg) = pair
     if p == pattern {
-      raise EvalError::EvalErr("invalid regex: " + pattern)
+      raise EvalError::EvalErr(msg)
     }
   }
-  let re = @string.Regex::Regex(pattern) catch {
-    _ => {
-      g.regex_failed.push(pattern)
-      raise EvalError::EvalErr("invalid regex: " + pattern)
+  // Translate and compile without touching the grammar inside a handler:
+  // failures are turned into values first, then folded into one message.
+  let compiled : Result[@string.Regex, String] = match translate_re2_pattern(
+    pattern,
+  ) {
+    Err(detail) => Err(detail)
+    Ok(translated) =>
+      try {
+        Ok(@string.Regex::Regex(translated))
+      } catch {
+        // The engine's own diagnostic names the offending construct,
+        // which is far more useful than a bare "invalid regex".
+        e => Err(e.to_string())
+      }
+  }
+  match compiled {
+    Ok(re) => {
+      g.regex_cache.push((pattern, re))
+      re.execute(s) is Some(_)
+    }
+    Err(detail) => {
+      let msg = "invalid regex: " + pattern + " (" + detail + ")"
+      g.regex_failed.push((pattern, msg))
+      raise EvalError::EvalErr(msg)
     }
   }
-  g.regex_cache.push((pattern, re))
-  re.execute(s) is Some(_)
 }
 
 ///|

@@ -91,13 +91,17 @@ Other syntax:
   `from > to` → empty; works on arrays and strings (string slices are
   character-based in mbel; expr slices bytes — non-ASCII divergence
   documented).
-- `matches` regex: the right operand is compiled as a real regex by the
-  MoonBit core engine — anchors, `.`, classes, quantifiers, groups and
-  alternation all work, and a malformed pattern is a runtime error. The
-  core syntax is not Go RE2: `\d`/`\D`/`\s`/`\S`/`\w`/`\W` are
-  unsupported (use POSIX classes such as `[[:digit:]]`), `.` also
-  matches newline, and case-insensitivity is written `(?i:…)` (documented
-  divergences; see docs/coverage-vs-expr.md).
+- `matches` regex: the right operand is an RE2 pattern. It is translated
+  to the MoonBit core engine's dialect and compiled (cached per grammar),
+  so RE2 class shorthands (`\d \D \w \W \s \S`), `.` (any character
+  except newline; `(?s)` for dot-all), character classes including a
+  leading or trailing `-`, POSIX classes, inline flags (`(?i)`, `(?i:…)`,
+  `(?s)`) and named groups all behave as in RE2 — verified case-by-case
+  against Go's `regexp` (see tools/README.md). A malformed pattern, or a
+  construct with no core equivalent, raises `invalid regex: …` naming the
+  construct. Documented cuts: `\p{…}`/`\P{…}`, `(?m)`, `\D`/`\W`/`\S`
+  inside a character class, `\Q…\E`, `\xHH`, `(?P<name>…)`, `(?U)`, and
+  turning `(?i)` back off inside an active `(?i)` scope.
   `contains`/`startsWith`/`endsWith` are
   operators, nil-safe (nil operand → false).
 - `let x = expr; rest` and `a; b; c` sequences — `let` at precedence-0
@@ -182,8 +186,10 @@ transforms are registered per engine instance (no reflection — see
 - String `in` (classic dialect) is substring semantics; the standard dialect
   rejects nothing statically there (Eval mode follows legacy substring
   behavior for strings — divergence documented in coverage matrix).
-- String slices are character-based; `matches` uses the core regex syntax
-  (no `\d`/`\w`/`\s` class escapes, `.` matches newline); `upper`/`lower`
+- String slices are character-based; `matches` follows RE2 except for the
+  documented cuts (`\p{…}`, `(?m)`, `\D`/`\W`/`\S` inside a class,
+  `\Q…\E`, `\xHH`, `(?P<…>)`, `(?U)`, `(?-i)` in an `(?i)` scope);
+  `upper`/`lower`
   are ASCII-only; time is the minimal UTC/ISO subset; JSON numbers are
   doubles (integers above 2^53 lose exactness in context data; literals
   and `toJSON` of int64 are exact).

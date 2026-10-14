@@ -1,0 +1,116 @@
+# RE2 differential corpus for the `matches` operator: one case per line,
+# TAB-separated: <pattern> <subject>.
+#
+# Both fields use the same escape convention -- \n \t \r \f \v \\ and
+# \" are decoded to the corresponding character; everything else is
+# literal. So a regex escape like \d is written \\d here.
+#
+# Regenerate the MoonBit table with tools/gen_regex_mbt.py, which runs the
+# Go RE2 oracle over this file; engine_test/regex_re2_test.mbt then asserts
+# mbel agrees with Go.
+\\d+	abc123
+\\d+	abc
+^\\d+$	12345
+^\\d+$	12a45
+\\D+	abc
+\\D+	123
+\\w+	abc_1
+\\w+	a-b
+\\W	-
+\\W	a
+\\w+@\\w+	a@b
+^\\w+$	abc_1
+\\s	 
+\\s	\t
+\\s	\n
+\\s	\r
+\\s	\f
+\\s	\v
+\\s	a
+\\S	a
+\\S	 
+\\S	\v
+\\S	\t
+a\\sb	a b
+^\\s*\\w+\\s*$	  hello  
+a.b	axb
+a.b	a\nb
+a.b	a\rb
+(?s)a.b	a\nb
+(?s)a.b	axb
+^a.b$	a\nb
+.*	a\nb
+(?s).*	a\nb
+a[^\\n]b	a\nb
+a[^\\n]b	axb
+[a-]	-
+[a-]	a
+[a-]	b
+[-a]	-
+[-a]	a
+[-]	-
+[a-z]+	hello
+[a-z]+	HELLO
+[a-z-]+	a-b
+[]]	]
+[^]]	a
+[^]]	]
+[\\d]+	123
+[\\w]+	ab_1
+[^\\d]+	abc
+[a\\s]	 
+[\\d\\w]+	a1
+[^\\-a]	b
+[[:digit:]]+	123
+[[:alpha:]]+	abc
+[[:alpha:]]+	é
+[[:space:]]	\v
+[[:space:]]	 
+[[:word:]]+	ab_1
+[[:xdigit:]]+	deadBEEF
+[[:upper:]]+	ABC
+[[:upper:]]+	abc
+(?i)hello	HELLO
+(?i)hello	hello
+(?i)hello	world
+(?i)abc|DEF	def
+(?i)abc|DEF	ABC
+a(?i)b|C	ac
+a(?i)b|C	aC
+a(?i)b|C	ab
+(?i:a)b	Ab
+(?i:a)b	AB
+(?i:a)b	ab
+((?i)a)b	Ab
+((?i)a)b	AB
+(?i)a(?-i)b	Ab
+(?i)a(?-i)b	AB
+(?i)a(?-i)b	ab
+(?i)[a-z]+	ABC
+(?is)a.b	A\nB
+(?i)(?-s:a.b)	A.B
+(?:ab)+	abab
+(?<n>a)b	ab
+^(a|b)+$	abba
+^(a|b)+$	abc
+a{2,3}	aaa
+a{2,3}	a
+a{2,}	aaaa
+colou?r	color
+colou?r	colour
+^abc$	abc
+^abc$	xabc
+\\bfoo\\b	a foo b
+\\bfoo\\b	afoob
+a\\.b	a.b
+a\\.b	axb
+\\\\	\\
+\\t	\t
+\\n	\n
+^[\\w.-]+@[\\w.-]+\\.\\w+$	a.b-c@example.co
+^[\\w.-]+@[\\w.-]+\\.\\w+$	not-an-email
+^\\d{4}-\\d{2}-\\d{2}$	2026-10-14
+^\\d{4}-\\d{2}-\\d{2}$	2026-1-4
+[	 abc
+(	 abc
+a)	 ab

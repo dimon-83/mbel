@@ -59,3 +59,33 @@ Known intentional divergence (not in the diff corpora, see
 TypeError for `arr[.f == x].prop` when the filtered array is empty
 (its README example `assoc[.first == "Lana"].last` without a context
 crashes there); mbel returns undefined.
+
+## Regex differential corpus (`matches`)
+
+`tools/regex_corpus.txt` — 106 `pattern<TAB>subject` cases for the
+`matches` operator. Both fields use one escape convention (`\n \t \r \f
+\v \\ \"` decoded, everything else literal), so a regex escape like `\d`
+is written `\\d`.
+
+- `tools/regex_oracle.go` — the Go side: evaluates every case with Go's
+  `regexp` package (RE2, the engine expr-lang itself uses) and prints
+  `match` / `no match` / `error`. Only that distinction is compared;
+  Go's and the core engine's error *text* differ by design.
+- `tools/gen_regex_mbt.py` — runs the oracle and freezes the verdicts
+  into `engine_test/regex_re2_data_test.mbt`.
+- `engine_test/regex_re2_test.mbt` — the mbel side: asserts `matches`
+  produces the same verdict on every row, on BOTH engines. The pattern is
+  bound through the environment (`s matches p`), so no string-literal
+  escaping sits between the corpus and the regex engine.
+
+    python3 tools/gen_regex_mbt.py   # runs Go, regenerates the table
+    moon test -p engine_test         # asserts mbel agrees
+
+A mismatch names the offending case and engine. Verified 2026-10-14:
+106/106 identical to Go (go1.27.0) on Walk and Vm.
+
+Known cuts are deliberately NOT in this corpus — they are covered by
+`evaluator/regex_translate_wbtest.mbt` and documented in
+docs/expr-gap-analysis.md: `\p{…}`, `(?m)`, `\D`/`\W`/`\S` inside a
+character class, `\Q…\E`, `\xHH`, `(?P<…>)`, `(?U)`, and turning `(?i)`
+back off inside an active `(?i)` scope.

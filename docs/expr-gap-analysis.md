@@ -55,12 +55,17 @@
 | 时间 4 | now duration date timezone(含 Go time 方法直调) | MoonBit 无 time — 4.5 | 4-6 |
 | 集合 9 | len first last get take keys values reverse uniq concat flatten sort | 无 | 2-3 |
 | 位运算 8 | bitand bitor bitxor bitnand bitnot bitshl bitshr bitushr | Int64 值模型(4.4.3) | 1-2 |
-| matches/正则 | core 正则引擎(真实模式解析;此前误用字面量构造器已修正) | 剩余 RE2 语法差异见 §E.4 差异表 | 1-2 |
+| matches/正则 | core 引擎 + RE2 翻译层(regex_translate.mbt),逐例对拍 Go regexp 106 例 | 无 core 等价物的构造按差异表裁剪 | ✅ |
 
 ### E. 架构差异(不可 1:1,需显式裁剪并记录)
 
 1. **反射**:expr 经 Go reflect 访问任意 struct env 的字段/方法(运行时 Field/Method 索引、methodset 缓存)。MoonBit 无反射 → env 收敛为引擎数据模型(Value ObjectVal/ArrayVal);"任意宿主结构体作为 env"裁剪。影响公开 API 形态与 `foo.bar()` 方法调用的宿主扩展方式(改为注册式)。
-2. **time/regexp**:expr 直接依赖 Go time 与 regexp(方法集很大:`.Year() .In(tz) .Seconds()` 等)。regexp 一侧已由 MoonBit core 正则引擎覆盖——`matches` 现为真实模式解析(此前误用 `Regex::string` 字面量构造器,等价于子串匹配;已改用 `Regex::Regex`),残留 RE2 语法差异见差异表;time 一侧核心仍无 → 4.5 最小自实现或 FFI(wasm/js 后端可注入宿主实现)。最大外部依赖风险。
+2. **time/regexp**:expr 直接依赖 Go time 与 regexp(方法集很大:`.Year() .In(tz) .Seconds()` 等)。regexp 一侧已由 MoonBit core 正则引擎 + 翻译层
+   (`evaluator/regex_translate.mbt`)覆盖:`matches` 现按 RE2 语义解析(A 类简写、
+   `.`、字符类、内联标志),并逐例对拍 Go `regexp`(tools/regex_corpus.txt,
+   106 例 × 双引擎);余下为无 core 等价物的构造,一律报错并点名(见差异表)。
+   此前误用 `Regex::string` 字面量构造器(等价于子串匹配),已修正。time 一侧
+   核心仍无 → 4.5 最小自实现或 FFI(wasm/js 后端可注入宿主实现)。最大外部依赖风险。
 3. **生成代码**:VM runtime helpers 3718 行 + func_types 370 行为 Go 生成代码;MoonBit 侧以手写特化/泛型替代,不追求同构。
 4. **性能口径**:wasm-gc 与 Go 原生无可比性;验收 = 自身基准 + 复杂度同阶(4.3 内建 bench)。
 5. **错误通道**:expr panic→recover→file.Error;MoonBit checked errors(raise)天然等价,不需 recover。
@@ -114,9 +119,18 @@ New divergences recorded:
 |---|---|---|---|
 | `type(1)` | "int" | "number" | no int/float split until 4.4.3 |
 | `?? mixed with other ops` | parse error | accepted | parser-level check not ported |
-| invalid regex pattern | compile error (check time) | runtime error `invalid regex: <pattern>` | mbel compiles the pattern at eval time, not check time |
-| `\d` `\D` `\s` `\S` `\w` `\W` in a pattern | supported (RE2) | invalid-pattern error | core regex has no class escapes; use POSIX classes (`[[:digit:]]`, `[[:word:]]`, `[[:space:]]`) |
-| `.` | any char except newline | any char including newline | core regex `.` is newline-inclusive |
+| invalid regex pattern | compile error (check time) | runtime error `invalid regex: <pattern> (<engine detail>)` | mbel compiles the pattern at eval time, not check time |
+| `\d` `\D` `\w` `\W` (outside a class) | supported (RE2) | supported, translated to `[[:digit:]]` / `[[:word:]]` etc. | core has no class escapes; translation layer |
+| `\s` `\S` (outside a class) | `[\t\n\f\r ]` — **excludes `\v`** | translated to `[\t\n\f\r ]` / `[^\t\n\f\r ]` | core's `[[:space:]]` *includes* `\v`, so the set must be spelled out |
+| `.` | any char except newline | same, translated to `[^\n]`; `(?s)` leaves `.` | core's `.` is newline-inclusive |
+| leading/trailing `-` in a class (`[a-]`, `[-a]`) | literal dash | translated to `[a\-]` / `[\-a]` | core rejects a dash in first/last position |
+| bare `(?i)`, `(?s)` | applies to the rest of the group | translated to `(?i:…)` / dot-all bookkeeping | core only implements the `(?i:…)` group form |
+| `\p{…}` `\P{…}` | supported | `invalid regex: … unsupported regex construct` | core has no Unicode property classes; would need Unicode tables |
+| `(?m)` | supported | `invalid regex: … multiline mode is not supported` | core has no multiline mode |
+| `\D` `\W` `\S` **inside** a class (`[\D5]`) | supported | `invalid regex: …` | needs character-class set algebra (complement ∩ union) |
+| `\Q…\E`, `\xHH`, `(?P<…>)`, `(?U)` | supported | `invalid regex: …` | no core equivalent, not translated |
+| `(?-i)` inside an active `(?i)` scope | supported | `invalid regex: …` | core only implements `(?i:…)`, no way to switch it back off |
+| `\uXXXX` / `\u{…}` | **rejected** by RE2 | accepted | core-native escape; mbel superset |
 | `1..2` (Jexl corpus) | n/a | range | mbel superset; moved to tools/divergence.txt |
 | time objects / timezones | Go time.Time | unix-ms numbers | stage 4.5 cut item |
 

@@ -51,7 +51,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 切片 [1:3] [:3] [3:] | ✅ | eval_test(双引擎) | expr 语义:负边界 len+x、越界 clamp、from>to 为空;数组+字符串(字符串按字符,mbel 注:expr 按字节,非 ASCII 差异记录) |
 | 可选链 ?. /?.[ | ✅ | parser_test, eval_test `user?.name` | 求值走 nil-safe drill(与 mbel drill 语义一致) |
 | 链式比较 a<b<c | ✅ | parser_test(结构) | `< > <= >=` 合取;`==`/`!=` 不链 |
-| matches 正则 | ✅ | builtin_test(双引擎), want 表 033/034 | core 正则引擎真实解析(锚点/`.`/字符类/量词/分组/交替;非法模式运行时报错)。残留差异:无 `\d`/`\w`/`\s` 类转义(用 POSIX 类)、`.` 匹配换行、大小写不敏感为 `(?i:…)` |
+| matches 正则 | ✅ | regex_re2_test(Go RE2 对拍 106 例 × 双引擎), builtin_test, want 表 033/034 | 右操作数是 RE2 模式,经翻译层(evaluator/regex_translate.mbt)转 core 方言:简写类、`.`(不含换行,`(?s)` dot-all)、字符类首/末位 `-`、裸 `(?i)`/内联标志、命名分组均与 RE2 一致。裁剪:`\p{…}`、`(?m)`、类内 `\D`/`\W`/`\S`、`\Q…\E`、`\xHH`、`(?P<…>)`、`(?U)`、`(?i)` 作用域内 `(?-i)`;非法模式透传 core 诊断 |
 | contains/startsWith/endsWith 运算符 | ✅ | eval_test, parser_test | expr 语义是**运算符**(非函数):infix、nil-safe(空操作数=false),双引擎注册 |
 | 管道 \| | ✅ | parser_test, eval_test | expr 管道:`x\|f(a)` desugar 为 `f(x,a)`;RHS 必须是调用(`1\|2` 解析报错);需宿主注册函数/转换 |
 | 一元 -/!(优先级) | ✅ | parser_test, eval_test | expr:一元 -/+ 90、not/! 50、幂 100 → `-2**2`=-(2**2)、`2**-2` 合法;Jexl legacy 词法负号保留 |
@@ -199,10 +199,16 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    求值器 / VM 子 Program+单子 VM 复用),见 §4 行与 §7 实测。
 7. **4.5 依赖(P2/P3,评审修订)**:正则——原"自实现/FFI 注入"方案已作废:
    `matches` 现直接使用 MoonBit core 正则引擎(`Regex::Regex`,求值期编译
-   +缓存),锚点/字符类/量词/分组/交替均可用,非法模式报运行时报错;此前
-   误用 `Regex::string` 字面量构造器,等价于子串匹配,已修正。剩余差异是
-   core 的语法缺口(无 `\d`/`\w`/`\s` 类转义、`.` 匹配换行、大小写不敏感
-   写作 `(?i:…)`),见 §2 行与 expr-gap-analysis 差异表。时间——civil
+   +缓存),此前误用 `Regex::string` 字面量构造器(等价于子串匹配,已修正)。
+   core 不是 RE2,故新增翻译层 `evaluator/regex_translate.mbt`:简写类
+   `\d \D \w \W \s \S`、`.`(RE2 不含换行,`(?s)` 恢复 dot-all)、字符类首/末位
+   `-`、裸 `(?i)`/`(?i:…)`/`(?s)` 均改写为 core 等价形式;并逐例对拍 Go
+   `regexp`(tools/regex_corpus.txt + tools/gen_regex_mbt.py →
+   engine_test/regex_re2_test.mbt,106 例 × 双引擎)。明确裁剪:`\p{…}`、
+   `(?m)`、类内 `\D`/`\W`/`\S`、`\Q…\E`、`\xHH`、`(?P<…>)`、`(?U)`、`(?i)`
+   作用域内的 `(?-i)`——一律报 `invalid regex: … (…)` 并点名构造,不做静默
+   降级。注意 `\s` 必须译成 `[\t\n\f\r ]` 而非 `[[:space:]]`:Go 的 `\s`
+   不含 `\v` 而 core 的 `[[:space:]]` 含(对拍时发现)。时间——civil
    日历(已有 days_from_civil 基础)+ 固定偏移;完整 tzdata 预留外部文件
    加载接口,可永不内置。时间项仍延后至核心稳定。
 8. **4.4 收尾清单(2026-09-07 起逐项收尾,完成即更新)**:① 文档对齐 ✅(本文);

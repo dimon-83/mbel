@@ -8,33 +8,64 @@ All notable changes to mbel are documented here. The format follows
 
 ### Fixed
 
-- **`matches` now compiles real regex patterns.** `grammar_regex_match`
+- **`matches` now implements RE2 regex semantics.** `grammar_regex_match`
   called `@string.Regex::string`, which builds a *literal* matcher — the
   pattern was matched as plain text — so `matches` behaved like
-  `contains` (`"hello" matches "^h.*o$"` was `false`). It now uses
-  `@string.Regex::Regex`, the core pattern parser: anchors, `.`,
-  character classes, quantifiers, groups and alternation work, and a
-  malformed pattern raises `invalid regex: …` instead of silently
-  returning `false`. That error path already existed in the code but was
-  unreachable, which is why this reads as a wrong-constructor bug rather
-  than a deliberate cut.
+  `contains` (`"hello" matches "^h.*o$"` was `false`). It now compiles a
+  real pattern through the core parser, and a malformed pattern raises
+  instead of silently returning `false`. That error path already existed
+  in the code but was unreachable, which is why this reads as a
+  wrong-constructor bug rather than a deliberate cut.
+- **Pattern errors carry the engine's own diagnostic.** The failure path
+  discarded it and reported a bare `invalid regex: <pattern>`; the
+  message now names the offending construct, and the failure text is
+  cached so a repeated evaluation reports exactly the same message on
+  both engines.
+
+### Added
+
+- **RE2 → core translation layer** (`evaluator/regex_translate.mbt`), so
+  the RE2 constructs with a core equivalent behave as in Go: class
+  shorthands (`\d \D \w \W`, and `\s \S` translated to `[\t\n\f\r ]` —
+  Go's `\s` excludes `\v` while core's `[[:space:]]` includes it), `.`
+  (any character except newline; `(?s)` for dot-all), a leading or
+  trailing `-`/`]` in a character class, bare `(?i)`/`(?s)` flags, and
+  named groups.
+- **Go differential harness for `matches`**: `tools/regex_corpus.txt`
+  (106 cases), `tools/regex_oracle.go` (Go's `regexp`, i.e. RE2 — the
+  engine expr itself uses), `tools/gen_regex_mbt.py` (freezes the
+  verdicts) and `engine_test/regex_re2_test.mbt` (asserts mbel agrees on
+  every row, on Walk and Vm). 106/106 identical.
 
 ### Changed
 
 - The documentation claim that the MoonBit core regex is "literal-only"
-  was wrong. `docs/en/language-definition.md`,
+  was wrong, and so was "the remaining gaps are `\d`/`.`/`(?i)`" — those
+  are now translated. `docs/en/language-definition.md`,
   `docs/zh/language-definition.md`, `docs/expr-gap-analysis.md`,
-  `docs/coverage-vs-expr.md`, `docs/review-roadmap-2026-09-06.md` and the
-  README roadmap now describe the real behavior and list the remaining
-  gaps against Go RE2: no `\d`/`\w`/`\s` class escapes (use POSIX classes
-  such as `[[:digit:]]`), `.` matches newline, and case-insensitivity is
-  written `(?i:…)`.
+  `docs/coverage-vs-expr.md`, `docs/review-roadmap-2026-09-06.md`,
+  `tools/README.md` and the README state the supported surface and the
+  exact cuts.
 - TestExpr want-table rows 033/034 — the two rows skipped as a "regex
   cut" — are now transcribed and asserted on both engines (150
   transcribed + 17 documented skips). `builtin_test` gains real-regex
   cases plus an invalid-pattern case, and the VM parity suite asserts
   regex values and the invalid-pattern error message agree across
   engines.
+- **API:** `@evaluator.Grammar`'s `regex_failed` cache field changed type
+  from `Array[String]` to `Array[(String, String)]` — pattern plus the
+  message to re-raise — so a failed pattern keeps one consistent error
+  text. `Grammar` is `pub(all)`, so this is a source-level change for code
+  that builds a grammar literal; `default_grammar()` and the engine entry
+  points are unaffected.
+
+### Documented cuts
+
+`matches` rejects, with an actionable `invalid regex: …` message rather
+than a silent wrong answer: `\p{…}`/`\P{…}` Unicode properties, `(?m)`
+multiline, `\D`/`\W`/`\S` inside a character class, `\Q…\E`, `\xHH`,
+`(?P<name>…)`, `(?U)`, and switching `(?i)` back off inside an active
+`(?i)` scope.
 
 ## [0.3.4] — 2026-10-11
 
