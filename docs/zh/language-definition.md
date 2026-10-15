@@ -100,7 +100,8 @@ mbel 额外接受经典方言的方括号谓词 `items[.price <= 2]`(逐元素�
 - 环境只能是数据:无 struct 环境、值上无方法(反射裁剪);方法调用语法可解析但在 lowering 时报错。
 - `type()` 对浮点返回 `"number"`(legacy 锁定)而非 `"float"`。
 - 经典方言中字符串 `in` 是子串语义(标准方言 Eval 模式对字符串沿用该行为——差异已在覆盖矩阵记录)。
-- 字符串切片按字符;`matches` 除下列裁剪外遵循 RE2(`\p{…}`、`(?m)`、类内 `\D`/`\W`/`\S`、`\Q…\E`、`\xHH`、`(?P<…>)`、`(?U)`、`(?i)` 作用域内的 `(?-i)`);`upper`/`lower` 仅 ASCII;时间是最小 UTC/ISO 子集;JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。
+- 数组 `in` 在 Compile 模式按 expr 做类型检查:成员类型与元素类型不可比较即编译错误(`1 in ["a"]` → `cannot use int as type string in array`)。int/float 之间可比较,`nil` 与任何类型可比较,异质数组字面量推断为普通 array 而非报错。成员判等与 `==` 同源,故 `1 in [1.0]` 为 `true`。映射表键成员不支持(已文档化裁剪)。
+- 字符串切片按字符;`matches` 除下列裁剪外遵循 RE2(`\p{…}`、`(?m)`、类内 `\D`/`\W`/`\S`、`\Q…\E`、`\xHH`、`(?P<…>)`、`(?U)`、`(?i)` 作用域内的 `(?-i)`);`upper`/`lower` 仅 ASCII;时间是最小 UTC/ISO 子集,且 `now()`/`date()`/`duration()` 统一为 int64 纳秒(故时间与时长运算即精确 int64 加法);JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。
 - 方括号谓词 `items[.expr]` 被接受(经典方言兼容);参考语义无方括号形式,`[` 后的裸 `.` 直接报错。
 
 expr 语言定义每一行的可机检状态见 docs/coverage-vs-expr.md;裁剪项与理由见 docs/expr-gap-analysis.md。

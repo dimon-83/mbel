@@ -209,3 +209,35 @@ test "strict mode: byte strings type as []uint8" {
     5, "bytes ordering",
   )
 }
+
+///|
+/// expr checks a membership operand against the array's element type
+/// ("cannot use int as type string in array") and points the caret at the
+/// `in` operator. Numbers stay comparable across int/float, nil is
+/// comparable with anything, and a heterogeneous literal has an unknown
+/// element type (expr types it as a plain `array`, not an error).
+test "checker: in checks membership types like expr" {
+  expect_checked_err(
+    "1 in [\"a\"]", "cannot use int as type string in array (1:3)", 2,
+    "int in [string]",
+  )
+  expect_checked_err(
+    "\"a\" in [1]", "cannot use string as type int in array (1:5)", 4,
+    "string in [int]",
+  )
+  expect_checked_err(
+    "true in [1]", "cannot use bool as type int in array (1:6)", 5,
+    "bool in [int]",
+  )
+  expect_checked_err(
+    "1 in [b\"x\"]", "cannot use int as type []uint8 in array (1:3)", 2,
+    "int in [bytes]",
+  )
+  // Compatible operands still evaluate; `1 in [1.0]` agrees with
+  // `1 == 1.0` (true) because membership uses the operator's equality.
+  expect_checked("1 in [1.0]", "true", "int in [float]")
+  expect_checked("1.0 in [1]", "true", "float in [int]")
+  expect_checked("nil in [1]", "false", "nil in [int]")
+  expect_checked("1 in [1, \"a\"]", "true", "member of dynamic array")
+  expect_checked("1 in \"abc\"", "false", "string rhs is unchecked")
+}

@@ -230,6 +230,19 @@ pub fn now_ms() -> Int64 {
 }
 
 ///|
+/// Unix time in nanoseconds (UTC) — the unit time values are represented
+/// in, matching Go's `time.Time.UnixNano` and the nanosecond
+/// `time.Duration`, so that `time + duration` is plain int64 addition
+/// rather than an addition of two different units.
+///
+/// Exact int64, not a double: nanoseconds since the epoch (~1.8e18) exceed
+/// 2^53, so a double representation would make timestamps less than
+/// ~256 ns apart compare equal.
+pub fn now_ns() -> Int64 {
+  now_ms() * 1000000L
+}
+
+///|
 /// Parses Go-style durations: sequences like "1h30m", "250ms",
 /// "1.5h", "2us", units ns us µs ms s m h. Returns nanoseconds.
 pub fn parse_duration(s : String) -> Int64? {

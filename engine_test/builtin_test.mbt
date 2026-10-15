@@ -213,14 +213,14 @@ test "duration parses Go-style durations" {
 
 ///|
 test "date parses ISO 8601" {
-  // 2023-08-14T00:00:00Z = 1691971200000 ms
+  // 2023-08-14T00:00:00Z = 1691971200000 ms = 1691971200000000000 ns
   expect_v(
-    "date(\"2023-08-14\") == 1691971200000",
+    "date(\"2023-08-14\") == 1691971200000000000",
     @ast.BoolVal(true),
     "date ymd",
   )
   expect_v(
-    "date(\"2023-08-14T10:30:00Z\") == 1691971200000 + 37800000",
+    "date(\"2023-08-14T10:30:00Z\") == 1691971200000000000 + 37800000000000",
     @ast.BoolVal(true),
     "date time",
   )
@@ -228,12 +228,58 @@ test "date parses ISO 8601" {
 }
 
 ///|
-test "now is a plausible unix-ms timestamp" {
+test "now is a plausible unix-ns timestamp" {
   let r = eval1("now()") catch { @engine.EngineErr(msg) => abort(msg) }
   match r {
-    @ast.NumVal(d) => assert_true(d > 1700000000000.0 && d < 4000000000000.0)
-    _ => abort("now: expected number")
+    // ns, not a double: the value exceeds 2^53.
+    @ast.IntVal(ns) =>
+      assert_true(ns > 1700000000000000000L && ns < 4000000000000000000L)
+    _ => abort("now: expected an int64 nanosecond timestamp")
   }
+}
+
+///|
+test "time values share one unit, so time arithmetic is meaningful" {
+  // Time and duration are both int64 nanoseconds: this used to add
+  // milliseconds to nanoseconds and return a meaningless number.
+  expect_v(
+    "date(\"2024-01-01\") + duration(\"24h\") == date(\"2024-01-02\")",
+    @ast.BoolVal(true),
+    "date + duration",
+  )
+  expect_v(
+    "date(\"2024-01-02\") - date(\"2024-01-01\") == duration(\"24h\")",
+    @ast.BoolVal(true),
+    "date - date",
+  )
+  expect_v(
+    "date(\"2024-01-02\") - date(\"2024-01-01\") == 86400000000000",
+    @ast.BoolVal(true),
+    "date difference is ns",
+  )
+  expect_v(
+    "date(\"2024-06-15\") + duration(\"12h\") == date(\"2024-06-15T12:00:00Z\")",
+    @ast.BoolVal(true),
+    "date + half day",
+  )
+  // Subtracting a duration moves time backwards and stays comparable.
+  expect_v(
+    "date(\"2024-01-02\") - duration(\"24h\") == date(\"2024-01-01\")",
+    @ast.BoolVal(true),
+    "date - duration",
+  )
+  expect_v(
+    "date(\"2024-01-01\") < date(\"2024-01-02\")",
+    @ast.BoolVal(true),
+    "date compare",
+  )
+  // now() is on the same scale.
+  expect_v("now() - now() == 0", @ast.BoolVal(true), "now difference")
+  expect_v(
+    "now() - duration(\"1h\") < now()",
+    @ast.BoolVal(true),
+    "now - duration",
+  )
 }
 
 // --- expr operators: ?? .. matches ---

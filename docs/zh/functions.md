@@ -144,6 +144,8 @@ playground「🧩 自定义函数」抽屉(控件行按钮弹出)加载 UTF-8 JS
 - 转换(9):int float type toJSON fromJSON toBase64 fromBase64 toPairs fromPairs
 - 位运算(8):bitand bitor bitxor bitnand bitnot bitshl bitshr bitushr
 - 时间(4,最小集):now duration date timezone
+
+`now()`、`date()`、`duration()` 的值统一为 **int64 纳秒**(`now()`/`date()` 为 Unix 纪元起的纳秒数,UTC;`duration()` 为纳秒计数——与 Go 的 `UnixNano`/`Duration` 同单位)。统一单位是 `date("2024-01-01") + duration("24h")` 能成为精确 int64 加法的前提;时区仅 UTC,`date()` 只接受 ISO-8601 系列写法(已文档化裁剪)。
 - 谓词聚合(15):all none any one filter map count sum find findIndex findLast findLastIndex groupBy sortBy reduce
 
 若干内置按 expr 语义返回类型化整数:`len`、`count`、`indexOf`、`lastIndexOf`、`findIndex`、`findLastIndex`、`int()`,以及整数输入保持整数的 `abs`/`min`/`max`/`sum`。

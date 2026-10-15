@@ -45,7 +45,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 比较 == != < <= > >= | ✅ | evaluator_test, corpus | JS loose ==;expr 严格 → 4.4.5 |
 | 逻辑 && \|\| ! | ✅ | evaluator_test(短路) | 惰性求值 |
 | not / and / or 词形 | ✅ | parser_test | 关键字词法;`and`/`or` 二元(15/10),`not` 一元(50)+后缀否定 |
-| in / not in | ✅ / ✅ | corpus, parser_test | 后缀否定集=in/matches/contains/startsWith/endsWith;`a not in b`→`not (a in b)`;字符串上的 legacy `in` 为子串语义(expr 报错,差异记录) |
+| in / not in | ✅ / ✅ | corpus, parser_test, check_test, typed_builtin_test | 后缀否定集=in/matches/contains/startsWith/endsWith;`a not in b`→`not (a in b)`;字符串上的 legacy `in` 为子串语义(expr 报错,差异记录);**数组成员类型检查对齐 expr**(Compile 模式:`1 in ["a"]` 报 `cannot use int as type string in array`),成员相等用与 `==` 同一套相等(`1 in [1.0]`=true,与 `1 == 1.0` 一致);映射表键成员仍未支持(row 026 裁剪) |
 | ?? 空合并 | ✅ | eval_test | expr 混用限制已实现(`1 ?? 2 + 3` 解析报错,提示用括号);链式 `a ?? b ?? c` 合法;仅 nil/undefined 触发 |
 | .. 范围 | ✅ | builtin_test | 1e6 内存预算;负边界合法,降序空 |
 | 切片 [1:3] [:3] [3:] | ✅ | eval_test(双引擎) | expr 语义:负边界 len+x、越界 clamp、from>to 为空;数组+字符串(字符串按字符,mbel 注:expr 按字节,非 ASCII 差异记录) |
@@ -78,7 +78,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 集合 12 | ✅ 12/12 | get 越界 nil;sort 数字/字符串 |
 | 转换 9 | 🟡 9/9 实现 | type() 对整数返回 "int"(4.4.3);float 仍报 "number"(legacy 锁定,expr 报 "float",待 dialect 拆分);toJSON NaN→null(expr 报错);大 int64 JSON 精度损失已记录 |
 | 位运算 8 | ✅ 8/8 | Int64 语义 |
-| 时间 4 | 🟡 最小集 | now/duration/date(ISO)/timezone=UTC;无 time.Time 对象/方法/多 layout/时区库 |
+| 时间 4 | 🟡 最小集 | now/duration/date(ISO)/timezone=UTC;三者统一为 **int64 纳秒**(与 Go `UnixNano`/`Duration` 同单位,故 `date(…)+duration("24h")` 是精确 int64 加法);无 time.Time 对象/方法/多 layout/时区库 |
 | 谓词聚合 15 | ✅ 15/15 | 函数式调用形式已交付(2026-09-06,如 `count(list, # > 2)`):# /#index/#acc 指针、省略 # 的相对访问、子 Program+类型化槽位;`{expr}` 花括号谓词形式已随 parser 重写交付(4.4.2,双引擎一致) |
 
 ## 5. 工程能力
@@ -88,7 +88,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 节点上限(1e4,可配) | ✅ | budget_test |
 | 嵌套上限(1000;expr 无此项,wasm 栈必需) | ✅ | budget_test |
 | 求值深度 + 步数预算(跨 filter 共享) | ✅ | budget_test, stability_test, budget_parity_test | 深度预算双引擎同语义:Vm 每条指令携带源 AST 深度(program.depths),仅当 max_depth 低于程序最大深度时逐指令检查(默认预算零开销);相对过滤器谓词按「每元素新求值器」重新计深,与 Walk 一致;expr 前端 parse 应用 max_nodes(节点数,迭代统计)与递归/深度护栏(嵌套约 500-1000 层) |
-| env 白名单 / Strict | 🟡 严格模式 | `eval_expr_checked`/`compile_expr_checked_limited`(4.4.4 checker 阶段1):已知类型的运算符规则按 expr Compile 文案报错(`invalid operation: + (mismatched types int and string)`、`non-bool expression (type int) used as condition`);`eval_expr` 保持 Eval 模式(动态语义,与 expr 的 Eval/Compile 双模式对齐);env 白名单=阶段 2 |
+| env 白名单 / Strict | 🟡 严格模式 | `eval_expr_checked`/`compile_expr_checked_limited`(4.4.4 checker 阶段1):已知类型的运算符规则按 expr Compile 文案报错(`invalid operation: + (mismatched types int and string)`、`non-bool expression (type int) used as condition`、`in` 的成员类型检查);`eval_expr` 保持 Eval 模式(动态语义,与 expr 的 Eval/Compile 双模式对齐);env 白名单=阶段 2。**注:expr 不要求数组字面量元素同质**——异质字面量推断为 `array`/`UnknownN` 而非报错,mbel 与此一致 |
 | 常量折叠 | ✅ | builtin_test fold 套件 |
 | 12-pass optimizer 其余 | ❌ | 4.3 剩余(需 VM 落点) |
 | 字节码 VM | ✅ v2(指令化) | 26 opcode(0-25)平行 Int 数组 + 编译期预解析 + 栈预分配 + 原生过滤器/聚合循环帧 + 词法作用域(局部变量槽/切片/env 指令,4.4.2);`Engine::set_engine(Walk \| Vm)`,默认 Walk;207 corpus + 手写用例 Walk vs Vm **真绿**(值+错误消息严格相等,NaN-aware;f37f10d 恢复端到端分发后首次为真,此前"假绿"见 §7 勘误);实测:迭代型负载 Vm 领先(过滤器 native −69% / wasm −39%,聚合 native −30~41%),微负载 Vm 落后(常量求值 +38~118%)——同批数据见 §7 |

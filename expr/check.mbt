@@ -65,6 +65,24 @@ fn known(n : Nature) -> Bool {
 }
 
 ///|
+/// expr's `ComparableTo`, restricted to the natures mbel has: unknown and
+/// nil are comparable with anything, numbers with numbers (int/float mix
+/// included), arrays with arrays, and otherwise the families must match.
+/// Used by the `in` membership check (`1 in ["a"]` is a compile error in
+/// expr, not a silent `false`).
+fn nature_comparable(l : Nature, r : Nature) -> Bool {
+  match (l, r) {
+    (UnknownN, _) | (_, UnknownN) => true
+    (NilN, _) | (_, NilN) => true
+    (IntN, IntN) | (IntN, FloatN) | (FloatN, IntN) | (FloatN, FloatN) => true
+    (ArrN(_), ArrN(_)) => true
+    (MapN(_), MapN(_)) => true
+    (StringN, StringN) | (BoolN, BoolN) | (BytesN, BytesN) => true
+    _ => false
+  }
+}
+
+///|
 type Scope = Array[(String, Nature)]
 
 ///|
@@ -460,7 +478,29 @@ fn check_binary(
         (UnknownN, _) | (_, UnknownN) => UnknownN
         _ => raise mismatch()
       }
-    "in" | "matches" | "contains" | "startsWith" | "endsWith" => UnknownN
+    // expr checks membership types against the container's element type
+    // ("cannot use int as type string in array"); the map-key half of
+    // that rule has no failing case here — mbel maps are string-keyed by
+    // construction.
+    "in" =>
+      match rt {
+        ArrN(elem) =>
+          if nature_comparable(lt, elem) {
+            UnknownN
+          } else {
+            raise CheckError::CheckErr(
+              "cannot use " +
+              lname +
+              " as type " +
+              nature_name(elem) +
+              " in array",
+              op_line,
+              op_col,
+            )
+          }
+        _ => UnknownN
+      }
+    "matches" | "contains" | "startsWith" | "endsWith" => UnknownN
     "??" => UnknownN
     "|" => UnknownN // pipe never survives as a binary node
     _ => UnknownN

@@ -503,8 +503,15 @@ fn neq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 }
 
 ///|
-/// JS `in`: substring check on strings, strict element match on arrays,
-/// false for anything else.
+/// JS `in`: substring check on strings, element match on arrays, false
+/// for anything else.
+///
+/// Array membership uses the same equality as `==`: under the typed value
+/// model that is `typed_eq`, so `1 in [1.0]` agrees with `1 == 1.0`
+/// (true). Bare `strict_eq` made the two disagree — the checker accepts
+/// `1 in [1.0]` (numbers are comparable in expr) while the runtime
+/// answered false. The dynamic/legacy case keeps `strict_eq`, so no
+/// locked legacy behaviour moves.
 fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   guard_value_nesting(a, b)
   match b {
@@ -512,7 +519,12 @@ fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
     @ast.ArrayVal(xs) => {
       let mut found = false
       for elem in xs {
-        if strict_eq(elem, a) {
+        let hit = if typed_bin(elem, a) {
+          typed_eq(elem, a)
+        } else {
+          strict_eq(elem, a)
+        }
+        if hit {
           found = true
           break
         }

@@ -220,6 +220,13 @@ lists.
   toPairs fromPairs
 - Bitwise (8): bitand bitor bitxor bitnand bitnot bitshl bitshr bitushr
 - Time (4, minimal): now duration date timezone
+
+`now()`, `date()` and `duration()` all evaluate to **int64 nanoseconds**
+(`now()`/`date()`: nanoseconds since the Unix epoch, UTC; `duration()`:
+a nanosecond count — the same unit as Go's `UnixNano` and `Duration`).
+One unit throughout is what makes `date("2024-01-01") + duration("24h")`
+exact int64 addition; timezone support is UTC-only and `date()` accepts
+ISO-8601 layouts only (documented cut).
 - Predicate aggregates (15): all none any one filter map count sum find
   findIndex findLast findLastIndex groupBy sortBy reduce
 

@@ -105,3 +105,29 @@ test "get accepts an integer index in the standard dialect" {
   expect_expr_both("get({a:1}, \"a\")", @ast.IntVal(1L), "get map key")
   expect_expr_both("get({a:1}, \"z\")", @ast.NullVal, "get missing key")
 }
+
+///|
+test "in uses the operator's equality under the typed value model" {
+  // `1 == 1.0` is true, so membership has to agree. Bare strict element
+  // matching made `1 in [1.0]` false while `1 == 1.0` was true — and the
+  // checker accepts the expression (numbers are comparable in expr), so
+  // the disagreement was invisible until it produced a wrong answer.
+  expect_expr_both("1 in [1.0]", @ast.BoolVal(true), "int in float array")
+  expect_expr_both("1.0 in [1]", @ast.BoolVal(true), "float in int array")
+  expect_expr_both("1 in [1]", @ast.BoolVal(true), "int in int array")
+  expect_expr_both("1 in [2, 3]", @ast.BoolVal(false), "int miss in int array")
+  expect_expr_both("1 in [1.5]", @ast.BoolVal(false), "int miss in float array")
+  expect_expr_both("nil in [1]", @ast.BoolVal(false), "nil in int array")
+  // Exact int64 comparison: these two collapse to the same double, so a
+  // numeric-coercion path that went through doubles would answer true.
+  expect_expr_both(
+    "9007199254740993 in [9007199254740992]",
+    @ast.BoolVal(false),
+    "distinct large int64 members",
+  )
+  expect_expr_both(
+    "9007199254740992 in [9007199254740992]",
+    @ast.BoolVal(true),
+    "equal large int64 members",
+  )
+}

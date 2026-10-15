@@ -132,7 +132,8 @@ New divergences recorded:
 | `(?-i)` inside an active `(?i)` scope | supported | `invalid regex: …` | core only implements `(?i:…)`, no way to switch it back off |
 | `\uXXXX` / `\u{…}` | **rejected** by RE2 | accepted | core-native escape; mbel superset |
 | `1..2` (Jexl corpus) | n/a | range | mbel superset; moved to tools/divergence.txt |
-| time objects / timezones | Go time.Time | unix-ms numbers | stage 4.5 cut item |
+| time objects / timezones | Go time.Time | int64 unix-ns numbers (UTC) | stage 4.5 cut item: no time.Time object/methods, no timezone database, ISO-8601 layouts only |
+| time/duration unit mixing | one unit throughout | one unit throughout (ns) | both are int64 ns, so `date(…) + duration("24h")` is exact int64 addition; it previously added ms to ns and returned a meaningless number |
 
 ## 5. 已决策与待决策
 

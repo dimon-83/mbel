@@ -186,11 +186,20 @@ transforms are registered per engine instance (no reflection — see
 - String `in` (classic dialect) is substring semantics; the standard dialect
   rejects nothing statically there (Eval mode follows legacy substring
   behavior for strings — divergence documented in coverage matrix).
+- Array `in` is type-checked in Compile mode like expr: a member whose type
+  is not comparable to the element type is a compile error
+  (`1 in ["a"]` → `cannot use int as type string in array`). Numbers are
+  comparable across int/float, `nil` with anything, and a heterogeneous
+  array literal is typed as a plain array rather than rejected. Membership
+  uses the same equality as `==`, so `1 in [1.0]` is `true`. Map-key
+  membership is not supported (documented cut).
 - String slices are character-based; `matches` follows RE2 except for the
   documented cuts (`\p{…}`, `(?m)`, `\D`/`\W`/`\S` inside a class,
   `\Q…\E`, `\xHH`, `(?P<…>)`, `(?U)`, `(?-i)` in an `(?i)` scope);
   `upper`/`lower`
-  are ASCII-only; time is the minimal UTC/ISO subset; JSON numbers are
+  are ASCII-only; time is the minimal UTC/ISO subset, with `now()`,
+  `date()` and `duration()` all in int64 nanoseconds so that time and
+  duration arithmetic is exact int64 addition; JSON numbers are
   doubles (integers above 2^53 lose exactness in context data; literals
   and `toJSON` of int64 are exact).
 - `//` is a comment (expr parity), not floor division.

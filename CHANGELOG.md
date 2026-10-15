@@ -6,6 +6,40 @@ All notable changes to mbel are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Time and duration arithmetic produced meaningless numbers.**
+  `now()` and `date()` returned milliseconds while `duration()` returned
+  nanoseconds, and `+`/`-` simply added the raw values, so
+  `date("2024-01-01") + duration("24h")` returned `88104067200000` and
+  `now() - duration("1h")` returned a negative number — silently, with no
+  error. All three now evaluate to **int64 nanoseconds** (the same unit as
+  Go's `UnixNano`/`Duration`), which makes time and duration arithmetic
+  exact int64 addition: `date("2024-01-01") + duration("24h")` equals
+  `date("2024-01-02")` exactly. int64 rather than double because
+  nanoseconds since the epoch exceed 2^53, so a double representation
+  would make timestamps under ~256 ns apart compare equal. `duration()`
+  keeps its nanosecond values, so the transcribed expr want-table rows
+  (r102–r113) still match.
+- **`in` used a stricter equality than `==`.** Array membership matched
+  elements with `strict_eq`, so `1 in [1.0]` was `false` while `1 == 1.0`
+  was `true` — an internal contradiction the checker did not catch,
+  because expr accepts the expression (numbers are comparable). Membership
+  now uses the operator's equality under the typed value model, while the
+  dynamic/legacy path keeps `strict_eq` so no legacy behaviour moves.
+  Comparison stays exact int64 (`9007199254740993 in [9007199254740992]`
+  is `false`).
+
+### Added
+
+- **The checker now type-checks array membership like expr.** Compile mode
+  reports `cannot use int as type string in array` (with expr's
+  `msg (L:C)` + source line + caret layout) for `1 in ["a"]`. Numbers stay
+  comparable across int/float, `nil` is comparable with anything, and a
+  heterogeneous array literal is typed as a plain array rather than
+  rejected — which is what expr does: container literals are *typed*, not
+  required to be homogeneous.
+
 ### Added
 
 - **Resource-gate observability** — `Engine::budget_stats()` and
