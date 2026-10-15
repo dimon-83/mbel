@@ -105,10 +105,9 @@ test "regex translate: pass-through of the supported core dialect" {
 
 ///|
 test "regex translate: documented cuts raise actionable errors" {
-  // Unicode property classes.
-  assert_true(tr_cut("\\p{L}").contains("Unicode property"))
-  assert_true(tr_cut("\\P{Greek}").contains("Unicode property"))
-  assert_true(tr_cut("[\\p{L}]").contains("Unicode property"))
+  // A negated Unicode class *inside* a class needs set algebra, like
+  // \D/\W/\S there; outside one it is a plain negated class.
+  assert_true(tr_cut("[\\P{L}]").contains("class complement"))
   // Multiline mode.
   assert_true(tr_cut("(?m)^a").contains("multiline"))
   assert_true(tr_cut("(?im)a").contains("multiline"))
@@ -124,6 +123,28 @@ test "regex translate: documented cuts raise actionable errors" {
   assert_true(tr_cut("(?i)(?-i:a)").contains("(?-i:…)"))
   // Ungreedy mode has no core equivalent.
   assert_true(tr_cut("(?U)a+").contains("ungreedy"))
+}
+
+///|
+test "regex translate: Unicode classes expand to core classes" {
+  // Go's own range tables back these (evaluator/unicode_classes.mbt), so
+  // the expansion has to contain the ranges Go would match.
+  assert_true(tr("\\p{L}").has_prefix("["))
+  assert_true(tr("\\p{L}").contains("\\u{41}-\\u{5A}"))
+  assert_true(tr("\\p{Greek}").contains("\\u{370}-\\u{373}"))
+  assert_true(tr("\\p{Han}").contains("\\u{4E00}-\\u{9FFF}"))
+  // \pL is the one-letter spelling of \p{L}; \P negates.
+  assert_eq(tr("\\pL"), tr("\\p{L}"))
+  assert_true(tr("\\P{L}").has_prefix("[^"))
+  // Inside a class the ranges are inline (no nested brackets).
+  let inline = tr("[\\p{L}5]")
+  assert_true(inline.has_prefix("[\\u{"))
+  assert_true(!inline.contains("[["))
+  assert_true(!inline.contains("]]"))
+  assert_true(inline.has_suffix("5]"))
+  // Unknown names are reported, not silently matched.
+  assert_true(tr_cut("\\p{Nope}").contains("unknown Unicode class"))
+  assert_true(tr_cut("\\p{L").contains("unterminated"))
 }
 
 ///|

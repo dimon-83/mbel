@@ -97,7 +97,7 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
       while i < n && is_ident_cont(chars[i]) {
         i += 1
       }
-      let text = source[start:i].to_owned()
+      let text = cp_slice(chars, start, i)
       out.push(tok(keyword_or_ident(text), text, pos))
       continue
     }
@@ -108,7 +108,7 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
       while i < n && is_ident_cont(chars[i]) {
         i += 1
       }
-      out.push(tok(TkPointer, source[start:i].to_owned(), pos))
+      out.push(tok(TkPointer, cp_slice(chars, start, i), pos))
       continue
     }
     // byte strings b"…" / b'…' (value is a raw byte sequence)
@@ -552,6 +552,20 @@ fn hex_val(c : Char) -> Int? {
 
 ///|
 /// Operators, longest-match first.
+///|
+/// Slices by code point. The lexer tracks indices into `chars`, so slicing
+/// `source[a:b]` (UTF-16 units) silently shifted every token after an
+/// astral character by one unit: `"\u{1F600}" matches "x"` lexed the
+/// operator as ` matche`, and `len("\u{1F600}") + 1` evaluated to 1
+/// instead of 2.
+fn cp_slice(chars : Array[Char], start : Int, stop : Int) -> String {
+  let buf = StringBuilder::new()
+  for k in start..<stop {
+    buf.write_char(chars[k])
+  }
+  buf.to_string()
+}
+
 fn scan_operator(chars : Array[Char], i : Int, n : Int) -> (String, Int) {
   let two = if i + 1 < n {
     String::from_array([chars[i], chars[i + 1]])
@@ -618,7 +632,7 @@ fn scan_float(
       i = j
     }
   }
-  (strip_underscores(source[start:i].to_owned()), i)
+  (strip_underscores(cp_slice(chars, start, i)), i)
 }
 
 ///|
@@ -639,7 +653,7 @@ fn scan_number(
         while i < n && (hex_val(chars[i]) is Some(_) || chars[i] == '_') {
           i += 1
         }
-        let text = strip_underscores(source[start + 2:i].to_owned())
+        let text = strip_underscores(cp_slice(chars, start + 2, i))
         let v = parse_radix(text, 16)
         return (TkInt, "int:" + v.to_string(), i)
       }
@@ -648,7 +662,7 @@ fn scan_number(
         while i < n && ((chars[i] >= '0' && chars[i] <= '7') || chars[i] == '_') {
           i += 1
         }
-        let text = strip_underscores(source[start + 2:i].to_owned())
+        let text = strip_underscores(cp_slice(chars, start + 2, i))
         let v = parse_radix(text, 8)
         return (TkInt, "int:" + v.to_string(), i)
       }
@@ -657,7 +671,7 @@ fn scan_number(
         while i < n && (chars[i] == '0' || chars[i] == '1' || chars[i] == '_') {
           i += 1
         }
-        let text = strip_underscores(source[start + 2:i].to_owned())
+        let text = strip_underscores(cp_slice(chars, start + 2, i))
         let v = parse_radix(text, 2)
         return (TkInt, "int:" + v.to_string(), i)
       }
@@ -689,7 +703,7 @@ fn scan_number(
       i = j
     }
   }
-  let raw = strip_underscores(source[start:i].to_owned())
+  let raw = strip_underscores(cp_slice(chars, start, i))
   if is_float {
     let d = parse_float_str(raw)
     (TkFloat, "float:" + d.to_string(), i)

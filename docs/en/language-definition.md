@@ -99,7 +99,7 @@ Other syntax:
   `(?s)`) and named groups all behave as in RE2 — verified case-by-case
   against Go's `regexp` (see tools/README.md). A malformed pattern, or a
   construct with no core equivalent, raises `invalid regex: …` naming the
-  construct. Documented cuts: `\p{…}`/`\P{…}`, `(?m)`, `\D`/`\W`/`\S`
+  construct. Documented cuts: `(?m)`, `\D`/`\W`/`\S`
   inside a character class, `(?U)`, and
   turning `(?i)` back off inside an active `(?i)` scope.
   `contains`/`startsWith`/`endsWith` are
@@ -198,7 +198,7 @@ transforms are registered per engine instance (no reflection — see
   uses the same equality as `==`, so `1 in [1.0]` is `true`. Map-key
   membership is not supported (documented cut).
 - String slices are character-based; `matches` follows RE2 except for the
-  documented cuts (`\p{…}`, `(?m)`, `\D`/`\W`/`\S` inside a class,
+  documented cuts (`(?m)`, `\D`/`\W`/`\S` inside a class, in-class `\P{…}`,
   `(?U)`, `(?-i)` in an `(?i)` scope);
   `upper`/`lower`
   are ASCII-only; time is the minimal UTC/ISO subset, with `now()`,

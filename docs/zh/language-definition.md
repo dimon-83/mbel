@@ -53,7 +53,7 @@
 - `if cond { seq } else { seq }` —— 两个花括号与 `else` 均必选;分支是完整序列(可含 let);`if` 只能作为表达式起点(内嵌需括号);支持 else-if 链。
 - 可选链 `?.` / `?.[` —— nil 安全成员访问(mbel 下钻默认 nil 安全)。
 - 切片 `a[1:3]`、`a[:2]`、`a[2:]`、负边界(`len + x`)、越界收敛、`from > to` 为空;支持数组与字符串(字符串按字符切片;expr 按字节——非 ASCII 差异已文档化)。
-- `matches` 正则:右操作数是 RE2 模式,翻译为 MoonBit core 方言后编译(按 grammar 缓存)。RE2 的类简写(`\d \D \w \W \s \S`)、`.`(不匹配换行,`(?s)` 为 dot-all)、字符类(含首位/末位 `-`)、POSIX 类、内联标志(`(?i)`、`(?i:…)`、`(?s)`)、命名分组均与 RE2 一致——逐条对照 Go `regexp` 验证(见 tools/README.md)。非法模式、或无 core 等价物的构造,报 `invalid regex: …` 并点名该构造。明确裁剪:`\p{…}`/`\P{…}`、`(?m)`、字符类内的 `\D`/`\W`/`\S`、`(?U)`,以及在生效的 `(?i)` 作用域内关掉不区分大小写。(`\xHH`/`\x{H…}` 译为 `\u00HH`/`\u{H…}`,`\Q…\E` 转为转义字面量,`(?P<name>…)` 归一为 `(?<name>…)`——均已支持。)`contains`/`startsWith`/`endsWith` 是运算符,nil 安全(nil 操作数 → false)。
+- `matches` 正则:右操作数是 RE2 模式,翻译为 MoonBit core 方言后编译(按 grammar 缓存)。RE2 的类简写(`\d \D \w \W \s \S`)、`.`(不匹配换行,`(?s)` 为 dot-all)、字符类(含首位/末位 `-`)、POSIX 类、内联标志(`(?i)`、`(?i:…)`、`(?s)`)、命名分组均与 RE2 一致——逐条对照 Go `regexp` 验证(见 tools/README.md)。非法模式、或无 core 等价物的构造,报 `invalid regex: …` 并点名该构造。明确裁剪:`(?m)`、字符类内的 `\D`/`\W`/`\S`、类内 `\P{…}`、`(?U)`,以及在生效的 `(?i)` 作用域内关掉不区分大小写。(`\p{…}`/`\P{…}` 的 Unicode 类别与脚本**已支持**:表由 Go 的 `unicode` 包生成,evaluator/unicode_classes.mbt。)(`\xHH`/`\x{H…}` 译为 `\u00HH`/`\u{H…}`,`\Q…\E` 转为转义字面量,`(?P<name>…)` 归一为 `(?<name>…)`——均已支持。)`contains`/`startsWith`/`endsWith` 是运算符,nil 安全(nil 操作数 → false)。
 - `let x = expr; rest` 与 `a; b; c` 序列 —— `let` 出现在 prec-0 位置(顶层、括号、实参、if 分支);词法作用域,允许遮蔽(Eval 模式);序列结果为最后一项;序列/谓词代码可读外层 let。
 - `$env` —— 整个上下文作为值(`len($env)`、`keys($env)`、成员访问均可用;不可声明)。
 
@@ -101,7 +101,7 @@ mbel 额外接受经典方言的方括号谓词 `items[.price <= 2]`(逐元素�
 - `type()` 对浮点:标准方言 `"float"`,经典方言 `"number"`(见上文方言拆分说明)。
 - 经典方言中字符串 `in` 是子串语义(标准方言 Eval 模式对字符串沿用该行为——差异已在覆盖矩阵记录)。
 - 数组 `in` 在 Compile 模式按 expr 做类型检查:成员类型与元素类型不可比较即编译错误(`1 in ["a"]` → `cannot use int as type string in array`)。int/float 之间可比较,`nil` 与任何类型可比较,异质数组字面量推断为普通 array 而非报错。成员判等与 `==` 同源,故 `1 in [1.0]` 为 `true`。映射表键成员不支持(已文档化裁剪)。
-- 字符串切片按字符;`matches` 除下列裁剪外遵循 RE2(`\p{…}`、`(?m)`、类内 `\D`/`\W`/`\S`、`(?U)`、`(?i)` 作用域内的 `(?-i)`);`upper`/`lower` 仅 ASCII;时间是最小 UTC/ISO 子集,且 `now()`/`date()`/`duration()` 统一为 int64 纳秒(故时间与时长运算即精确 int64 加法);JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。
+- 字符串切片按字符;`matches` 除下列裁剪外遵循 RE2(`(?m)`、类内 `\D`/`\W`/`\S`、类内 `\P{…}`、`(?U)`、`(?i)` 作用域内的 `(?-i)`);`upper`/`lower` 仅 ASCII;`date()` 支持 expr 的 7 种 layout 与调用方 layout、RFC3339 数字偏移(时区库仅 UTC),且 `now()`/`date()`/`duration()` 统一为 int64 纳秒(故时间与时长运算即精确 int64 加法);JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。
 - 方括号谓词 `items[.expr]` 被接受(经典方言兼容);参考语义无方括号形式,`[` 后的裸 `.` 直接报错。
 
 expr 语言定义每一行的可机检状态见 docs/coverage-vs-expr.md;裁剪项与理由见 docs/expr-gap-analysis.md。

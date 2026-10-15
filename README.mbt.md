@@ -349,7 +349,7 @@ phase. Remaining items — the verifiable list lives in
   (`matches` now takes RE2 patterns: an internal translation layer
   rewrites class shorthands, `.` and inline flags for the MoonBit core
   engine, verified case-by-case against Go's `regexp`. The constructs
-  with no core equivalent — `\p{…}`, `(?m)`, class-internal
+  with no core equivalent — `(?m)`, class-internal
   `\D`/`\W`/`\S` — are documented cuts in
   [docs/expr-gap-analysis.md](docs/expr-gap-analysis.md).)
 

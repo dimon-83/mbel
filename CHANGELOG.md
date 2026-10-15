@@ -8,6 +8,26 @@ All notable changes to mbel are documented here. The format follows
 
 ### Added
 
+- **`\p{…}` Unicode classes.** `matches` now supports Unicode general
+  categories and scripts (`\p{L}`, `\p{Lu}`, `\p{Greek}`, `\p{Han}`,
+  `\p{So}`, `\p{Any}`, the one-letter `\pL` spelling and the `\P{…}`
+  negation, also inside a character class). The ranges come from Go's own
+  `unicode` package (`tools/unicode_oracle` →
+  `evaluator/unicode_classes.mbt`, 212 names), so agreement with expr is a
+  property of the build. The Go differential corpus grew 122 → 174 cases,
+  including astral letters and emoji.
+- **`date()` understands Go's layouts.** It now scans expr's seven default
+  layouts and applies a numeric UTC offset when the string carries one
+  (RFC3339 `+08:00`, fractional seconds included), and accepts expr's call
+  forms: an optional location first or last, plus a caller-supplied layout
+  (`date("01/02/2024", "02/01/2006")`). A Go layout interpreter handles the
+  reference elements. `now(tz)` is accepted (an instant in nanoseconds is
+  location-free). A new Go differential corpus covers 27 inputs, including
+  leap years, rejected dates and the RFC822/850/1123 layouts.
+- `docs`/`tools` gain the two oracles and their generators, and the
+  `\p{…}` cut is removed from the documented cut list, which now reads
+  `(?m)`, class-internal `\D`/`\W`/`\S`, in-class `\P{…}`, `(?U)` and
+  `(?i)`-scoped `(?-i)`.
 - **Behavioural sample of expr's optimizer table.** `TestOptimize`'s 43
   inputs now run against mbel with env `{a: 1, b: 2, c: 3}` and must produce
   the values expr produces *with* its optimizer passes; all 43 match on both
@@ -15,6 +35,18 @@ All notable changes to mbel are documented here. The format follows
   `tools/gen_optimizer_sample.py`). This is the property that matters given
   the passes themselves are documented as not portable — the rewrite set is
   absent, the results are not.
+
+### Fixed
+
+- **An astral character corrupted every later token in the expression.**
+  The lexer tracked indices into the code-point array but sliced token text
+  out of the source string, which indexes UTF-16 units, so one astral
+  character shifted everything after it: `len("😀") + 1` evaluated to **1**
+  instead of 2, `"😀" matches "x"` failed to parse (the operator lexed as
+  ` matche`), and `"😀".length` was undefined. Token text is now sliced by
+  code point. This also explains an earlier false lead — astral ranges in
+  character classes looked unsupported, but core handles them; the subject
+  emoji had been breaking the parse.
 
 ## [0.3.6] — 2026-10-15
 

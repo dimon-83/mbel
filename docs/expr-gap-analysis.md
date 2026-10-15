@@ -125,7 +125,7 @@ New divergences recorded:
 | `.` | any char except newline | same, translated to `[^\n]`; `(?s)` leaves `.` | core's `.` is newline-inclusive |
 | leading/trailing `-` in a class (`[a-]`, `[-a]`) | literal dash | translated to `[a\-]` / `[\-a]` | core rejects a dash in first/last position |
 | bare `(?i)`, `(?s)` | applies to the rest of the group | translated to `(?i:…)` / dot-all bookkeeping | core only implements the `(?i:…)` group form |
-| `\p{…}` `\P{…}` | supported | `invalid regex: … unsupported regex construct` | core has no Unicode property classes; would need Unicode tables |
+| `\p{…}` `\P{…}` | supported | supported, translated | expanded from Go's own `unicode` tables (evaluator/unicode_classes.mbt); only a negated class *inside* a class is still a cut |
 | `(?m)` | supported | `invalid regex: … multiline mode is not supported` | core has no multiline mode |
 | `\D` `\W` `\S` **inside** a class (`[\D5]`) | supported | `invalid regex: …` | needs character-class set algebra (complement ∩ union) |
 | `\xHH`, `\x{H…}`, `\Q…\E`, `(?P<name>…)` | supported | supported, translated | core spells hex escapes `\u00HH`/`\u{H…}`, has no quoting escape, and only the `(?<name>…)` group form |

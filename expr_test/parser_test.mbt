@@ -208,3 +208,15 @@ test "expr parser: comments and escapes" {
   expect_dump("1 // x\n+ 2", "bin(+,int:1,int:2)", "line comment")
   expect_dump("\"a\\n\\u{41}b\"", "str:a\nAb", "escapes")
 }
+
+///|
+test "expr lexer: astral characters do not shift later tokens" {
+  // Token text was sliced with code-point indices against the source
+  // string, which indexes UTF-16 units: after an astral character every
+  // later token moved by one unit. `"😀" matches "x"` lexed the operator
+  // as ` matche` (a parse error) and `len("😀") + 1` evaluated to 1.
+  expect_dump("len(\"😀\") + 1", "bin(+,call(id:len,str:😀),int:1)", "astral then +")
+  expect_dump("len('👍') + 1", "bin(+,call(id:len,str:👍),int:1)", "astral single-quoted")
+  expect_dump("\"😀\" matches \"x\"", "bin(matches,str:😀,str:x)", "astral then word operator")
+  expect_dump("\"a😀b\" + \"c\"", "bin(+,str:a😀b,str:c)", "astral inside")
+}

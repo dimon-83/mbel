@@ -77,11 +77,15 @@ def main():
         pat, subj = line.split("\t", 1)
         cases.append((unescape(pat), unescape(subj)))
 
+    # Keep Go's build cache inside the repo: the default lives in the user's
+    # home directory, which the project's file sandbox does not allow.
+    env = dict(os.environ, GOCACHE=os.path.join(ROOT, "_build/gocache"))
     proc = subprocess.run(
         ["go", "run", ORACLE, CORPUS],
         cwd=ROOT,
         capture_output=True,
         text=True,
+        env=env,
     )
     if proc.returncode != 0:
         sys.exit("regex oracle failed: " + proc.stderr.strip())

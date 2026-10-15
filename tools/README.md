@@ -72,6 +72,26 @@ crashes there); mbel returns undefined.
   has constant folding only, so this pins the property that has to hold
   without the passes: identical values. 43/43.
 
+## Unicode classes for `\p{…}`
+
+- `tools/unicode_oracle/` — emits `evaluator/unicode_classes.mbt` from Go's
+  own `unicode` package (general categories and scripts, 212 names). expr's
+  `\p{…}` is Go's regexp, so taking the tables from Go makes agreement a
+  property of the build rather than of matching Unicode versions.
+  Run: `cd tools/unicode_oracle && go run . ../../evaluator/unicode_classes.mbt`.
+
+## Time differential corpus (`date`)
+
+- `tools/time_corpus.txt` — `date()` inputs.
+- `tools/time_oracle/` — evaluates each input exactly as expr's `date()`
+  does (the 7-layout scan with Go's `time.Parse`) and prints int64
+  `UnixNano`, or `ERR`.
+- `tools/gen_time_mbt.py` — freezes that into
+  `expr_test/time_want_data_test.mbt`; `expr_test/time_want_test.mbt` runs
+  the same inputs through mbel on both engines. 27 cases, including
+  RFC3339 numeric offsets, fractional seconds, leap years and the
+  RFC822/850/1123 layouts.
+
 ## Parser differential corpus (`TestParse`)
 
 - `tools/parse_corpus.txt` — the 105 inputs of upstream

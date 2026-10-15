@@ -141,11 +141,7 @@ fn re_translate_escape(
     // [[:space:]] includes it — so the set is written out explicitly.
     's' => out.write_string("[\\t\\n\\f\\r ]")
     'S' => out.write_string("[^\\t\\n\\f\\r ]")
-    'p' | 'P' =>
-      raise re_cut(
-        "\\p{…}/\\P{…}",
-        "Unicode property classes are not supported; use an explicit class",
-      )
+    'p' | 'P' => return re_translate_unicode_class(src, start, out, c == 'P')
     'Q' => {
       // \Q…\E: the enclosed text is literal. Escape it for core, which has
       // no quoting escape. A missing \E quotes to the end of the pattern
@@ -219,6 +215,108 @@ fn re_translate_hex_escape(
 }
 
 ///|
+/// Uppercase hex, for the `\u{H…}` ranges a class expansion is built from.
+fn hex_upper(v : Int) -> String {
+  let digits : Array[Char] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
+  ]
+  if v == 0 {
+    return "0"
+  }
+  let buf : Array[Char] = []
+  let mut x = v
+  while x > 0 {
+    buf.push(digits[x % 16])
+    x = x / 16
+  }
+  let out = StringBuilder::new()
+  for i in 0..<buf.length() {
+    out.write_char(buf[buf.length() - 1 - i])
+  }
+  out.to_string()
+}
+
+///|
+/// Reads the class name of a `\p{Name}` / `\pN` escape, returning it with
+/// the index just past the escape.
+fn re_unicode_class_name(
+  src : Array[Char],
+  start : Int,
+) -> (String, Int) raise EvalError {
+  let n = src.length()
+  let i = start + 2
+  if i < n && src[i] == '{' {
+    let mut j = i + 1
+    while j < n && src[j] != '}' {
+      j = j + 1
+    }
+    if j >= n {
+      raise EvalError::EvalErr("invalid regex: unterminated \\p{…} escape")
+    }
+    let buf = StringBuilder::new()
+    for k in (i + 1)..<j {
+      buf.write_char(src[k])
+    }
+    (buf.to_string(), j + 1)
+  } else if i < n {
+    (src[i].to_string(), i + 1)
+  } else {
+    raise EvalError::EvalErr("invalid regex: \\p needs a class name")
+  }
+}
+
+///|
+/// Writes the ranges of a `\p{…}` name to `out`.
+fn re_write_unicode_ranges(out : StringBuilder, name : String) -> Unit raise EvalError {
+  let rs = match unicode_class(name) {
+    Some(r) => r
+    None =>
+      raise EvalError::EvalErr("invalid regex: unknown Unicode class " + name)
+  }
+  for r in rs {
+    let (lo, hi) = r
+    out.write_string("\\u{" + hex_upper(lo) + "}")
+    if hi > lo {
+      out.write_string("-\\u{" + hex_upper(hi) + "}")
+    }
+  }
+}
+
+///|
+/// `\p{L}`, `\pL`, `\P{Greek}` — expand a Unicode class into a core
+/// character class. Go's own range tables back this (see
+/// evaluator/unicode_classes.mbt), so `\p{…}` matches expr exactly.
+fn re_translate_unicode_class(
+  src : Array[Char],
+  start : Int,
+  out : StringBuilder,
+  negated : Bool,
+) -> Int raise EvalError {
+  let (name, next) = re_unicode_class_name(src, start)
+  out.write_char('[')
+  if negated {
+    out.write_char('^')
+  }
+  re_write_unicode_ranges(out, name)
+  out.write_char(']')
+  next
+}
+
+///|
+/// The same expansion inside a character class, where the ranges are
+/// written inline (nested brackets are not valid). `\P{…}` there needs
+/// class set algebra, so it stays a cut — like `\D`/`\W`/`\S`.
+fn re_translate_unicode_class_inline(
+  src : Array[Char],
+  start : Int,
+  out : StringBuilder,
+) -> Int raise EvalError {
+  let (name, next) = re_unicode_class_name(src, start)
+  re_write_unicode_ranges(out, name)
+  next
+}
+
+///|
 fn is_hex(c : Char) -> Bool {
   match c {
     '0'..='9' | 'a'..='f' | 'A'..='F' => true
@@ -260,10 +358,11 @@ fn re_translate_class_escape(
         "\\S inside a character class",
         "write the negation as [^\\t\\n\\f\\r ] or list the set explicitly",
       )
-    'p' | 'P' =>
+    'p' => return re_translate_unicode_class_inline(src, start, out)
+    'P' =>
       raise re_cut(
-        "\\p{…}/\\P{…}",
-        "Unicode property classes are not supported; use an explicit class",
+        "\\P{…} inside a character class",
+        "write the class complement instead ([^…])",
       )
     'Q' | 'E' =>
       raise re_cut(
