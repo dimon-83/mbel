@@ -60,10 +60,11 @@ test "expr parser: precedence and associativity" {
 ///|
 test "expr parser: chained comparisons" {
   expect_dump(
-    "1 < x < 10", "bin(and,bin(<,int:1,id:x),bin(<,id:x,int:10))", "chain",
+    "1 < x < 10", "bin(&&,bin(<,int:1,id:x),bin(<,id:x,int:10))", "chain",
   )
   expect_dump(
-    "1 < x <= 5 < y", "bin(and,bin(and,bin(<,int:1,id:x),bin(<=,id:x,int:5)),bin(<,int:5,id:y))",
+    "1 < x <= 5 < y",
+    "bin(&&,bin(&&,bin(<,int:1,id:x),bin(<=,id:x,int:5)),bin(<,int:5,id:y))",
     "chain 3 (each link compares the last operand — expr semantics)",
   )
 }

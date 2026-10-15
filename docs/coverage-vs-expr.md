@@ -227,8 +227,9 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
 ### 6.3 覆盖率目标
 4.4 gate(收尾清单 ⑤,2026-09-07 状态):TestExpr 167 行全量处置 ✅
 (153 转写 + 14 文档化跳过,双引擎;正则修正后 033/034、`in` 映射表成员修正后 026、方言拆分后 len 的 049/050 均已转写);checker TestCheck 107/112 ✅;
-**parser TestParse 143 行(Go AST want → mbel dump 翻译)与 optimizer
-表抽样未完成**——gate 达标前需补。4.5 后 builtin_test 904 行对齐。
+parser TestParse ✅:上游 105 条输入已全部转写为 AST 形状对照
+(96 匹配 + 9 条带原因跳过,`expr_test/parse_want_test.mbt`;上游真解析器
+产出期望值,非手写)。**optimizer 表抽样仍未做**——gate 达标前需补。4.5 后 builtin_test 904 行对齐。
 
 > 转写来源与许可:两张转写表取自 expr-lang/expr 的
 > commit `4b31df3`(即 tag v1.17.8 + 8;v1.17.8 tag 本身的

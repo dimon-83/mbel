@@ -1,0 +1,108 @@
+# expr parser_test.go TestParse inputs, one per line. Escapes (\n \t \r \\)
+# are decoded by tools/parse_oracle.go, which freezes expr's AST shape into
+# engine-agnostic mbel dump form for expr_test/parse_want_test.mbt.
+a
+"str"
+`hello\nworld`
+3
+0xFF
+0x6E
+0X63
+0o600
+0O45
+0b10
+0B101011
+10_000_000
+2.5
+1e9
+true
+false
+nil
+b"hello"
+b'\\xff\\x00'
+-3
+-2^2
+1 - 2
+(1 - 2) * 3
+a or b or c
+a or b and c
+(a or b) and c
+2**4-1
+foo(bar())
+foo("arg1", 2, true)
+foo.bar
+foo['all']
+foo.bar()
+foo.bar("arg1", 2, true)
+foo[3]
+true ? true : false
+a?[b]:c
+a.b().c().d[33]
+'a' == 'b'
++0 != -0
+[a, b, c]
+{foo:1, bar:2}
+{foo:1, bar:2, }
+{"a": 1, 'b': 2}
+[1].foo
+{foo:1}.bar
+len(foo)
+foo matches "foo"
+foo not matches "foo"
+foo matches regex
+foo contains "foo"
+foo not contains "foo"
+foo startsWith "foo"
+foo endsWith "foo"
+1..9
+0 in []
+not in_var
+-1 not in [1, 2, 3, 4]
+1*8 not in [1, 2, 3, 4]
+2==2 ? false : 3 not in [1, 2, 5]
+'foo' + 'bar' not matches 'foobar'
+all(Tickets, #)
+all(Tickets, {.Price > 0})
+one(Tickets, {#.Price > 0})
+filter(Prices, {# > 100})
+array[1:2]
+array[:2]
+array[1:]
+array[:]
+[]
+foo ?? bar
+foo ?? bar ?? baz
+foo ?? (bar || baz)
+foo || bar ?? baz
+foo ?? bar()
+true | ok()
+let foo = a + b; foo + c
+map([], #index)
+::split("a,b,c", ",")
+::split("a,b,c", ",")[0]
+"hello"[1:3]
+1 < 2 > 3
+1 < 2 < 3 < 4
+1 < 2 < 3 == true
+if a>b {true} else {x}
+if a { 1 } else if b { 2 } else { 3 }
+if a { 1 } else if b { 2 } else if c { 3 } else { 4 }
+1; 2; 3
+1; (2; 3)
+true ? 1 : 2; 3 ; 4
+true ? 1 : ( 2; 3; 4 )
+true ?: 1; 2; 3
+let x = true ? 1 : 2; x
+let x = true ? 1 : ( 2; 3; 4 ); x
+if true { 1; 2; 3 } else { 4; 5; 6 }
+all(ls, if true { 1 } else { 2 })
+let x = if true { 1 } else { 2 }; x
+call(if true { 1 } else { 2 })
+[if true { 1 } else { 2 }]
+map(ls, { 1; 2; 3 })
+let x = 1; 2; 3 + x
+let x = 1; let y = 2; 3; 4; x + y
+let x = (1; 2; 3); x
+all(\n\t\t\t\t[\n\t\t\t\t  true,\n\t\t\t\t  false,\n\t\t\t\t],\n\t\t\t\t#,\n\t\t\t)
+list | all(#,)
+func(\n\t\t\t\tparameter1,\n\t\t\t\tparameter2,\n\t\t\t)

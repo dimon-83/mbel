@@ -599,7 +599,10 @@ fn Parser::parse_binary_inner(
         let mid = left_midpoint(left)
         let right2 = self.parse_binary(binary_prec(op2) + 1)
         left = EBinary(
-          "and",
+          // expr synthesizes `&&` for a comparison chain; using the
+          // keyword spelling here made `1 < 2 < 3` dump differently from
+          // an explicit `a && b`.
+          "&&",
           left,
           EBinary(op2, mid, right2, op2_tok.line, op2_tok.col),
           op2_tok.line,
@@ -620,9 +623,12 @@ fn is_comparison(op : String) -> Bool {
 /// The midpoint of a chained comparison: for `a < b`, `b`.
 fn left_midpoint(left : ENode) -> ENode {
   match left {
-    // chained comparisons build and-nodes; the chain continues from
-    // the last comparison's RIGHT operand
-    EBinary("and", _, r, _, _) => left_midpoint(r)
+    // A chain builds `&&` nodes; the chain continues from the last
+    // comparison's RIGHT operand. Both spellings are accepted because a
+    // user may write `a < b and c > d`, and matching only one of them
+    // silently picked the wrong midpoint for chains of three or more
+    // operators (`1 < 2 < 3 > 4` then compared a bool against an int).
+    EBinary(op, _, r, _, _) if op == "&&" || op == "and" => left_midpoint(r)
     EBinary(_, _, r, _, _) => r
     other => other
   }
@@ -784,6 +790,41 @@ fn Parser::parse_postfix(self : Parser) -> ENode raise ParseErrorExpr {
 }
 
 ///|
+/// Parses a precedence-0 sequence body terminated by `closer` — the shared
+/// shape of `(1; 2)` groups and `{1; 2}` predicate bodies (the caller has
+/// already consumed the opening token). `let` is allowed at each item, as
+/// in a block body, and a single item yields that item rather than a
+/// one-element sequence.
+fn Parser::parse_seq_body(
+  self : Parser,
+  closer : String,
+) -> ENode raise ParseErrorExpr {
+  let items : Array[ENode] = []
+  if self.at_kw("let") {
+    items.push(self.parse_let())
+  } else {
+    items.push(self.parse_expr())
+  }
+  while self.at_op(";") {
+    self.pos += 1
+    if self.at_op(closer) {
+      break
+    }
+    if self.at_kw("let") {
+      items.push(self.parse_let())
+    } else {
+      items.push(self.parse_expr())
+    }
+  }
+  self.expect_op(closer)
+  if items.length() == 1 {
+    items[0]
+  } else {
+    ESeq(items, node_line(items[0]), node_col(items[0]))
+  }
+}
+
+///|
 /// Parses `(args)`. Inside argument position, `{` starts either a map
 /// literal or a brace-wrapped predicate — disambiguated like expr:
 /// map keys must start with an identifier/string/number/paren.
@@ -822,8 +863,9 @@ fn Parser::parse_call_args_for(
       args.push(self.parse_map_literal())
     } else if self.at_op("{") {
       self.pos += 1
-      let inner = self.parse_expr()
-      self.expect_op("}")
+      // A brace predicate body is a precedence-0 sequence site too:
+      // `map(ls, { 1; 2; 3 })`.
+      let inner = self.parse_seq_body("}")
       args.push(EPred(inner, node_line(inner), node_col(inner)))
     } else {
       args.push(self.parse_expr())
@@ -831,6 +873,10 @@ fn Parser::parse_call_args_for(
     self.in_predicate = saved
     arg_idx += 1
     if self.eat_op(",") {
+      // expr allows a trailing comma in an argument list: f(1,)
+      if self.at_op(")") {
+        break
+      }
       continue
     }
     break
@@ -1064,9 +1110,10 @@ fn Parser::parse_primary(self : Parser) -> ENode raise ParseErrorExpr {
     TkOperator =>
       if self.at_op("(") {
         self.pos += 1
-        let e = self.parse_expr()
-        self.expect_op(")")
-        e
+        // A parenthesized group is a precedence-0 sequence site:
+        // `(1; 2)` and `(let x = 1; x)` are valid. Parsing a single
+        // expression here made the documented form a parse error.
+        self.parse_seq_body(")")
       } else if self.at_op("[") {
         self.parse_array_literal()
       } else if self.at_op("{") {

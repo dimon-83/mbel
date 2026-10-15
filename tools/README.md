@@ -60,6 +60,25 @@ TypeError for `arr[.f == x].prop` when the filtered array is empty
 (its README example `assoc[.first == "Lana"].last` without a context
 crashes there); mbel returns undefined.
 
+## Parser differential corpus (`TestParse`)
+
+- `tools/parse_corpus.txt` — the 105 inputs of upstream
+  `parser/parser_test.go`'s `TestParse` table.
+- `tools/parse_oracle/` — a small Go module that parses each input with the
+  *reference* expr parser and prints the AST in mbel's `dump()` convention
+  (`go run . ../../tools/parse_corpus.txt`). It `replace`s
+  `github.com/expr-lang/expr` with a local checkout; expr has no external
+  dependencies, so it resolves offline. Set `GOCACHE` to a workspace path if
+  the sandbox forbids the default cache location.
+- `tools/gen_parse_mbt.py` — freezes the oracle output into
+  `expr_test/parse_want_data_test.mbt`.
+- `expr_test/parse_want_test.mbt` — asserts mbel's parser produces exactly
+  that shape. Currently 96 of 105 rows match; the 9 remaining are listed
+  with their reason in `parse_want_skips()`.
+
+Unlike the regex corpus this compares *tree shape*, not values, so it also
+pins the node names mbel's own tests rely on.
+
 ## Regex differential corpus (`matches`)
 
 `tools/regex_corpus.txt` — 106 `pattern<TAB>subject` cases for the

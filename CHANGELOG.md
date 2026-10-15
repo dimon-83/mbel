@@ -8,6 +8,13 @@ All notable changes to mbel are documented here. The format follows
 
 ### Added
 
+- **Parser shape parity harness** against expr's own `TestParse` table.
+  All 105 upstream inputs are parsed by the *reference* expr parser
+  (`tools/parse_oracle`, a tiny Go module over a local checkout) and the
+  AST is rendered in mbel's `dump()` convention, so the expectation column
+  is generated from expr rather than written by hand; mbel matches 96 and
+  the other 9 are listed with a reason. This closes the parser half of the
+  coverage matrix's transcription gate item.
 - **More RE2 constructs now translate instead of being cut.** `\xHH` and
   `\x{H…}` are code-point escapes in RE2 and core spells those
   `\u00HH`/`\u{H…}`; `(?P<name>…)` is Go's other named-group spelling and
@@ -69,6 +76,23 @@ All notable changes to mbel are documented here. The format follows
 
 ### Fixed
 
+- **Parenthesized and brace-predicate sequences were parse errors.** The
+  grammar documents parenthesized groups and predicate bodies as
+  precedence-0 sequence sites, but `(` parsed exactly one expression and a
+  `{…}` argument body likewise, so `(1; 2)`, `let x = (1; 2; 3); x` and
+  `map(ls, { 1; 2; 3 })` were rejected. Both now parse a `let`-capable
+  sequence, through one shared `parse_seq_body`.
+- **Argument lists rejected a trailing comma.** `f(1,)` was a parse error
+  while `{a: 1,}` was accepted and expr accepts both. `all([true, false],
+  #,)` and `func(a, b,)` now parse.
+- **A chained comparison of three or more operators picked the wrong
+  midpoint.** The chain rewrite looked up its continuation through
+  `EBinary("and", …)`, so the spelling of the synthesized node was load
+  bearing: building the chain with `&&` (which expr uses, and which mbel
+  itself prints for an explicit `&&`) made `1 < 2 < 3 > 4` evaluate the
+  boolean result as the next operand and fail with
+  `invalid operation: bool > int`. The lookup now accepts both spellings
+  and the chain is built with `&&`, matching expr's shape.
 - **The classic lexer cut astral characters out of string literals.**
   `unquote` stripped the quotes with `str[1:n - 1]`, where `n` counts code
   points but string slicing indexes UTF-16 units — so `"a👍b"` decoded to
