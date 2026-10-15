@@ -6,6 +6,8 @@ All notable changes to mbel are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.6] — 2026-10-15
+
 ### Added
 
 - **Parser shape parity harness** against expr's own `TestParse` table.

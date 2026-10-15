@@ -11,7 +11,7 @@
 
 name = "dimon-83/mbel"
 
-version = "0.3.5"
+version = "0.3.6"
 
 readme = "README.mbt.md"
 
