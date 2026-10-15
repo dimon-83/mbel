@@ -85,6 +85,16 @@ You can browse and install extra skills here:
   assertions (match `IntVal(_)` vs `NumVal(_)`, see `expr_test/typed_test.mbt`)
   whenever the int/float distinction matters (overflow, `/` vs `%`, `type()`).
 
+- **Test builtins through the standard dialect, not just legacy.** The legacy
+  lexer only produces `NumVal`, so a builtin that matches on `NumVal` works
+  there and silently misbehaves under `eval_expr`, where integer literals are
+  `IntVal`. That is how `sort` returned integer arrays unsorted and `get`
+  returned the fallback for every integer index — both passed the legacy-path
+  tests for as long as they existed. Any builtin that inspects value kinds or
+  orders values needs a case in `engine_test/typed_builtin_test.mbt` (standard
+  dialect, both engines, explicit kinds); legacy-path coverage alone is not
+  coverage.
+
 - **Budgets**: verify budget behavior per engine (node/token limits at parse,
   `max_depth` at eval on BOTH engines, step budget at allocation points) and
   that budget error messages match the legacy wording exactly

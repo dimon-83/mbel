@@ -35,6 +35,25 @@ All notable changes to mbel are documented here. The format follows
   Successful patterns are capped at 256 (`regex_cache_capacity()`),
   remembered failures at 64 (`regex_failed_capacity()`); when full, the
   oldest half is dropped so inserts stay amortized O(1).
+- **`sort` returned integer arrays unsorted in the standard dialect.**
+  `sort_values` classified values by matching `NumVal` and `StrVal`, so the
+  `IntVal` elements the standard dialect produces for integer literals and
+  integer arithmetic fell through to the "mixed array, no total order"
+  branch and came back in input order — silently, with no error
+  (`sort([3,1,2])` → `[3,1,2]`). `IntVal` now counts as numeric, and two
+  `IntVal`s compare as exact int64 so ordering above 2^53 is not lost
+  through the double fallback. Floats, strings and mixed numeric arrays are
+  unchanged.
+- **`get` ignored integer indices in the standard dialect.** Its array
+  branch matched `@ast.NumVal(d)` only, so `get([3,1,2], 1)` returned the
+  fallback (`nil`) instead of the element. Both integer kinds are handled
+  now; out-of-range and negative indices still fall back.
+
+  Both bugs were invisible to the existing tests because the only coverage
+  drove these builtins through the **legacy** dialect, whose lexer produces
+  nothing but `NumVal`. `engine_test/typed_builtin_test.mbt` now exercises
+  them through `eval_expr` on both engines with explicit value kinds, and
+  AGENTS.md records the rule.
 
 ### Changed
 

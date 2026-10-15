@@ -371,6 +371,16 @@ fn collection_functions() -> Array[(String, @evaluator.FnA)] {
         let key = arg(args, 1, "get")
         let fallback = if args.length() > 2 { args[2] } else { @ast.NullVal }
         match (subject, key) {
+          // The standard dialect indexes with IntVal (integer literals and
+          // integer arithmetic stay int64), the legacy dialect with NumVal;
+          // both must reach the element, or `get` silently returns the
+          // fallback for every integer index.
+          (@ast.ArrayVal(xs), @ast.IntVal(i)) =>
+            if i >= 0L && i < xs.length().to_int64() {
+              xs[i.to_int()]
+            } else {
+              fallback
+            }
           (@ast.ArrayVal(xs), @ast.NumVal(d)) =>
             if d == d.floor() && d >= 0.0 {
               let i = d.to_int()

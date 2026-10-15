@@ -103,13 +103,18 @@ fn value_len(v : @ast.Value) -> Int {
 }
 
 ///|
+/// Sorts a homogeneous numeric or string array. `IntVal` counts as a
+/// number: the standard dialect produces `IntVal` for every integer
+/// literal and integer operation, so classifying only `NumVal` as
+/// numeric left integer arrays unsorted (and silently so — the array came
+/// back in input order).
 fn sort_values(xs : Array[@ast.Value]) -> Array[@ast.Value] {
   let mut all_str = true
   let mut all_num = true
   for x in xs {
     match x {
       @ast.StrVal(_) => all_num = false
-      @ast.NumVal(_) => all_str = false
+      @ast.NumVal(_) | @ast.IntVal(_) => all_str = false
       _ => {
         all_str = false
         all_num = false
@@ -120,7 +125,9 @@ fn sort_values(xs : Array[@ast.Value]) -> Array[@ast.Value] {
   if all_num {
     out.sort_by(fn(a, b) {
       match (a, b) {
-        (@ast.NumVal(x), @ast.NumVal(y)) =>
+        // Exact int64 ordering: routing two large integers through the
+        // double fallback would lose the order above 2^53.
+        (@ast.IntVal(x), @ast.IntVal(y)) =>
           if x < y {
             -1
           } else if x > y {
@@ -128,7 +135,17 @@ fn sort_values(xs : Array[@ast.Value]) -> Array[@ast.Value] {
           } else {
             0
           }
-        (_, _) => 0
+        (_, _) => {
+          let x = @evaluator.to_number(a)
+          let y = @evaluator.to_number(b)
+          if x < y {
+            -1
+          } else if x > y {
+            1
+          } else {
+            0
+          }
+        }
       }
     })
   } else if all_str {
