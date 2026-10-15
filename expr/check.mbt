@@ -83,6 +83,20 @@ fn nature_comparable(l : Nature, r : Nature) -> Bool {
 }
 
 ///|
+/// expr's `AssignableTo` for the natures mbel has — used by the map-key
+/// half of the `in` check. Note the difference from `nature_comparable`:
+/// `nil` is comparable with anything but is *not* assignable to a string
+/// key, so `nil in {a: 1}` is a compile error in expr.
+fn nature_assignable(l : Nature, target : Nature) -> Bool {
+  match (l, target) {
+    (UnknownN, _) | (_, UnknownN) => true
+    (StringN, StringN) | (IntN, IntN) | (FloatN, FloatN) | (BoolN, BoolN) => true
+    (BytesN, BytesN) | (ArrN(_), ArrN(_)) | (MapN(_), MapN(_)) => true
+    _ => false
+  }
+}
+
+///|
 type Scope = Array[(String, Nature)]
 
 ///|
@@ -478,10 +492,11 @@ fn check_binary(
         (UnknownN, _) | (_, UnknownN) => UnknownN
         _ => raise mismatch()
       }
-    // expr checks membership types against the container's element type
-    // ("cannot use int as type string in array"); the map-key half of
-    // that rule has no failing case here — mbel maps are string-keyed by
-    // construction.
+    // expr checks membership types against the container: the array half
+    // compares against the element type, the map half against the key
+    // type — an AssignableTo test, not ComparableTo, because `nil` is
+    // comparable with anything yet not assignable to a string key. mbel
+    // maps are string-keyed by construction, so the key type is string.
     "in" =>
       match rt {
         ArrN(elem) =>
@@ -494,6 +509,16 @@ fn check_binary(
               " as type " +
               nature_name(elem) +
               " in array",
+              op_line,
+              op_col,
+            )
+          }
+        MapN(_) =>
+          if nature_assignable(lt, StringN) {
+            UnknownN
+          } else {
+            raise CheckError::CheckErr(
+              "cannot use " + lname + " as type string in map key",
               op_line,
               op_col,
             )

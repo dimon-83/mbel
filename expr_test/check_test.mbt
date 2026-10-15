@@ -241,3 +241,27 @@ test "checker: in checks membership types like expr" {
   expect_checked("1 in [1, \"a\"]", "true", "member of dynamic array")
   expect_checked("1 in \"abc\"", "false", "string rhs is unchecked")
 }
+
+///|
+/// The map half of expr's membership rule: the member must be assignable
+/// to the key type. mbel maps are string-keyed by construction, so any
+/// known non-string member is rejected. Note `nil` is comparable with
+/// anything but not *assignable* to a string key, which is why it is an
+/// error here while `nil in [1]` is not.
+test "checker: in checks map key types like expr" {
+  expect_checked_err(
+    "1 in {a: 1}", "cannot use int as type string in map key (1:3)", 2, "int key",
+  )
+  expect_checked_err(
+    "1.5 in {a: 1}", "cannot use float as type string in map key (1:5)", 4,
+    "float key",
+  )
+  expect_checked_err(
+    "true in {a: 1}", "cannot use bool as type string in map key (1:6)", 5, "bool key",
+  )
+  expect_checked_err(
+    "nil in {a: 1}", "cannot use nil as type string in map key (1:5)", 4, "nil key",
+  )
+  expect_checked("\"a\" in {a: 1}", "true", "string key hit")
+  expect_checked("\"z\" in {a: 1}", "false", "string key miss")
+}

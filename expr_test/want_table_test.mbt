@@ -16,8 +16,7 @@
 // normalized to canonical JSON and compared through the same canon
 // serializer the corpus driver uses, on BOTH engines per row.
 //
-// Skipped rows (17/167), each with its documented reason:
-//   row 026: in on struct/map membership (legacy JS in-semantics lock)
+// Skipped rows (16/167), each with its documented reason:
 //   row 042: Go method call (reflection cut)
 //   row 043: Go method call (reflection cut)
 //   row 049: len counts UTF-16 units vs expr rune count (documented divergence)
@@ -203,6 +202,9 @@ let want_rows : Array[(String, String, String)] = [
   ("r023", "Int in 0..1", "true"),
   ("r024", "Int32 in 0..1", "true"),
   ("r025", "Int64 in 0..1", "true"),
+  (
+    "r026", "1 in [1, 2, 3] && \"foo\" in {foo: 0, bar: 1} && \"Bar\" in Foo", "true",
+  ),
   ("r027", "1 in [1.5] || 1 not in [1]", "false"),
   ("r028", "One in 0..1 && Two not in 0..1", "true"),
   ("r029", "Two not in 0..1", "true"),

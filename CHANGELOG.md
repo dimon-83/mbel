@@ -6,6 +6,51 @@ All notable changes to mbel are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The checker type-checks array membership like expr.** Compile mode
+  reports `cannot use int as type string in array` (with expr's
+  `msg (L:C)` + source line + caret layout) for `1 in ["a"]`. Numbers stay
+  comparable across int/float, `nil` is comparable with anything, and a
+  heterogeneous array literal is typed as a plain array rather than
+  rejected — which is what expr does: container literals are *typed*, not
+  required to be homogeneous.
+- **The checker type-checks map keys like expr.** Compile mode reports
+  `cannot use int as type string in map key` for `1 in {a: 1}` (and the same
+  for float/bool/nil members). That test is expr's `AssignableTo`, not
+  `ComparableTo`: `nil` is comparable with everything but not assignable to a
+  string key, which is why `nil in [1]` is fine while `nil in {a: 1}` is a
+  compile error.
+- **Resource-gate observability** — `Engine::budget_stats()` and
+  `Engine::reset_budget_stats()`. The budget failure messages are a locked
+  contract (`expression is too large (more than N nodes)`, …), so they gain
+  no text; the counters are where the outcome of the gate becomes visible.
+  Each counter is `(reason, count)` in first-hit order, with `reason` one of
+  `nodes`, `nesting`, `depth`, `steps`, `memory`, `value_nesting`,
+  `flatten_depth`. Ordinary errors (syntax, type, unknown name) are not
+  counted, and the snapshot is a copy rather than live state. Counters are
+  incremented by per-stage guards around the parse and evaluation stages of
+  each entry point, so one failure counts once — including the expr
+  front-end path, which the tests pin down.
+- **`Engine::clear_caches()`** — drops the compiled `matches` pattern cache,
+  so an embedder fed unbounded dynamic patterns can reclaim that memory on
+  its own schedule instead of waiting for the engine to be dropped.
+- **CI gate** (`.github/workflows/ci.yml`) — the three-target matrix
+  (wasm-gc, js, native) now runs on every push to `main` and every pull
+  request. The repository previously had no automated test gate at all.
+
+### Changed
+
+- The pre-commit hook now runs `moon check` **and** `moon test` (it ran only
+  `moon check`), and `core.hooksPath` is documented as a required per-clone
+  step. Previously the hook file existed but nothing installed it, so it
+  never ran on any commit. `moon fmt` is deliberately excluded: the pinned
+  toolchain's formatter rewrites unrelated files.
+- `docs/{en,zh}/environment.md` document two boundaries of the gate that were
+  previously implicit: host-registered callbacks (`add_function` /
+  `add_transform` / `add_binary_op`) run outside the budget, and
+  `max_steps` is an allocation budget rather than a CPU budget.
+
 ### Fixed
 
 - **Time and duration arithmetic produced meaningless numbers.**
@@ -29,39 +74,16 @@ All notable changes to mbel are documented here. The format follows
   dynamic/legacy path keeps `strict_eq` so no legacy behaviour moves.
   Comparison stays exact int64 (`9007199254740993 in [9007199254740992]`
   is `false`).
-
-### Added
-
-- **The checker now type-checks array membership like expr.** Compile mode
-  reports `cannot use int as type string in array` (with expr's
-  `msg (L:C)` + source line + caret layout) for `1 in ["a"]`. Numbers stay
-  comparable across int/float, `nil` is comparable with anything, and a
-  heterogeneous array literal is typed as a plain array rather than
-  rejected — which is what expr does: container literals are *typed*, not
-  required to be homogeneous.
-
-### Added
-
-- **Resource-gate observability** — `Engine::budget_stats()` and
-  `Engine::reset_budget_stats()`. The budget failure messages are a locked
-  contract (`expression is too large (more than N nodes)`, …), so they gain
-  no text; the counters are where the outcome of the gate becomes visible.
-  Each counter is `(reason, count)` in first-hit order, with `reason` one of
-  `nodes`, `nesting`, `depth`, `steps`, `memory`, `value_nesting`,
-  `flatten_depth`. Ordinary errors (syntax, type, unknown name) are not
-  counted, and the snapshot is a copy rather than live state. Counters are
-  incremented by per-stage guards around the parse and evaluation stages of
-  each entry point, so one failure counts once — including the expr
-  front-end path, which the tests pin down.
-- **`Engine::clear_caches()`** — drops the compiled `matches` pattern cache,
-  so an embedder fed unbounded dynamic patterns can reclaim that memory on
-  its own schedule instead of waiting for the engine to be dropped.
-- **CI gate** (`.github/workflows/ci.yml`) — the three-target matrix
-  (wasm-gc, js, native) now runs on every push to `main` and every pull
-  request. The repository previously had no automated test gate at all.
-
-### Fixed
-
+- **`in` now tests map keys.** `"foo" in {foo: 0}` returned `false` because
+  `in_op` only handled strings and arrays; it now checks key membership for
+  objects, matching expr and JS object `in` (so the legacy dialect gains the
+  same answer rather than a divergent one — the legacy corpus has no object
+  `in` case). Only a string member can match: mbel map keys are strings, and
+  the checked entry rejects a non-string member outright, so coercing numbers
+  to keys would invent matches the checker forbids. This un-skips the
+  transcribed upstream row 026 (`1 in [1, 2, 3] && "foo" in {foo: 0, bar: 1}
+  && "Bar" in Foo`): the want table is now 151 transcribed + 16 documented
+  skips.
 - **The `matches` pattern cache is now capacity-bounded.** It grew for the
   lifetime of an engine: every distinct pattern and its compiled program
   were retained forever, and the lookup is a linear scan, so both memory and
@@ -83,23 +105,12 @@ All notable changes to mbel are documented here. The format follows
   fallback (`nil`) instead of the element. Both integer kinds are handled
   now; out-of-range and negative indices still fall back.
 
-  Both bugs were invisible to the existing tests because the only coverage
-  drove these builtins through the **legacy** dialect, whose lexer produces
-  nothing but `NumVal`. `engine_test/typed_builtin_test.mbt` now exercises
-  them through `eval_expr` on both engines with explicit value kinds, and
-  AGENTS.md records the rule.
+  `sort`, `get` and the membership equality were all invisible to the
+  existing tests because the only coverage drove those builtins through the
+  **legacy** dialect, whose lexer produces nothing but `NumVal`.
+  `engine_test/typed_builtin_test.mbt` exercises them through `eval_expr` on
+  both engines with explicit value kinds, and AGENTS.md records the rule.
 
-### Changed
-
-- The pre-commit hook now runs `moon check` **and** `moon test` (it ran only
-  `moon check`), and `core.hooksPath` is documented as a required per-clone
-  step. Previously the hook file existed but nothing installed it, so it
-  never ran on any commit. `moon fmt` is deliberately excluded: the pinned
-  toolchain's formatter rewrites unrelated files.
-- `docs/{en,zh}/environment.md` document two boundaries of the gate that were
-  previously implicit: host-registered callbacks (`add_function` /
-  `add_transform` / `add_binary_op`) run outside the budget, and
-  `max_steps` is an allocation budget rather than a CPU budget.
 
 ## [0.3.5] — 2026-10-14
 

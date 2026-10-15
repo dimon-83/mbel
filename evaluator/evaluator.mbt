@@ -503,8 +503,8 @@ fn neq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 }
 
 ///|
-/// JS `in`: substring check on strings, element match on arrays, false
-/// for anything else.
+/// `in`: substring check on strings, element match on arrays, key
+/// membership on maps/objects, false for anything else.
 ///
 /// Array membership uses the same equality as `==`: under the typed value
 /// model that is `typed_eq`, so `1 in [1.0]` agrees with `1 == 1.0`
@@ -512,6 +512,14 @@ fn neq(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 /// `1 in [1.0]` (numbers are comparable in expr) while the runtime
 /// answered false. The dynamic/legacy case keeps `strict_eq`, so no
 /// locked legacy behaviour moves.
+///
+/// Map/object membership is expr's key test (`"foo" in {foo: 0}`), which
+/// is also JS semantics for `in` on an object, so the legacy dialect gains
+/// the same answer rather than a divergent one. Only a string member can
+/// match: mbel map keys are strings, and expr's checker rejects a
+/// non-string member at compile time (`cannot use int as type string in
+/// map key`), so coercing numbers to keys here would invent matches that
+/// the checked entry forbids.
 fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
   guard_value_nesting(a, b)
   match b {
@@ -528,6 +536,22 @@ fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
           found = true
           break
         }
+      }
+      @ast.BoolVal(found)
+    }
+    @ast.ObjectVal(pairs) => {
+      let mut found = false
+      match a {
+        @ast.StrVal(s) => {
+          for pair in pairs {
+            let (k, _) = pair
+            if k == s {
+              found = true
+              break
+            }
+          }
+        }
+        _ => ()
       }
       @ast.BoolVal(found)
     }

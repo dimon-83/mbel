@@ -131,3 +131,16 @@ test "in uses the operator's equality under the typed value model" {
     "equal large int64 members",
   )
 }
+
+///|
+test "in checks map keys" {
+  expect_expr_both("\"a\" in {a: 1}", @ast.BoolVal(true), "string key hit")
+  expect_expr_both("\"z\" in {a: 1}", @ast.BoolVal(false), "string key miss")
+  expect_expr_both("\"a\" in {}", @ast.BoolVal(false), "empty map")
+  expect_expr_both("\"a\" in {\"a\": 1}", @ast.BoolVal(true), "quoted key hit")
+  // A non-string member never matches: mbel map keys are strings, and the
+  // checked entry rejects the expression outright rather than letting it
+  // answer false (see check_test.mbt).
+  expect_expr_both("1 in {a: 1}", @ast.BoolVal(false), "int member miss")
+  expect_expr_both("nil in {a: 1}", @ast.BoolVal(false), "nil member miss")
+}
