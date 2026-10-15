@@ -8,6 +8,15 @@ All notable changes to mbel are documented here. The format follows
 
 ### Added
 
+- **More RE2 constructs now translate instead of being cut.** `\xHH` and
+  `\x{H…}` are code-point escapes in RE2 and core spells those
+  `\u00HH`/`\u{H…}`; `(?P<name>…)` is Go's other named-group spelling and
+  is normalized to `(?<name>…)`; `\Q…\E` is rewritten as escaped literal
+  text (a missing `\E` quotes to the end, as in RE2). `\x` works inside a
+  character class too, including as a range end. The documented cut list
+  shrinks to `\p{…}`, `(?m)`, class-internal `\D`/`\W`/`\S`, in-class
+  `\Q…\E`, `(?U)` and `(?-i)` in an active `(?i)` scope. All of it is
+  covered by the Go differential corpus, now 122 cases.
 - **Dialect-specific `len`/`type`** — the standard dialect now reports
   expr's names and counting: `type(5.0)` is `"float"` (was `"number"`) and
   `len('👍')` is `1` code point (was 2 UTF-16 units). The front end lowers

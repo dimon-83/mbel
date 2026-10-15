@@ -128,7 +128,8 @@ New divergences recorded:
 | `\p{…}` `\P{…}` | supported | `invalid regex: … unsupported regex construct` | core has no Unicode property classes; would need Unicode tables |
 | `(?m)` | supported | `invalid regex: … multiline mode is not supported` | core has no multiline mode |
 | `\D` `\W` `\S` **inside** a class (`[\D5]`) | supported | `invalid regex: …` | needs character-class set algebra (complement ∩ union) |
-| `\Q…\E`, `\xHH`, `(?P<…>)`, `(?U)` | supported | `invalid regex: …` | no core equivalent, not translated |
+| `\xHH`, `\x{H…}`, `\Q…\E`, `(?P<name>…)` | supported | supported, translated | core spells hex escapes `\u00HH`/`\u{H…}`, has no quoting escape, and only the `(?<name>…)` group form |
+| `(?U)`, `\Q…\E` inside a class | supported | `invalid regex: …` | no core equivalent, not translated |
 | `(?-i)` inside an active `(?i)` scope | supported | `invalid regex: …` | core only implements `(?i:…)`, no way to switch it back off |
 | `\uXXXX` / `\u{…}` | **rejected** by RE2 | accepted | core-native escape; mbel superset |
 | `1..2` (Jexl corpus) | n/a | range | mbel superset; moved to tools/divergence.txt |

@@ -100,7 +100,7 @@ Other syntax:
   against Go's `regexp` (see tools/README.md). A malformed pattern, or a
   construct with no core equivalent, raises `invalid regex: …` naming the
   construct. Documented cuts: `\p{…}`/`\P{…}`, `(?m)`, `\D`/`\W`/`\S`
-  inside a character class, `\Q…\E`, `\xHH`, `(?P<name>…)`, `(?U)`, and
+  inside a character class, `(?U)`, and
   turning `(?i)` back off inside an active `(?i)` scope.
   `contains`/`startsWith`/`endsWith` are
   operators, nil-safe (nil operand → false).
@@ -199,7 +199,7 @@ transforms are registered per engine instance (no reflection — see
   membership is not supported (documented cut).
 - String slices are character-based; `matches` follows RE2 except for the
   documented cuts (`\p{…}`, `(?m)`, `\D`/`\W`/`\S` inside a class,
-  `\Q…\E`, `\xHH`, `(?P<…>)`, `(?U)`, `(?-i)` in an `(?i)` scope);
+  `(?U)`, `(?-i)` in an `(?i)` scope);
   `upper`/`lower`
   are ASCII-only; time is the minimal UTC/ISO subset, with `now()`,
   `date()` and `duration()` all in int64 nanoseconds so that time and

@@ -122,11 +122,32 @@ test "regex translate: documented cuts raise actionable errors" {
   // own: a bare (?-i) under an outer (?i:…), and the group form.
   assert_true(tr_cut("(?i:a(?-i)b)").contains("(?-i)"))
   assert_true(tr_cut("(?i)(?-i:a)").contains("(?-i:…)"))
-  // \Q…\E, \xHH, (?P<…>), (?U)
-  assert_true(tr_cut("\\Qa.b\\E").contains("\\Q"))
-  assert_true(tr_cut("\\x41").contains("\\x"))
-  assert_true(tr_cut("(?P<n>a)").contains("(?<name>"))
+  // Ungreedy mode has no core equivalent.
   assert_true(tr_cut("(?U)a+").contains("ungreedy"))
+}
+
+///|
+test "regex translate: hex, quoted literals and (?P<…>) groups" {
+  // \xHH / \x{H…} are code-point escapes; core spells them \u00HH / \u{H…}.
+  assert_eq(tr("\\x41"), "\\u0041")
+  assert_eq(tr("^\\x41$"), "^\\u0041$")
+  assert_eq(tr("\\x{263A}"), "\\u{263A}")
+  assert_eq(tr("[\\x41]"), "[\\u0041]")
+  assert_eq(tr("[\\x41-\\x5A]"), "[\\u0041-\\u005A]")
+  // \Q…\E quotes literally; core has no quoting escape, so the metachars
+  // are escaped. A missing \E quotes to the end (as in RE2).
+  assert_eq(tr("\\Qa.b\\E"), "a\\.b")
+  assert_eq(tr("\\Qa+b\\Ec"), "a\\+bc")
+  assert_eq(tr("\\Qa.b"), "a\\.b")
+  assert_eq(tr("\\Q\\E"), "")
+  // Go accepts both named-group spellings; core only the (?<name>…) one.
+  assert_eq(tr("(?P<n>a)b"), "(?<n>a)b")
+  assert_eq(tr("(?<n>a)b"), "(?<n>a)b")
+  assert_eq(tr("(?P<n>a)|b"), "(?<n>a)|b")
+  // Malformed escapes are reported, not passed through.
+  assert_true(tr_cut("\\x4").contains("two hex digits"))
+  assert_true(tr_cut("\\x{263A").contains("unterminated"))
+  assert_true(tr_cut("\\E").contains("without a matching"))
 }
 
 ///|

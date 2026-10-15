@@ -2,7 +2,7 @@
 // Regenerate with tools/gen_regex_mbt.py
 //
 // Expected column is Go's regexp verdict (go version go1.27.0 darwin/arm64) on
-// 2026-10-14: "true"/"false" is the match result, "error" means Go
+// 2026-10-15: "true"/"false" is the match result, "error" means Go
 // rejected the pattern. engine_test/regex_re2_test.mbt asserts mbel
 // agrees on every row (match value, or a raised error).
 
@@ -114,4 +114,20 @@ let regex_re2_cases : Array[(String, String, String)] = [
   ("[", " abc", "error"),
   ("(", " abc", "error"),
   ("a)", " ab", "error"),
+  ("\\x41", "A", "true"),
+  ("\\x41", "B", "false"),
+  ("^\\x41$", "A", "true"),
+  ("\\x{263A}", "☺", "true"),
+  ("\\x{263A}", "x", "false"),
+  ("[\\x41-\\x5A]+", "M", "true"),
+  ("[\\x41-\\x5A]+", "m", "false"),
+  ("(?P<n>a)b", "ab", "true"),
+  ("(?P<n>a)b", "ac", "false"),
+  ("(?P<n>a)|b", "b", "true"),
+  ("(?<n>a)b", "ab", "true"),
+  ("\\Qa.b\\E", "a.b", "true"),
+  ("\\Qa.b\\E", "axb", "false"),
+  ("\\Qa+b\\E", "a+b", "true"),
+  ("\\Qa+b\\E", "aab", "false"),
+  ("\\Qa.b", "a.b", "true"),
 ]

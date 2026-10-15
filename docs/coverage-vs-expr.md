@@ -51,7 +51,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 切片 [1:3] [:3] [3:] | ✅ | eval_test(双引擎) | expr 语义:负边界 len+x、越界 clamp、from>to 为空;数组+字符串(字符串按字符,mbel 注:expr 按字节,非 ASCII 差异记录) |
 | 可选链 ?. /?.[ | ✅ | parser_test, eval_test `user?.name` | 求值走 nil-safe drill(与 mbel drill 语义一致) |
 | 链式比较 a<b<c | ✅ | parser_test(结构) | `< > <= >=` 合取;`==`/`!=` 不链 |
-| matches 正则 | ✅ | regex_re2_test(Go RE2 对拍 106 例 × 双引擎), builtin_test, want 表 033/034 | 右操作数是 RE2 模式,经翻译层(evaluator/regex_translate.mbt)转 core 方言:简写类、`.`(不含换行,`(?s)` dot-all)、字符类首/末位 `-`、裸 `(?i)`/内联标志、命名分组均与 RE2 一致。裁剪:`\p{…}`、`(?m)`、类内 `\D`/`\W`/`\S`、`\Q…\E`、`\xHH`、`(?P<…>)`、`(?U)`、`(?i)` 作用域内 `(?-i)`;非法模式透传 core 诊断 |
+| matches 正则 | ✅ | regex_re2_test(Go RE2 对拍 122 例 × 双引擎), builtin_test, want 表 033/034 | 右操作数是 RE2 模式,经翻译层(evaluator/regex_translate.mbt)转 core 方言:简写类、`.`(不含换行,`(?s)` dot-all)、字符类首/末位 `-`、裸 `(?i)`/内联标志、`\xHH`/`\x{H…}`、`\Q…\E`、`(?P<name>…)` 均与 RE2 一致。裁剪:`\p{…}`、`(?m)`、类内 `\D`/`\W`/`\S`、类内 `\Q…\E`、`(?U)`、`(?i)` 作用域内 `(?-i)`;非法模式透传 core 诊断 |
 | contains/startsWith/endsWith 运算符 | ✅ | eval_test, parser_test | expr 语义是**运算符**(非函数):infix、nil-safe(空操作数=false),双引擎注册 |
 | 管道 \| | ✅ | parser_test, eval_test | expr 管道:`x\|f(a)` desugar 为 `f(x,a)`;RHS 必须是调用(`1\|2` 解析报错);需宿主注册函数/转换 |
 | 一元 -/!(优先级) | ✅ | parser_test, eval_test | expr:一元 -/+ 90、not/! 50、幂 100 → `-2**2`=-(2**2)、`2**-2` 合法;Jexl legacy 词法负号保留 |
@@ -205,7 +205,7 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    `-`、裸 `(?i)`/`(?i:…)`/`(?s)` 均改写为 core 等价形式;并逐例对拍 Go
    `regexp`(tools/regex_corpus.txt + tools/gen_regex_mbt.py →
    engine_test/regex_re2_test.mbt,106 例 × 双引擎)。明确裁剪:`\p{…}`、
-   `(?m)`、类内 `\D`/`\W`/`\S`、`\Q…\E`、`\xHH`、`(?P<…>)`、`(?U)`、`(?i)`
+   `(?m)`、类内 `\D`/`\W`/`\S`、`(?U)`、`(?i)`
    作用域内的 `(?-i)`——一律报 `invalid regex: … (…)` 并点名构造,不做静默
    降级。注意 `\s` 必须译成 `[\t\n\f\r ]` 而非 `[[:space:]]`:Go 的 `\s`
    不含 `\v` 而 core 的 `[[:space:]]` 含(对拍时发现)。时间——civil

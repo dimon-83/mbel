@@ -350,7 +350,7 @@ phase. Remaining items — the verifiable list lives in
   rewrites class shorthands, `.` and inline flags for the MoonBit core
   engine, verified case-by-case against Go's `regexp`. The constructs
   with no core equivalent — `\p{…}`, `(?m)`, class-internal
-  `\D`/`\W`/`\S`, `\Q…\E`, `\xHH` — are documented cuts in
+  `\D`/`\W`/`\S` — are documented cuts in
   [docs/expr-gap-analysis.md](docs/expr-gap-analysis.md).)
 
 Already delivered: the standard-dialect syntax layer (4.4.1/4.4.2),

@@ -15,7 +15,7 @@
 //   - `(?m)` multiline mode
 //   - `\D` / `\W` / `\S` *inside* a character class (e.g. `[\D5]`), which
 //     needs character-class set algebra
-//   - `\Q…\E`, `\xHH`, `(?P<name>…)`, `(?U)`
+//   - `(?U)` (ungreedy mode)
 //   - switching case-insensitivity back off with `(?-i)` when it is on
 //
 // Translation runs at most once per distinct pattern per engine: the
@@ -146,15 +146,84 @@ fn re_translate_escape(
         "\\p{…}/\\P{…}",
         "Unicode property classes are not supported; use an explicit class",
       )
-    'Q' | 'E' =>
-      raise re_cut("\\Q…\\E", "escape the literal text instead")
-    'x' => raise re_cut("\\xHH", "use \\uXXXX or \\u{…} instead")
+    'Q' => {
+      // \Q…\E: the enclosed text is literal. Escape it for core, which has
+      // no quoting escape. A missing \E quotes to the end of the pattern
+      // (as in RE2).
+      let n = src.length()
+      let mut i = start + 2
+      while i < n {
+        if src[i] == '\\' && i + 1 < n && src[i + 1] == 'E' {
+          return i + 2
+        }
+        if is_regex_metachar(src[i]) {
+          out.write_char('\\')
+        }
+        out.write_char(src[i])
+        i = i + 1
+      }
+      return i
+    }
+    'E' => raise EvalError::EvalErr("invalid regex: \\E without a matching \\Q")
+    'x' => return re_translate_hex_escape(src, start, out)
     _ => {
       out.write_char('\\')
       out.write_char(c)
     }
   }
   start + 2
+}
+
+///|
+/// True for the characters that must be escaped to be literal.
+fn is_regex_metachar(c : Char) -> Bool {
+  match c {
+    '.' | '^' | '$' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '\\' =>
+      true
+    _ => false
+  }
+}
+
+///|
+/// `\xHH` and `\x{H…}` are code-point escapes in RE2; core spells those
+/// `\u00HH` and `\u{H…}`. Returns the index just past the escape.
+fn re_translate_hex_escape(
+  src : Array[Char],
+  start : Int,
+  out : StringBuilder,
+) -> Int raise EvalError {
+  let n = src.length()
+  let i = start + 2
+  if i < n && src[i] == '{' {
+    let mut j = i + 1
+    while j < n && src[j] != '}' {
+      j = j + 1
+    }
+    if j >= n {
+      raise EvalError::EvalErr("invalid regex: unterminated \\x{…} escape")
+    }
+    // \x{H…} -> \u{H…}
+    out.write_string("\\u")
+    for k in i..<(j + 1) {
+      out.write_char(src[k])
+    }
+    return j + 1
+  }
+  if i + 1 >= n || !is_hex(src[i]) || !is_hex(src[i + 1]) {
+    raise EvalError::EvalErr("invalid regex: \\x needs two hex digits")
+  }
+  out.write_string("\\u00")
+  out.write_char(src[i])
+  out.write_char(src[i + 1])
+  i + 2
+}
+
+///|
+fn is_hex(c : Char) -> Bool {
+  match c {
+    '0'..='9' | 'a'..='f' | 'A'..='F' => true
+    _ => false
+  }
 }
 
 ///|
@@ -197,8 +266,12 @@ fn re_translate_class_escape(
         "Unicode property classes are not supported; use an explicit class",
       )
     'Q' | 'E' =>
-      raise re_cut("\\Q…\\E", "escape the literal text instead")
-    'x' => raise re_cut("\\xHH", "use \\uXXXX or \\u{…} instead")
+      raise re_cut(
+        "\\Q…\\E inside a character class",
+        "escape the literal characters instead",
+      )
+    // Core accepts \uXXXX inside a class too (including as a range end).
+    'x' => return re_translate_hex_escape(src, start, out)
     _ => {
       out.write_char('\\')
       out.write_char(c)
@@ -330,9 +403,21 @@ fn re_translate_seq(
           i = pos + 1
           continue
         }
-        if j < n && src[j] == '<' {
+        // Go spells named groups both (?<name>…) and (?P<name>…); core
+        // takes the first, so the P is dropped.
+        let mut lt = j
+        if j < n && src[j] == 'P' {
+          if j + 1 < n && src[j + 1] == '<' {
+            lt = j + 1
+          } else {
+            raise EvalError::EvalErr(
+              "invalid regex: (?P must be followed by <name>",
+            )
+          }
+        }
+        if lt < n && src[lt] == '<' {
           // (?<name>…) named group
-          let mut k = j + 1
+          let mut k = lt + 1
           while k < n && src[k] != '>' {
             k = k + 1
           }
@@ -340,7 +425,7 @@ fn re_translate_seq(
             raise EvalError::EvalErr("invalid regex: unterminated group name")
           }
           out.write_string("(?<")
-          for p in (j + 1)..<(k + 1) {
+          for p in (lt + 1)..<(k + 1) {
             out.write_char(src[p])
           }
           let (body, pos) = re_translate_seq(src, k + 1, {
@@ -354,9 +439,6 @@ fn re_translate_seq(
           out.write_char(')')
           i = pos + 1
           continue
-        }
-        if j < n && src[j] == 'P' {
-          raise re_cut("(?P<name>…)", "use the (?<name>…) form instead")
         }
         let (on, off, next, colon) = re_parse_flags(src, j)
         let (ni, ns) = re_apply_flags(on, off, cur_i, cur_s)
