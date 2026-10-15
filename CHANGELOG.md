@@ -6,6 +6,8 @@ All notable changes to mbel are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.7] — 2026-10-15
+
 ### Added
 
 - **`\p{…}` Unicode classes.** `matches` now supports Unicode general
