@@ -103,6 +103,26 @@ fn value_len(v : @ast.Value) -> Int {
 }
 
 ///|
+/// Code-point count, used by the standard dialect's `len` (the legacy
+/// dialect lowercases to UTF-16 code units through `value_len`).
+///
+/// expr counts runes: `len('👍')` is 1 while JS `.length` — and therefore
+/// the legacy dialect — says 2. The standard dialect lowers `len` here so
+/// both can be right at once; see expr/lower.mbt.
+fn value_len_runes(v : @ast.Value) -> Int {
+  match v {
+    @ast.StrVal(s) => {
+      let mut n = 0
+      for _ in s {
+        n = n + 1
+      }
+      n
+    }
+    _ => value_len(v)
+  }
+}
+
+///|
 /// Sorts a homogeneous numeric or string array. `IntVal` counts as a
 /// number: the standard dialect produces `IntVal` for every integer
 /// literal and integer operation, so classifying only `NumVal` as

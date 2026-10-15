@@ -76,7 +76,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 数学 8 | ✅ 8/8 | builtin_test;round=Go 半远离零 |
 | 字符串 16 | ✅ 16/16 | upper/lower 仅 ASCII(差异记录) |
 | 集合 12 | ✅ 12/12 | get 越界 nil;sort 数字/字符串 |
-| 转换 9 | 🟡 9/9 实现 | type() 对整数返回 "int"(4.4.3);float 仍报 "number"(legacy 锁定,expr 报 "float",待 dialect 拆分);toJSON NaN→null(expr 报错);大 int64 JSON 精度损失已记录 |
+| 转换 9 | ✅ 9/9 | type() 对整数返回 "int"(4.4.3);float 在**标准方言报 "float"**(expr 名称)、经典方言报 "number"(JS 名称)——降层按方言改写;toJSON NaN→null(expr 报错);大 int64 JSON 精度损失已记录 |
 | 位运算 8 | ✅ 8/8 | Int64 语义 |
 | 时间 4 | 🟡 最小集 | now/duration/date(ISO)/timezone=UTC;三者统一为 **int64 纳秒**(与 Go `UnixNano`/`Duration` 同单位,故 `date(…)+duration("24h")` 是精确 int64 加法);无 time.Time 对象/方法/多 layout/时区库 |
 | 谓词聚合 15 | ✅ 15/15 | 函数式调用形式已交付(2026-09-06,如 `count(list, # > 2)`):# /#index/#acc 指针、省略 # 的相对访问、子 Program+类型化槽位;`{expr}` 花括号谓词形式已随 parser 重写交付(4.4.2,双引擎一致) |
@@ -226,7 +226,7 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
 
 ### 6.3 覆盖率目标
 4.4 gate(收尾清单 ⑤,2026-09-07 状态):TestExpr 167 行全量处置 ✅
-(151 转写 + 16 文档化跳过,双引擎;正则修正后 033/034 已转写,`in` 的映射表成员修正后 026 已转写);checker TestCheck 107/112 ✅;
+(153 转写 + 14 文档化跳过,双引擎;正则修正后 033/034、`in` 映射表成员修正后 026、方言拆分后 len 的 049/050 均已转写);checker TestCheck 107/112 ✅;
 **parser TestParse 143 行(Go AST want → mbel dump 翻译)与 optimizer
 表抽样未完成**——gate 达标前需补。4.5 后 builtin_test 904 行对齐。
 

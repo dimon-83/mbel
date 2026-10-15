@@ -89,7 +89,9 @@ test "typed: equality and comparisons follow expr kinds" {
 ///|
 test "typed: type() and ranges report integers" {
   expect_typed("type(5)", "str:int", "type of int")
-  expect_typed("type(5.0)", "str:number", "float still number (legacy name)")
+  // The standard dialect now reports expr's "float"; the legacy dialect
+  // keeps the JS name "number" (see engine_test/builtin_test.mbt).
+  expect_typed("type(5.0)", "str:float", "type of float")
   expect_typed("type(5 + 2)", "str:int", "type of int sum")
   expect_typed("len(1..5)", "int:5", "range len")
   let i = @engine.new()

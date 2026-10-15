@@ -26,7 +26,7 @@
 - `**`/`^` 恒产生浮点(即使 `2 ** 3`);负指数合法。
 - 数值间相等/排序会提升(`1 == 1.0` 为 true);跨类相等为 false;跨类排序与混合 `+` 在运行时(或 Compile 模式检查期)报 `invalid operation: int + string` 一类错误。
 - 一元 `-` 保持操作数类型(`-5` 为 int,`-5.0` 为 float)。
-- `type()` 对整数报 `"int"`;浮点报 `"number"`(expr 报 `"float"`——文档化偏离:legacy 名称被锁定)。
+- `type()` 对整数报 `"int"`;浮点在标准方言报 `"float"`(expr 名称)、在经典方言报 `"number"`(JS 名称)。`len()` 同理:标准方言数码点、经典方言数 UTF-16 单元——前端把 `len`/`type` 降层到方言专用实现(`expr/lower.mbt`)。
 
 ## 运算符
 
@@ -98,7 +98,7 @@ mbel 额外接受经典方言的方括号谓词 `items[.price <= 2]`(逐元素�
 ## 与参考语义的已知差异(摘要)
 
 - 环境只能是数据:无 struct 环境、值上无方法(反射裁剪);方法调用语法可解析但在 lowering 时报错。
-- `type()` 对浮点返回 `"number"`(legacy 锁定)而非 `"float"`。
+- `type()` 对浮点:标准方言 `"float"`,经典方言 `"number"`(见上文方言拆分说明)。
 - 经典方言中字符串 `in` 是子串语义(标准方言 Eval 模式对字符串沿用该行为——差异已在覆盖矩阵记录)。
 - 数组 `in` 在 Compile 模式按 expr 做类型检查:成员类型与元素类型不可比较即编译错误(`1 in ["a"]` → `cannot use int as type string in array`)。int/float 之间可比较,`nil` 与任何类型可比较,异质数组字面量推断为普通 array 而非报错。成员判等与 `==` 同源,故 `1 in [1.0]` 为 `true`。映射表键成员不支持(已文档化裁剪)。
 - 字符串切片按字符;`matches` 除下列裁剪外遵循 RE2(`\p{…}`、`(?m)`、类内 `\D`/`\W`/`\S`、`\Q…\E`、`\xHH`、`(?P<…>)`、`(?U)`、`(?i)` 作用域内的 `(?-i)`);`upper`/`lower` 仅 ASCII;时间是最小 UTC/ISO 子集,且 `now()`/`date()`/`duration()` 统一为 int64 纳秒(故时间与时长运算即精确 int64 加法);JSON 数字是 double(上下文数据中 2^53 以上整数损失精度;字面量与 int64 的 `toJSON` 输出精确)。

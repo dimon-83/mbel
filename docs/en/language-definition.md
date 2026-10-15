@@ -182,7 +182,11 @@ transforms are registered per engine instance (no reflection — see
 
 - Env is data only: no struct envs, no methods on values (reflection cut);
   method-call syntax parses but raises at lowering.
-- `type()` of floats returns `"number"` (legacy lock) instead of `"float"`.
+- `type()` of floats returns `"float"` in the standard dialect (expr's
+  name) and `"number"` in the classic dialect (JS name). `len()` likewise
+  counts code points in the standard dialect and UTF-16 code units in the
+  classic one — the front end lowers `len`/`type` to a dialect-specific
+  implementation (`expr/lower.mbt`).
 - String `in` (classic dialect) is substring semantics; the standard dialect
   rejects nothing statically there (Eval mode follows legacy substring
   behavior for strings — divergence documented in coverage matrix).

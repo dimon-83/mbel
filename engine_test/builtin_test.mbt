@@ -379,3 +379,17 @@ test "folding preserves semantics" {
   // evaluation.
   expect_v("len(1..3) * 2", @ast.NumVal(6.0), "fold + call")
 }
+
+///|
+test "legacy dialect keeps JS type names and UTF-16 length" {
+  // The deliberate other half of the dialect split documented in
+  // typed_builtin_test.mbt: the same source means different things.
+  expect_v("type(5.0)", @ast.StrVal("number"), "legacy float name")
+  expect_v("len(\"\u{1F44D}\")", @ast.IntVal(2L), "legacy UTF-16 length")
+  expect_v("len(\"\u{4EAC}\u{5317}\")", @ast.IntVal(2L), "BMP unchanged")
+  // Astral literals used to be cut mid-surrogate: the lexer stripped the
+  // quotes using the code-point count but sliced UTF-16 units, so
+  // `"a👍b"` decoded to `a` plus a lone surrogate and lost the `b`.
+  expect_v("\"a\u{1F44D}b\"", @ast.StrVal("a\u{1F44D}b"), "astral round-trip")
+  expect_v("len(\"a\u{1F44D}b\")", @ast.IntVal(4L), "astral JS length")
+}

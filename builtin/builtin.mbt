@@ -596,16 +596,47 @@ fn conversion_functions() -> Array[(String, @evaluator.FnA)] {
       "type",
       fn(args) {
         @ast.StrVal(
-          // expr parity (4.4.3): typed integers report "int". Floats
-          // report "number" on the legacy path (locked by legacy
-          // tests) where expr would say "float" — documented
-          // divergence until the strict-engine split (4.4.5).
+          // Legacy dialect: floats report "number" (JS name), locked by
+          // the legacy suites. The standard dialect lowers `type` to
+          // `expr.type`, which reports expr's "float".
           match arg(args, 0, "type") {
             @ast.BoolVal(_) => "bool"
             @ast.NumVal(_) => "number"
             @ast.IntVal(_) => "int"
             @ast.StrVal(_) => "string"
             // expr reports "array" for []byte too
+            @ast.BytesVal(_) => "array"
+            @ast.NullVal => "nil"
+            @ast.UndefVal => "unknown"
+            @ast.ArrayVal(_) => "array"
+            @ast.ObjectVal(_) => "map"
+          },
+        )
+      },
+    ),
+    // --- standard-dialect spellings -------------------------------------
+    // Reached only through the expr front end's lowering (expr/lower.mbt),
+    // which rewrites the handful of builtins whose semantics differ
+    // between the dialects. The names are not lexable as identifiers, so a
+    // user cannot call them directly, and every error message inside still
+    // uses the user-visible name ("len", "type") so diagnostics are
+    // unchanged.
+    (
+      "expr.len",
+      // expr counts code points, not UTF-16 code units.
+      fn(args) { @ast.IntVal(value_len_runes(arg(args, 0, "len")).to_int64()) },
+    ),
+    (
+      "expr.type",
+      fn(args) {
+        @ast.StrVal(
+          match arg(args, 0, "type") {
+            @ast.BoolVal(_) => "bool"
+            // expr/lib.go Type(): float32/float64 -> "float"
+            @ast.NumVal(_) => "float"
+            @ast.IntVal(_) => "int"
+            @ast.StrVal(_) => "string"
+            // expr returns "array" for []byte as well
             @ast.BytesVal(_) => "array"
             @ast.NullVal => "nil"
             @ast.UndefVal => "unknown"

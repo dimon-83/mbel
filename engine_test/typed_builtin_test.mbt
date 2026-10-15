@@ -144,3 +144,20 @@ test "in checks map keys" {
   expect_expr_both("1 in {a: 1}", @ast.BoolVal(false), "int member miss")
   expect_expr_both("nil in {a: 1}", @ast.BoolVal(false), "nil member miss")
 }
+
+///|
+test "standard dialect uses expr's type names and code-point len" {
+  // expr/lib.go Type(): float32/float64 -> "float"; the legacy dialect
+  // keeps the JS name "number" (locked by the legacy test in
+  // builtin_test.mbt). The front end lowers `type`/`len` so both can be
+  // right at once.
+  expect_expr_both("type(5.0)", @ast.StrVal("float"), "type of float")
+  expect_expr_both("type(5)", @ast.StrVal("int"), "type of int")
+  expect_expr_both("type(\"a\")", @ast.StrVal("string"), "type of string")
+  // expr counts code points, not UTF-16 code units.
+  expect_expr_both("len('\u{1F44D}')", @ast.IntVal(1L), "one code point")
+  expect_expr_both(
+    "len('\u{1F44D}\u{1F3FB}')", @ast.IntVal(2L), "two code points",
+  )
+  expect_expr_both("len('\u{4EAC}\u{5317}')", @ast.IntVal(2L), "BMP unchanged")
+}

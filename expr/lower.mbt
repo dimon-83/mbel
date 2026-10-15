@@ -168,12 +168,28 @@ fn seq_items(n : ENode) -> Array[@ast.AstNode] raise LowerError {
 }
 
 ///|
+/// Rewrites the few builtins whose meaning differs between the dialects
+/// to their standard-dialect implementation. The legacy dialect keeps the
+/// JS behaviour (`len` in UTF-16 code units, `type(1.5)` == "number")
+/// while expr — and therefore this front end — counts code points and
+/// reports "float". Renaming happens after parsing and checking, so the
+/// checker still sees the user's spelling and error messages are
+/// unaffected.
+fn dialect_builtin(name : String) -> String {
+  match name {
+    "len" => "expr.len"
+    "type" => "expr.type"
+    _ => name
+  }
+}
+
+///|
 fn lower_call(
   callee : ENode,
   args : Array[ENode],
 ) -> @ast.AstNode raise LowerError {
   let fname = match callee {
-    EIdent(f, _, _) => f
+    EIdent(f, _, _) => dialect_builtin(f)
     EMember(_, m, _, _, _) =>
       raise LowerError::LowerErr(
         "method call '" +

@@ -8,6 +8,13 @@ All notable changes to mbel are documented here. The format follows
 
 ### Added
 
+- **Dialect-specific `len`/`type`** — the standard dialect now reports
+  expr's names and counting: `type(5.0)` is `"float"` (was `"number"`) and
+  `len('👍')` is `1` code point (was 2 UTF-16 units). The front end lowers
+  these two calls to a dialect-specific implementation, so the classic
+  dialect keeps the JS answers (`"number"`, UTF-16 units) that its suites
+  lock. This un-skips transcribed upstream rows 049/050: the want table is
+  now 153 transcribed + 14 documented skips.
 - **The checker type-checks array membership like expr.** Compile mode
   reports `cannot use int as type string in array` (with expr's
   `msg (L:C)` + source line + caret layout) for `1 in ["a"]`. Numbers stay
@@ -53,6 +60,13 @@ All notable changes to mbel are documented here. The format follows
 
 ### Fixed
 
+- **The classic lexer cut astral characters out of string literals.**
+  `unquote` stripped the quotes with `str[1:n - 1]`, where `n` counts code
+  points but string slicing indexes UTF-16 units — so `"a👍b"` decoded to
+  `a` plus a lone surrogate, losing everything after the character, and
+  `len("👍")` was `0`. The quotes are now stripped by code point; the
+  classic dialect reports `len("a👍b") == 4` and `len("👍") == 2`, matching
+  JS.
 - **Time and duration arithmetic produced meaningless numbers.**
   `now()` and `date()` returned milliseconds while `duration()` returned
   nanoseconds, and `+`/`-` simply added the raw values, so

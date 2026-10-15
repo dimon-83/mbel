@@ -545,8 +545,14 @@ fn unquote(str : String) -> String {
     return str
   }
   let quote = chars[0]
-  let inner = str[1:n - 1].to_owned()
-  let inner_chars = inner.to_array()
+  // Strip the quotes by code point: `str[1:n - 1]` would index UTF-16
+  // units while `n` counts code points, so a literal containing an astral
+  // character was cut mid-surrogate — `"a👍b"` decoded to `a` plus a lone
+  // surrogate and lost the `b`.
+  let inner_chars : Array[Char] = []
+  for k in 1..<(n - 1) {
+    inner_chars.push(chars[k])
+  }
   let m = inner_chars.length()
   let buf = StringBuilder::new()
   let mut i = 0

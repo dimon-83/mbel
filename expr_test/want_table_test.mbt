@@ -16,11 +16,9 @@
 // normalized to canonical JSON and compared through the same canon
 // serializer the corpus driver uses, on BOTH engines per row.
 //
-// Skipped rows (16/167), each with its documented reason:
+// Skipped rows (14/167), each with its documented reason:
 //   row 042: Go method call (reflection cut)
 //   row 043: Go method call (reflection cut)
-//   row 049: len counts UTF-16 units vs expr rune count (documented divergence)
-//   row 050: len counts UTF-16 units vs expr rune count (documented divergence)
 //   row 066: time arithmetic (stage 4.5)
 //   row 094: time arithmetic (stage 4.5)
 //   row 095: time arithmetic (stage 4.5)
@@ -225,6 +223,10 @@ let want_rows : Array[(String, String, String)] = [
   ("r046", "len([\"hello\", \"world\"])", "2"),
   ("r047", "len(\"hello, world\")", "12"),
   ("r048", "len('北京')", "2"),
+  // expr counts code points: 👍🏻 is two, 👍 is one. The legacy dialect
+  // keeps JS UTF-16 code units — a documented dialect split.
+  ("r049", "len('👍🏻')", "2"),
+  ("r050", "len('👍')", "1"),
   ("r051", "len(ArrayOfInt)", "5"),
   ("r052", "len({a: 1, b: 2, c: 2})", "3"),
   ("r053", "max([1, 2, 3])", "3"),
