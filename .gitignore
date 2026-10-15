@@ -9,3 +9,6 @@ target
 # Generated repo-local diagrams — not part of the published module.
 architecture.html
 architecture-dialect-engine.html
+
+# Coverage-bisect report emitted by the coverage tooling.
+bisect.coverage

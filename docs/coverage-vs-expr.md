@@ -90,7 +90,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 求值深度 + 步数预算(跨 filter 共享) | ✅ | budget_test, stability_test, budget_parity_test | 深度预算双引擎同语义:Vm 每条指令携带源 AST 深度(program.depths),仅当 max_depth 低于程序最大深度时逐指令检查(默认预算零开销);相对过滤器谓词按「每元素新求值器」重新计深,与 Walk 一致;expr 前端 parse 应用 max_nodes(节点数,迭代统计)与递归/深度护栏(嵌套约 500-1000 层) |
 | env 白名单 / Strict | 🟡 严格模式 | `eval_expr_checked`/`compile_expr_checked_limited`(4.4.4 checker 阶段1):已知类型的运算符规则按 expr Compile 文案报错(`invalid operation: + (mismatched types int and string)`、`non-bool expression (type int) used as condition`、`in` 的成员类型检查);`eval_expr` 保持 Eval 模式(动态语义,与 expr 的 Eval/Compile 双模式对齐);env 白名单=阶段 2。**注:expr 不要求数组字面量元素同质**——异质字面量推断为 `array`/`UnknownN` 而非报错,mbel 与此一致 |
 | 常量折叠 | ✅ | builtin_test fold 套件 |
-| 12-pass optimizer 其余 | ❌ **不照搬(已实测)** | 仅常量折叠已交付。expr 的其余 pass 在 mbel 的契约下会改变可观测行为,实测反例:`len(filter(x,p))`→`count(x,p)` 会把错误文案从 `filter: first argument must be an array` 变成 `count: …`;`filter(x,p)[0]`→`find(x,p)` 未命中时 `undefined` vs `null` 不一致;`x in 1..3`→`x >= 1 && x <= 3` 在 `x=nil` 时把 `false` 变成 `invalid operation: nil >= int`;范围不物化的快路径会让 `x in 0..2000000` 不再触发 `memory budget exceeded`(安全测试断言该报错)。每个 pass 都需单独的语义/文案等价性证明 + 双引擎 parity,属独立立项;不做"看起来优化了"的移植 |
+| 12-pass optimizer 其余 | ❌ **不照搬(已实测)** | 仅常量折叠已交付。expr 的其余 pass 在 mbel 的契约下会改变可观测行为,实测反例:`len(filter(x,p))`→`count(x,p)` 会把错误文案从 `filter: first argument must be an array` 变成 `count: …`;`filter(x,p)[0]`→`find(x,p)` 未命中时 `undefined` vs `null` 不一致;`x in 1..3`→`x >= 1 && x <= 3` 在 `x=nil` 时把 `false` 变成 `invalid operation: nil >= int`;范围不物化的快路径会让 `x in 0..2000000` 不再触发 `memory budget exceeded`(安全测试断言该报错)。每个 pass 都需单独的语义/文案等价性证明 + 双引擎 parity,属独立立项;不做"看起来优化了"的移植。**行为抽样 ✅**:`TestOptimize` 全部 43 行在无 pass 下结果与 expr(带 pass)完全一致(`expr_test/optimizer_sample_test.mbt`) |
 | 字节码 VM | ✅ v2(指令化) | 26 opcode(0-25)平行 Int 数组 + 编译期预解析 + 栈预分配 + 原生过滤器/聚合循环帧 + 词法作用域(局部变量槽/切片/env 指令,4.4.2);`Engine::set_engine(Walk \| Vm)`,默认 Walk;207 corpus + 手写用例 Walk vs Vm **真绿**(值+错误消息严格相等,NaN-aware;f37f10d 恢复端到端分发后首次为真,此前"假绿"见 §7 勘误);实测:迭代型负载 Vm 领先(过滤器 native −69% / wasm −39%,聚合 native −30~41%),微负载 Vm 落后(常量求值 +38~118%)——同批数据见 §7 |
 | 编译错误 行:列\|…^ | ❌ | 4.4.1 位置信息 |
 | 差分验证 harness | ✅ | tools/(expr 侧待 go 差分) |
@@ -222,14 +222,17 @@ pc 语义(相对括号过滤器栈下溢)。修复后 207 条 corpus + 全节点
    API,不适用于 mbel 值语义运行时——审计表见 gap-analysis §5.2;④ checker 定位错误 ✅(ENode 位置化 + expr FileError 布局;注:unknown
    name 走引擎级 legacy AST 白名单,暂无位置——如需可把白名单迁入 checker
    并传 ctx 键,列为后续项);⑤ 4.4 gate 验收(§6.3):expr 官方 TestExpr 167
-   行 want 表全量转写 + parser/checker/optimizer 表抽样 ≥60%(未开始)。各项状态以本节标记与提交记录为准,发布时 CHANGELOG 同步。
+   行 want 表全量转写 + parser/checker/optimizer 表抽样 ≥60%(均已达成:
+want 153/167、parser 96/105、checker 107/112、optimizer 43/43)。各项状态以本节标记与提交记录为准,发布时 CHANGELOG 同步。
 
 ### 6.3 覆盖率目标
 4.4 gate(收尾清单 ⑤,2026-09-07 状态):TestExpr 167 行全量处置 ✅
 (153 转写 + 14 文档化跳过,双引擎;正则修正后 033/034、`in` 映射表成员修正后 026、方言拆分后 len 的 049/050 均已转写);checker TestCheck 107/112 ✅;
 parser TestParse ✅:上游 105 条输入已全部转写为 AST 形状对照
 (96 匹配 + 9 条带原因跳过,`expr_test/parse_want_test.mbt`;上游真解析器
-产出期望值,非手写)。**optimizer 表抽样仍未做**——gate 达标前需补。4.5 后 builtin_test 904 行对齐。
+产出期望值,非手写)。optimizer 表抽样 ✅:`TestOptimize` 全部 43 行
+**行为等价**抽样(43/43,双引擎;`expr_test/optimizer_sample_test.mbt`)——
+不移植 pass,但结果必须一致,这正是该项该验的性质。4.5 后 builtin_test 904 行对齐。
 
 > 转写来源与许可:两张转写表取自 expr-lang/expr 的
 > commit `4b31df3`(即 tag v1.17.8 + 8;v1.17.8 tag 本身的

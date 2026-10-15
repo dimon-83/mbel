@@ -60,6 +60,18 @@ TypeError for `arr[.f == x].prop` when the filtered array is empty
 (its README example `assoc[.first == "Lana"].last` without a context
 crashes there); mbel returns undefined.
 
+## Optimizer sample (behavioural)
+
+- `tools/gen_optimizer_sample.py` — reads the reference checkout's
+  `optimizer/optimizer_test.go` `TestOptimize` table (43 inputs, each with
+  the value expr produces *with* its optimizer passes) and freezes it into
+  `expr_test/optimizer_sample_data_test.mbt`. Honour `EXPR_SRC` to point at
+  the checkout; the default is the sibling `../expr`.
+- `expr_test/optimizer_sample_test.mbt` — evaluates the same inputs on both
+  engines with env `{a: 1, b: 2, c: 3}` and asserts the same results. mbel
+  has constant folding only, so this pins the property that has to hold
+  without the passes: identical values. 43/43.
+
 ## Parser differential corpus (`TestParse`)
 
 - `tools/parse_corpus.txt` — the 105 inputs of upstream
