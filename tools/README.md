@@ -111,6 +111,9 @@ crashes there); mbel returns undefined.
 Unlike the regex corpus this compares *tree shape*, not values, so it also
 pins the node names mbel's own tests rely on.
 
+The user-facing description of the regex surface (supported syntax, cuts,
+divergences) is docs/en/regex.md and docs/zh/regex.md.
+
 ## Regex differential corpus (`matches`)
 
 `tools/regex_corpus.txt` — 106 `pattern<TAB>subject` cases for the

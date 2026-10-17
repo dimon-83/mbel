@@ -116,7 +116,8 @@ Other syntax:
   (`1 in ["a"]` → `cannot use int as type string in array`,
   `1 in {a: 1}` → `cannot use int as type string in map key`).
   `contains`/`startsWith`/`endsWith` are
-  operators, nil-safe (nil operand → false).
+  operators, nil-safe (nil operand → false). The full verified surface,
+  the cut list and the divergences are in [Regular expressions](regex.md).
 - `let x = expr; rest` and `a; b; c` sequences — `let` at precedence-0
   sites (top level, parens, arguments, if-branches); lexical scope,
   shadowing allowed (Eval mode); result of a sequence is its last

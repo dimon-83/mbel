@@ -4,7 +4,7 @@ mbel 是一个 MoonBit 表达式引擎:两种表达式方言——类型化语�
 
 术语说明:**标准方言**指现代表达式语法(规格见[语言定义](language-definition.md)),其语义以参考语言基线(expr-lang v1.17.8)为准——工程对齐细节见下方开发文档。**经典方言(legacy)**是 v0.2 起锁定的兼容语法,只修不增。凡 mbel 不具备的能力均如实标注(裁剪/未实现/最接近的等价物)——不写任何愿景性内容。
 
-页面:[快速上手](getting-started.md) · [环境与配置](environment.md) · [自定义函数](functions.md) · [Visitor](visitor.md) · [Patch](patch.md) · [语言定义](language-definition.md)。
+页面:[快速上手](getting-started.md) · [环境与配置](environment.md) · [自定义函数](functions.md) · [正则表达式](regex.md) · [Visitor](visitor.md) · [Patch](patch.md) · [语言定义](language-definition.md)。
 
 相关开发文档:
 

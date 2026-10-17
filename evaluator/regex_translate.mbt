@@ -161,6 +161,8 @@ fn re_translate_escape(
       return i
     }
     'E' => raise EvalError::EvalErr("invalid regex: \\E without a matching \\Q")
+    'A' => out.write_char('^')
+    'z' => out.write_char('$')
     'x' => return re_translate_hex_escape(src, start, out)
     _ => {
       out.write_char('\\')
@@ -369,6 +371,20 @@ fn re_translate_class_escape(
         "\\Q…\\E inside a character class",
         "escape the literal characters instead",
       )
+    // RE2 rejects these inside a class (they are anchors, word boundaries
+    // or backreferences there, none of which is a class member); core would
+    // otherwise read them as the literal character and silently change the
+    // pattern's meaning.
+    'A' | 'z' | 'Z' | 'b' | 'B' | 'G' =>
+      raise EvalError::EvalErr(
+        "invalid regex: \\" +
+        c.to_string() +
+        " is not valid inside a character class",
+      )
+    '1'..='9' =>
+      raise EvalError::EvalErr(
+        "invalid regex: backreferences are not supported",
+      )
     // Core accepts \uXXXX inside a class too (including as a range end).
     'x' => return re_translate_hex_escape(src, start, out)
     _ => {
@@ -425,7 +441,8 @@ fn re_translate_class(
       continue
     }
     if c == '[' && i + 1 < n && src[i + 1] == ':' {
-      // POSIX class `[:name:]` — core accepts it verbatim.
+      // POSIX class `[:name:]`. Core implements ten of the fourteen; the
+      // rest are expanded here to their RE2 (ASCII) definitions.
       let mut j = i + 1
       while j < n && !(src[j] == ':' && j + 1 < n && src[j + 1] == ']') {
         j = j + 1
@@ -433,8 +450,29 @@ fn re_translate_class(
       if j >= n {
         raise EvalError::EvalErr("invalid regex: unterminated POSIX class")
       }
-      for k in i..<(j + 2) {
-        out.write_char(src[k])
+      let name = {
+        let buf = StringBuilder::new()
+        for k in (i + 2)..<j {
+          buf.write_char(src[k])
+        }
+        buf.to_string()
+      }
+      let expanded = match name {
+        // RE2/regexp/syntax ASCII definitions:
+        //   cntrl [\x00-\x1F\x7F], graph [!-~], print [ -~],
+        //   punct [!-/:-@\[-`{-~]
+        "cntrl" => "\\u{0}-\\u{1F}\\u{7F}"
+        "graph" => "\\u{21}-\\u{7E}"
+        "print" => "\\u{20}-\\u{7E}"
+        "punct" => "\\u{21}-\\u{2F}\\u{3A}-\\u{40}\\u{5B}-\\u{60}\\u{7B}-\\u{7E}"
+        _ => ""
+      }
+      if expanded != "" {
+        out.write_string(expanded)
+      } else {
+        for k in i..<(j + 2) {
+          out.write_char(src[k])
+        }
       }
       i = j + 2
       continue

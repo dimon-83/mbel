@@ -138,8 +138,10 @@ AGENTS.md "Playground (browser WASM)".
 User documentation, in English and Chinese:
 
 - English: docs/en (getting-started, environment & configuration,
-  custom functions, visitor, patch, language definition)
-- 中文: docs/zh(快速上手、环境与配置、自定义函数、visitor、patch、语言定义)
+  custom functions, regular expressions, visitor, patch, language
+  definition)
+- 中文: docs/zh(快速上手、环境与配置、自定义函数、正则表达式、visitor、
+  patch、语言定义)
 
 Internal/dev docs (parity contract, coverage matrix, gap analysis,
 perf report) live in docs/.

@@ -16,8 +16,9 @@ implemented / closest equivalent) — nothing here is aspirational.
 
 Pages: [Getting started](getting-started.md) ·
 [Environment & configuration](environment.md) ·
-[Custom functions](functions.md) · [Visitor](visitor.md) ·
-[Patch](patch.md) · [Language definition](language-definition.md).
+[Custom functions](functions.md) · [Regular expressions](regex.md) ·
+[Visitor](visitor.md) · [Patch](patch.md) ·
+[Language definition](language-definition.md).
 
 Related developer documentation:
 
