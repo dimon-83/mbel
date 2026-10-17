@@ -42,7 +42,21 @@ $ moon run cmd/main -- "sum(1..100)"
 
 $ moon run cmd/main -- "reduce(nums, #acc + #, 100)" '{"nums": [1, 2, 3, 4, 5]}'
 115
+
+$ moon run cmd/main -- "\"Ünïcode\" matches \"^\\p{L}+$\""
+true
+
+$ moon run cmd/main -- "date(\"2024-01-01\") + duration(\"24h\") == date(\"2024-01-02\")"
+true
+
+$ moon run cmd/main -- "date(\"2024-01-01T00:00:00+08:00\")"
+1704038400000000000
+
+$ moon run cmd/main -- "\"foo\" in {foo: 1}"
+true
 ```
+
+`matches` 支持完整的 RE2 表面,包括 Unicode 字符类(`\p{L}`、`\p{Greek}`、`\p{Any}`、`\P{…}`);`date()` 接受 Go 的参考布局,并应用字符串自带的数字偏移;`in` 对映射表判断键。
 
 CLI 默认解析经典方言(legacy);注册了演示 transform `dbl`、`first`、`concatWith`,因此管道可用:
 

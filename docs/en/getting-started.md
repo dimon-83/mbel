@@ -47,7 +47,24 @@ $ moon run cmd/main -- "sum(1..100)"
 
 $ moon run cmd/main -- "reduce(nums, #acc + #, 100)" '{"nums": [1, 2, 3, 4, 5]}'
 115
+
+$ moon run cmd/main -- "\"Ünïcode\" matches \"^\\p{L}+$\""
+true
+
+$ moon run cmd/main -- "date(\"2024-01-01\") + duration(\"24h\") == date(\"2024-01-02\")"
+true
+
+$ moon run cmd/main -- "date(\"2024-01-01T00:00:00+08:00\")"
+1704038400000000000
+
+$ moon run cmd/main -- "\"foo\" in {foo: 1}"
+true
 ```
+
+`matches` understands the RE2 surface, including Unicode classes
+(`\p{L}`, `\p{Greek}`, `\p{Any}`, `\P{…}`); `date()` takes Go
+reference layouts and applies a numeric offset carried by the string;
+`in` on a map tests keys.
 
 The CLI parses the classic dialect (legacy) by default; the demo transforms
 `dbl`, `first` and `concatWith` are registered, so pipes work:

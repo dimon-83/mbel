@@ -222,11 +222,33 @@ lists.
 - Time (4, minimal): now duration date timezone
 
 `now()`, `date()` and `duration()` all evaluate to **int64 nanoseconds**
-(`now()`/`date()`: nanoseconds since the Unix epoch, UTC; `duration()`:
-a nanosecond count — the same unit as Go's `UnixNano` and `Duration`).
+(`now()`/`date()`: nanoseconds since the Unix epoch; `duration()`: a
+nanosecond count — the same unit as Go's `UnixNano` and `Duration`).
 One unit throughout is what makes `date("2024-01-01") + duration("24h")`
-exact int64 addition; timezone support is UTC-only and `date()` accepts
-ISO-8601 layouts only (documented cut).
+exact int64 addition.
+
+`date()` follows expr: it takes Go reference layouts, not a strftime
+pattern. With no layout it scans expr's seven defaults (`2006-01-02`,
+`15:04:05`, `2006-01-02 15:04:05`, RFC3339, RFC822, RFC850, RFC1123); a
+caller may pass its own layout. A numeric offset carried by the string is
+applied, which is where expr supports fixed offsets:
+
+```text
+date("2024-01-01T00:00:00+08:00")      // 1704038400000000000
+date("2024-01-01T00:00:00.5+08:00")    // 1704038400500000000
+date("01 Jan 24 15:04 UTC")            // 1704121440000000000   (RFC822)
+date("01/02/2024", "02/01/2006")       // 1706745600000000000   (day/month/year)
+```
+
+expr's call forms are accepted: a location may come first
+(`date(timezone("UTC"), "2024-01-01")`) or last, and `now(tz)` is the same
+instant in a location (a nanosecond count is location-free). Two cuts
+remain, and both fail the same way Go does rather than differing
+silently: an IANA zone name needs the zone database, and `Local` needs
+host FFI. `timezone("+08:00")` is an error in Go too
+(`time.LoadLocation` rejects it), so offsets belong in the date string.
+Relative to Go's `time.Parse`, a time-only layout is rejected instead of
+reproducing its int64 overflow.
 - Predicate aggregates (15): all none any one filter map count sum find
   findIndex findLast findLastIndex groupBy sortBy reduce
 
@@ -238,6 +260,25 @@ integer-preserving `abs`/`min`/`max`/`sum` on integer inputs.
 is fixed by name; the predicate argument is recognized at parse time
 (`#`, `#index`, `#acc`). If you need a new aggregate-like function, register
 a plain function and pass a pre-computed array, or open an issue.
+
+## Dialect-sensitive builtins
+
+Two builtins answer differently per dialect, because the two value models
+differ. Both answers are correct for their model, and both are locked by
+tests:
+
+| Expression | Standard dialect (`eval_expr`) | Classic dialect (`eval`) |
+|---|---|---|
+| `len('👍')` | `1` — expr counts code points | `2` — JS counts UTF-16 code units |
+| `len("a👍b")` | `3` | `4` |
+| `type(5.0)` | `"float"` (expr's name) | `"number"` (JS's name) |
+| `type(5)` | `"int"` | `"number"` |
+
+The standard dialect reaches its column through a lowering step in the
+expr front end, so the classic dialect keeps the answers its corpus locks.
+`matches` is not dialect-sensitive: an RE2 pattern means the same thing in
+both, including Unicode classes (`\p{L}`, `\p{Greek}`, `\p{Any}`,
+`\P{…}`) — see [Language definition](language-definition.md).
 
 ## Calling convention notes
 

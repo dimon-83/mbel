@@ -96,18 +96,38 @@ Other syntax:
   so RE2 class shorthands (`\d \D \w \W \s \S`), `.` (any character
   except newline; `(?s)` for dot-all), character classes including a
   leading or trailing `-`, POSIX classes, inline flags (`(?i)`, `(?i:…)`,
-  `(?s)`) and named groups all behave as in RE2 — verified case-by-case
-  against Go's `regexp` (see tools/README.md). A malformed pattern, or a
-  construct with no core equivalent, raises `invalid regex: …` naming the
-  construct. Documented cuts: `(?m)`, `\D`/`\W`/`\S`
-  inside a character class, `(?U)`, and
-  turning `(?i)` back off inside an active `(?i)` scope.
+  `(?s)`), named groups in both Go spellings, hex escapes (`\xHH`,
+  `\x{H…}`), quoted literals (`\Q…\E`), and **Unicode classes**
+  (`\p{L}`, `\p{Lu}`, `\p{Greek}`, `\p{Han}`, `\p{Any}`, the
+  one-letter `\pL` form and the `\P{…}` negation, also inside a
+  character class) all behave as in RE2 — verified case-by-case against
+  Go's `regexp` (see tools/README.md); the Unicode ranges come from Go's
+  own `unicode` tables. A malformed pattern, or a construct with no core
+  equivalent, raises `invalid regex: …` naming the construct. Documented
+  cuts: `(?m)`, `\D`/`\W`/`\S` inside a character class, in-class
+  `\P{…}`, `(?U)`, and turning `(?i)` back off inside an active `(?i)`
+  scope.
+- `in` membership: on an **array** it compares elements with the same
+  equality as `==` (so `1 in [1.0]` is true, and
+  `9007199254740993 in [9007199254740992]` is false); on a **map or
+  object** it tests keys (`"foo" in {foo: 1}`); on a string it is
+  substring matching in the classic dialect (expr rejects string `in`, a
+  documented divergence). Compile mode type-checks the member like expr
+  (`1 in ["a"]` → `cannot use int as type string in array`,
+  `1 in {a: 1}` → `cannot use int as type string in map key`).
   `contains`/`startsWith`/`endsWith` are
   operators, nil-safe (nil operand → false).
 - `let x = expr; rest` and `a; b; c` sequences — `let` at precedence-0
   sites (top level, parens, arguments, if-branches); lexical scope,
   shadowing allowed (Eval mode); result of a sequence is its last
   expression; sequence/predicate code can read outer lets.
+- Time values: `now()`, `date()` and `duration()` all evaluate to int64
+  nanoseconds (Go's `UnixNano`/`Duration` unit), so time arithmetic is
+  exact int64 addition: `date("2024-01-01") + duration("24h") ==
+  date("2024-01-02")`. `date()` takes Go reference layouts (expr's seven
+  defaults, or one you pass) and applies a numeric offset when the string
+  carries one (`date("2024-01-01T00:00:00+08:00")`); `timezone()` resolves
+  UTC only, because the IANA database is a documented cut.
 - `$env` — the whole context as a value (`len($env)`, `keys($env)`, member
   access all work; cannot be declared).
 

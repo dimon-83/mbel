@@ -145,12 +145,36 @@ playground「🧩 自定义函数」抽屉(控件行按钮弹出)加载 UTF-8 JS
 - 位运算(8):bitand bitor bitxor bitnand bitnot bitshl bitshr bitushr
 - 时间(4,最小集):now duration date timezone
 
-`now()`、`date()`、`duration()` 的值统一为 **int64 纳秒**(`now()`/`date()` 为 Unix 纪元起的纳秒数,UTC;`duration()` 为纳秒计数——与 Go 的 `UnixNano`/`Duration` 同单位)。统一单位是 `date("2024-01-01") + duration("24h")` 能成为精确 int64 加法的前提;时区仅 UTC,`date()` 只接受 ISO-8601 系列写法(已文档化裁剪)。
+`now()`、`date()`、`duration()` 的值统一为 **int64 纳秒**(`now()`/`date()` 为 Unix 纪元起的纳秒数;`duration()` 为纳秒计数——与 Go 的 `UnixNano`/`Duration` 同单位)。统一单位是 `date("2024-01-01") + duration("24h")` 能成为精确 int64 加法的前提。
+
+`date()` 与 expr 一致:接受的是 Go 的**参考布局**(layout),不是 strftime 模式。不传 layout 时按 expr 的 7 种默认顺序尝试(`2006-01-02`、`15:04:05`、`2006-01-02 15:04:05`、RFC3339、RFC822、RFC850、RFC1123),也可以自己传 layout。字符串自带的数字偏移会被应用——expr 的固定偏移就落在这里:
+
+```text
+date("2024-01-01T00:00:00+08:00")      // 1704038400000000000
+date("2024-01-01T00:00:00.5+08:00")    // 1704038400500000000
+date("01 Jan 24 15:04 UTC")            // 1704121440000000000   (RFC822)
+date("01/02/2024", "02/01/2006")       // 1706745600000000000   (日/月/年)
+```
+
+expr 的调用形态都支持:location 可在**前**(`date(timezone("UTC"), "2024-01-01")`)或在后,`now(tz)` 表示同一时刻用某时区表达(纳秒计数本身无时区)。仍有两项裁剪,且都**与 Go 一样报错**而非静默偏差:IANA 时区名需要时区数据库,`Local` 需要宿主 FFI。`timezone("+08:00")` 在 Go 里本来就是错误(`time.LoadLocation` 拒绝它),所以偏移属于日期串。相对 Go 的 `time.Parse`,仅时刻的 layout 会被拒绝,而不是复现它的 int64 溢出。
 - 谓词聚合(15):all none any one filter map count sum find findIndex findLast findLastIndex groupBy sortBy reduce
 
 若干内置按 expr 语义返回类型化整数:`len`、`count`、`indexOf`、`lastIndexOf`、`findIndex`、`findLastIndex`、`int()`,以及整数输入保持整数的 `abs`/`min`/`max`/`sum`。
 
 **聚合是语言层能力,不可用户注册**:聚合集合按名字固定;谓词参数在解析期识别(`#`、`#index`、`#acc`)。若需要新的聚合式函数,注册普通函数并传入预计算数组,或提 issue。
+
+## 方言敏感的内置
+
+有两个内置的答案按方言不同,因为两套值模型不同。两个答案对各自的模型都正确,且都有测试锁定:
+
+| 表达式 | 标准方言(`eval_expr`) | 经典方言(`eval`) |
+|---|---|---|
+| `len('👍')` | `1` — expr 数码点 | `2` — JS 数 UTF-16 单元 |
+| `len("a👍b")` | `3` | `4` |
+| `type(5.0)` | `"float"`(expr 名称) | `"number"`(JS 名称) |
+| `type(5)` | `"int"` | `"number"` |
+
+标准方言通过 expr 前端的降层步骤得到左列,经典方言保留其语料锁定的答案。`matches` **不**随方言变化:RE2 模式在两边含义相同,包括 Unicode 字符类(`\p{L}`、`\p{Greek}`、`\p{Any}`、`\P{…}`)——见[语言定义](language-definition.md)。
 
 ## 调用约定注意事项
 

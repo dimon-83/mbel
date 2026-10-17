@@ -279,6 +279,19 @@ All three entries run on either engine (Walk or Vm) with identical
 results, and all honor `set_limits` budgets (the standard dialect
 applies `max_nodes` at parse time).
 
+Two builtins deliberately differ between the dialects, because both
+answers are right for their model:
+
+| Expression | Standard dialect (`eval_expr`) | Classic dialect (`eval`) |
+|---|---|---|
+| `len('👍')` | `1` — code points, as expr counts | `2` — UTF-16 code units, as JS counts |
+| `len("a👍b")` | `3` | `4` |
+| `type(5.0)` | `"float"` — expr's name | `"number"` — JS's name |
+| `type(5)` | `"int"` | `"number"` (the classic lexer produces only doubles) |
+
+The standard dialect reaches the first column through a lowering step, so
+the classic dialect keeps the JS answers its corpus locks.
+
 ## Current capabilities (classic dialect)
 
 - **Literals**: numbers, single/double-quoted strings with escapes,
@@ -332,7 +345,26 @@ $ moon run cmd/main -- "missing ?? 'fallback'"
 
 $ moon run cmd/main -- "sort([3,1,2]) | first"
 1
+
+$ moon run cmd/main -- "\"Ünïcode\" matches \"^\\p{L}+$\""
+true
+
+$ moon run cmd/main -- "\"abc123\" matches \"\\p{L}+\\p{Nd}+\""
+true
+
+$ moon run cmd/main -- "date(\"2024-01-01T00:00:00+08:00\")"
+1704038400000000000
+
+$ moon run cmd/main -- "date(\"2024-01-01\") + duration(\"24h\") == date(\"2024-01-02\")"
+true
+
+$ moon run cmd/main -- "\"foo\" in {foo: 1}"
+true
 ```
+
+The examples above run through the CLI, which uses the **classic
+dialect**; `in` on a map matches keys, and `matches` accepts the full
+RE2 surface, including Unicode classes.
 
 ## Roadmap
 
