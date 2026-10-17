@@ -219,7 +219,7 @@ lists.
 - Conversion (9): int float type toJSON fromJSON toBase64 fromBase64
   toPairs fromPairs
 - Bitwise (8): bitand bitor bitxor bitnand bitnot bitshl bitshr bitushr
-- Time (4, minimal): now duration date timezone
+- Time (4): now duration date timezone
 
 `now()`, `date()` and `duration()` all evaluate to **int64 nanoseconds**
 (`now()`/`date()`: nanoseconds since the Unix epoch; `duration()`: a
