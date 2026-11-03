@@ -96,6 +96,9 @@ Python + wasmtime, Rust + wasmtime).
   the manifest); a budget hit returns `RUNTIME_BUDGET`, it does not trap.
 - Hosts that take expressions from untrusted users should use
   `eval_with_limits` (or a session + `configure_session`) to lower the
-  budgets below the defaults; raising requires `allowRaise: true`.
+  budgets below the defaults; raising requires `allowRaise: true`. The
+  lowering rule compares against the compiled **default**, not the
+  session's current value — if untrusted input can drive
+  `configure_session`, enforce monotonicity on the host side.
 - Sessions are capped (`sessionLimit`, default 16). Release handles when
   done; leaked handles surface as `HANDLE_LIMIT` on the next create.

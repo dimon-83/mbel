@@ -116,3 +116,11 @@ text.
 `allowRaise` a request may only lower a budget relative to the compiled
 default; `configure_session` applies the same rule to a live session.
 Exhausting a budget yields `$code: "RUNTIME_BUDGET"`.
+
+Note the baseline: the "lowering only" rule compares against the
+**compiled default**, not the session's **current** value — a request of
+100 000 after a configure to 100 is accepted while it stays under the
+default. Tightening is therefore not monotonic; deliberate re-raising
+inside the default needs no `allowRaise`. If a host lets untrusted input
+drive `configure_session`, it must enforce monotonicity itself (or the
+engine baseline must change, see proposal 0003, open question 6).

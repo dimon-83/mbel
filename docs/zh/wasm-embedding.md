@@ -90,6 +90,8 @@ Rust + wasmtime）。
   manifest）；预算耗尽返回 `RUNTIME_BUDGET`，不会 trap。
 - 面向不可信输入的宿主应使用 `eval_with_limits`（或 session +
   `configure_session`）把预算降到默认值以下；上调必须显式传
-  `allowRaise: true`。
+  `allowRaise: true`。注意"只许下调"的比较基准是编译**默认值**，不是
+  session 的当前值——若不可信输入能触达 `configure_session`，宿主侧需
+  自行保证单调收紧。
 - session 数量有上限（`sessionLimit`，默认 16）。用完请释放句柄；
   泄漏的句柄会让下一次创建返回 `HANDLE_LIMIT`。

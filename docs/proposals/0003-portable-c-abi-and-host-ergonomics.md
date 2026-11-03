@@ -394,6 +394,20 @@ while the session is an optimisation for hosts that already work.
 5. **`abi_layout()` vs a compile-time constant.** A function can be checked
    mechanically; a constant in the docs is simpler to read. Both is also fine,
    just not free.
+6. **Budget-lowering baseline.** `check_lowered` compares a request against
+   the *compiled default*, not the *current* value: after lowering
+   `maxSteps` to 100, a later request of 100 000 (still under the default)
+   is accepted. This is the landed semantics — each configure call is an
+   independent request, and legal multi-turn tuning needs no `allowRaise`.
+   The alternative ("monotonic lower-only", compare against the current
+   value) makes the budget a high-water mark: any tightening is
+   irreversible without `allowRaise`, an untrusted caller can never undo a
+   host's tightening, and "current budget = historical minimum" makes
+   audit reasoning single-point. Cost: a mis-tightened session must be
+   re-raised via `allowRaise` or rebuilt. Switch the baseline the day an
+   untrusted party can reach `configure_session` / embedded limits config
+   (e.g. if rules files are ever allowed to carry limits); until then the
+   independent-request semantics is deliberate.
 
 ## Appendix A — probe evidence (2026-11-04, pinned toolchain 0.10.19+97801ee1b)
 
