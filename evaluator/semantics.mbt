@@ -209,7 +209,7 @@ pub fn to_string(v : @ast.Value) -> String {
 /// cap render as "…" instead of recursing off the host stack (legacy
 /// JS itself RangeErrors on deep arrays; mbel truncates). Depth is
 /// bounded by max_value_nesting (1024), far below every host stack.
-fn to_string_depth(v : @ast.Value, depth : Int) -> String {
+fn to_string_depth(v : @ast.Value, depth : Int32) -> String {
   match v {
     @ast.BoolVal(b) => if b { "true" } else { "false" }
     @ast.NumVal(d) => d.to_string()
@@ -246,7 +246,7 @@ fn arr_to_string(xs : Array[@ast.Value]) -> String {
 }
 
 ///|
-fn arr_to_string_depth(xs : Array[@ast.Value], depth : Int) -> String {
+fn arr_to_string_depth(xs : Array[@ast.Value], depth : Int32) -> String {
   if depth > 1024 {
     return "…"
   }
@@ -343,7 +343,7 @@ fn str_like(v : @ast.Value) -> Bool {
 ///|
 /// Lexicographic comparison by code unit (JS String relational
 /// semantics). Returns negative/zero/positive.
-pub fn lex_compare(x : String, y : String) -> Int {
+pub fn lex_compare(x : String, y : String) -> Int32 {
   let a = x.to_array()
   let b = y.to_array()
   let n = if a.length() < b.length() { a.length() } else { b.length() }
@@ -413,7 +413,7 @@ fn two_sum(x : Double, y : Double) -> (Double, Double) {
 
 ///|
 /// Finds the first index of `sub` in `s`, or -1 (String.indexOf).
-pub fn index_of(s : String, sub : String) -> Int {
+pub fn index_of(s : String, sub : String) -> Int32 {
   if sub == "" {
     return 0
   }

@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "dexter/mbel/parser_test"
+package "dimon-83/mbel/parser_test"
 
 // Values
 
@@ -10,4 +10,3 @@ package "dexter/mbel/parser_test"
 // Type aliases
 
 // Traits
-

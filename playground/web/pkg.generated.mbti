@@ -2,21 +2,27 @@
 package "dimon-83/mbel/playground/web"
 
 // Values
+pub fn describe_abi() -> String
+
+pub fn describe_functions(String) -> String
+
 pub fn disassemble(String, String) -> String
 
 pub fn dump_ast(String) -> String
 
-pub fn eval_checked(String, String) -> String
+pub fn eval_checked(String, String, String) -> String
 
-pub fn eval_expr(String, String) -> String
+pub fn eval_expr(String, String, String) -> String
 
-pub fn eval_jexl(String, String) -> String
+pub fn eval_jexl(String, String, String) -> String
+
+pub fn eval_with_functions(String, String, String, String, String) -> String
 
 // Errors
 
 // Types and methods
+type UserFnSpec
 
 // Type aliases
 
 // Traits
-

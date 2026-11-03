@@ -1,0 +1,155 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "dimon-83/mbel/evaluator"
+
+import {
+  "dimon-83/mbel/ast",
+  "moonbitlang/core/string",
+}
+
+// Values
+pub fn aggregate_call(String, Array[@ast.Value], Bool, Array[@ast.Value], (Int32, @ast.Value, @ast.Value) -> @ast.Value raise EvalError) -> @ast.Value raise EvalError
+
+pub fn clear_regex_cache(Grammar) -> Unit
+
+pub fn compare(String, @ast.Value, @ast.Value) -> Bool raise EvalError
+
+pub fn compile_program(@ast.AstNode, Grammar) -> Program raise EvalError
+
+pub fn compile_program_with_locals(@ast.AstNode, Grammar, Array[String]) -> Program raise EvalError
+
+pub fn constant_fold(@ast.AstNode) -> @ast.AstNode
+
+pub fn default_grammar() -> Grammar
+
+pub fn default_max_depth() -> Int32
+
+pub fn default_max_steps() -> Int32
+
+pub fn disassemble(Program) -> String
+
+pub fn has_int(@ast.Value) -> Bool
+
+pub fn index_of(String, String) -> Int32
+
+pub fn index_value(@ast.Value, @ast.Value) -> @ast.Value
+
+pub fn lex_compare(String, String) -> Int32
+
+pub fn loose_eq(@ast.Value, @ast.Value) -> Bool
+
+pub fn max_value_nesting() -> Int32
+
+pub fn nan() -> Double
+
+pub fn new_evaluator(Grammar, @ast.Value) -> Evaluator
+
+pub fn new_evaluator_limited(Grammar, @ast.Value, Int32, Int32) -> Evaluator
+
+pub fn new_relative_evaluator(Grammar, @ast.Value, @ast.Value) -> Evaluator
+
+pub fn parse_decimal(String) -> Double
+
+pub fn plus(@ast.Value, @ast.Value) -> @ast.Value raise EvalError
+
+pub fn regex_cache_capacity() -> Int32
+
+pub fn regex_failed_capacity() -> Int32
+
+pub fn remainder(Double, Double) -> Double
+
+pub fn run_program(Program, Grammar, @ast.Value, Int32, Int32) -> @ast.Value raise EvalError
+
+pub fn slice_value(@ast.Value, @ast.Value?, @ast.Value?) -> @ast.Value raise EvalError
+
+pub fn str_to_number(String) -> Double
+
+pub fn strict_eq(@ast.Value, @ast.Value) -> Bool
+
+pub fn to_number(@ast.Value) -> Double
+
+pub fn to_string(@ast.Value) -> String
+
+pub fn truthy(@ast.Value) -> Bool
+
+pub fn typed_compare(String, @ast.Value, @ast.Value) -> Bool raise EvalError
+
+pub fn typed_eq(@ast.Value, @ast.Value) -> Bool
+
+pub fn typed_int_arith(String, @ast.Value, @ast.Value) -> @ast.Value?
+
+pub fn unicode_class(String) -> Array[(Int32, Int32)]?
+
+pub fn value_kind(@ast.Value) -> String
+
+pub fn value_nesting_depth(@ast.Value) -> Int32
+
+// Errors
+pub(all) suberror EvalError {
+  EvalErr(String)
+}
+
+// Types and methods
+pub(all) struct BudgetCell {
+  mut steps : Int32
+}
+
+pub(all) enum Const {
+  CVal(@ast.Value)
+  CAst(@ast.AstNode)
+  CRaise(String)
+  CKeys(Array[String])
+  CFunc(String, String, Int32)
+  CFn((@ast.Value, @ast.Value) -> @ast.Value raise EvalError)
+  CUFn((@ast.Value) -> @ast.Value raise EvalError)
+  CAgg(String, Int32, Program?)
+}
+
+pub struct Evaluator {
+  grammar : Grammar
+  context : @ast.Value
+  rel_context : @ast.Value
+  mut depth : Int32
+  max_depth : Int32
+  budget : BudgetCell
+  max_steps : Int32
+  mut slot_elem : @ast.Value
+  mut slot_idx : Int32
+  mut slot_acc : @ast.Value
+  mut locals : Array[(String, @ast.Value)]
+}
+pub fn Evaluator::eval(Self, @ast.AstNode) -> @ast.Value raise EvalError
+pub fn Evaluator::eval_array(Self, Array[@ast.AstNode]) -> Array[@ast.Value] raise EvalError
+
+pub(all) struct Grammar {
+  transforms : Array[(String, (Array[@ast.Value]) -> @ast.Value raise EvalError)]
+  functions : Array[(String, (Array[@ast.Value]) -> @ast.Value raise EvalError)]
+  binary_ops : Array[(String, (@ast.Value, @ast.Value) -> @ast.Value raise EvalError)]
+  on_demand_ops : Array[(String, (() -> @ast.Value raise EvalError, () -> @ast.Value raise EvalError) -> @ast.Value raise EvalError)]
+  unary_ops : Array[(String, (@ast.Value) -> @ast.Value raise EvalError)]
+  mut regex_cache : Array[(String, @string.Regex)]
+  mut regex_failed : Array[(String, String)]
+}
+
+pub struct Program {
+  opcodes : Array[Int32]
+  operands : Array[Int32]
+  consts : Array[Const]
+  max_stack : Int32
+  depths : Array[Int32]
+  max_node_depth : Int32
+}
+
+// Type aliases
+pub type FnA = (Array[@ast.Value]) -> @ast.Value raise EvalError
+
+pub type FnB = (@ast.Value, @ast.Value) -> @ast.Value raise EvalError
+
+pub type FnL = (() -> @ast.Value raise EvalError, () -> @ast.Value raise EvalError) -> @ast.Value raise EvalError
+
+pub type FnU = (@ast.Value) -> @ast.Value raise EvalError
+
+pub type Lazy = () -> @ast.Value raise EvalError
+
+pub type PredRunner = (Int32, @ast.Value, @ast.Value) -> @ast.Value raise EvalError
+
+// Traits

@@ -92,7 +92,7 @@ pub fn tokenize_with(
         continue
       }
       // It's a binaryOp subtract
-      tokens.push(Token::{ typ: @grammar.BinaryOp, value: Str("-"), raw: "-" })
+      tokens.push(Token::{ typ: @grammar.BinaryOp, value: Str("-"), raw: "-", })
       pos += 1
       continue
     }
@@ -274,7 +274,7 @@ fn is_space(c : Char) -> Bool {
 /// boundaries on both sides (Jexl wraps them in `\b...\b`).
 fn match_element_at(
   chars : Array[Char],
-  pos : Int,
+  pos : Int32,
   elements : Array[@grammar.ElementDef],
 ) -> @grammar.ElementDef? {
   let n = chars.length()
@@ -299,7 +299,7 @@ fn match_element_at(
 }
 
 ///|
-fn prefix_eq(chars : Array[Char], pos : Int, sym : String) -> Bool {
+fn prefix_eq(chars : Array[Char], pos : Int32, sym : String) -> Bool {
   let sym_chars = sym.to_array()
   for i in 0..<sym_chars.length() {
     if chars[pos + i] != sym_chars[i] {
@@ -311,7 +311,7 @@ fn prefix_eq(chars : Array[Char], pos : Int, sym : String) -> Bool {
 
 ///|
 /// Matches `true` or `false` at pos (word-boundary check).
-fn match_boolean(chars : Array[Char], pos : Int) -> (String, Bool)? {
+fn match_boolean(chars : Array[Char], pos : Int32) -> (String, Bool)? {
   let n = chars.length()
   // true
   if pos + 4 <= n &&
@@ -344,7 +344,10 @@ fn match_boolean(chars : Array[Char], pos : Int) -> (String, Bool)? {
 ///|
 /// Scans a string literal starting at `pos` (the opening quote).
 /// Returns (raw_string_including_quotes, end_pos_after_closing_quote).
-fn scan_string(chars : Array[Char], pos : Int) -> Result[(String, Int), String] {
+fn scan_string(
+  chars : Array[Char],
+  pos : Int32,
+) -> Result[(String, Int32), String] {
   let n = chars.length()
   let quote = chars[pos]
   let buf = StringBuilder::new()
@@ -370,7 +373,7 @@ fn scan_string(chars : Array[Char], pos : Int) -> Result[(String, Int), String] 
 
 ///|
 /// Scans a numeric literal starting at `pos` (no sign — caller handles negation).
-fn scan_number(chars : Array[Char], pos : Int) -> (String, Int) {
+fn scan_number(chars : Array[Char], pos : Int32) -> (String, Int32) {
   let n = chars.length()
   let buf = StringBuilder::new()
   let mut i = pos
@@ -395,7 +398,7 @@ fn scan_number(chars : Array[Char], pos : Int) -> (String, Int) {
 
 ///|
 /// Scans an identifier starting at `pos`.
-fn scan_identifier(chars : Array[Char], pos : Int) -> (String, Int) {
+fn scan_identifier(chars : Array[Char], pos : Int32) -> (String, Int32) {
   let n = chars.length()
   let buf = StringBuilder::new()
   let mut i = pos
@@ -411,7 +414,7 @@ fn scan_identifier(chars : Array[Char], pos : Int) -> (String, Int) {
 ///|
 /// Scans a pointer token: '#' optionally followed by identifier chars
 /// ("#", "#index", "#acc", ...).
-fn scan_pointer(chars : Array[Char], pos : Int) -> (String, Int) {
+fn scan_pointer(chars : Array[Char], pos : Int32) -> (String, Int32) {
   let n = chars.length()
   let buf = StringBuilder::new()
   buf.write_char('#')
@@ -593,30 +596,38 @@ fn create_token(
   // String literal
   if first == '"' || first == '\'' {
     let val = unquote(element)
-    return Ok(Token::{ typ: @grammar.Literal, value: Str(val), raw: element })
+    return Ok(Token::{ typ: @grammar.Literal, value: Str(val), raw: element, })
   }
 
   // Numeric
   if is_numeric(element) {
     match parse_double(element) {
       Ok(d) =>
-        return Ok(Token::{ typ: @grammar.Literal, value: Num(d), raw: element })
+        return Ok(Token::{ typ: @grammar.Literal, value: Num(d), raw: element, })
       Err(_) => return Err("Invalid expression token: " + element)
     }
   }
 
   // Boolean
   if element == "true" {
-    return Ok(Token::{ typ: @grammar.Literal, value: Bool(true), raw: element })
+    return Ok(Token::{ typ: @grammar.Literal, value: Bool(true), raw: element, })
   }
   if element == "false" {
-    return Ok(Token::{ typ: @grammar.Literal, value: Bool(false), raw: element })
+    return Ok(Token::{
+      typ: @grammar.Literal,
+      value: Bool(false),
+      raw: element,
+    })
   }
 
   // Grammar element (operator/control char)
   match @grammar.find_element(elements, element) {
     Some(def) =>
-      return Ok(Token::{ typ: def.elem_type, value: Str(element), raw: element })
+      return Ok(Token::{
+        typ: def.elem_type,
+        value: Str(element),
+        raw: element,
+      })
     None => ()
   }
 

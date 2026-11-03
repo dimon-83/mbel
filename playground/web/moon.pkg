@@ -8,8 +8,9 @@ import {
   "moonbitlang/core/json",
 }
 
+pkgtype(kind: "executable")
+
 options(
-  "is-main": true,
   link: {
     "wasm-gc": {
       "exports": [

@@ -26,7 +26,7 @@ pub(all) suberror CheckError {
   // position of the offending construct (1-based line/col; EBinary =
   // its operator token), formatted by the checked entry with expr's
   // "msg (L:C)\n | src\n | ^" layout
-  CheckErr(String, Int, Int)
+  CheckErr(String, Int32, Int32)
 }
 
 ///|
@@ -115,7 +115,7 @@ type Scope = Array[(String, Nature)]
 /// symbol table (the batch plus the instance's callables) is built.
 pub(all) struct CheckCtx {
   // exact arity of every registered user function, by name
-  functions : Array[(String, Int)]
+  functions : Array[(String, Int32)]
   // names callable in the standard dialect (instance pool functions)
   callables : Array[String]
   // reject identifiers that are neither bound nor `$env`
@@ -140,7 +140,7 @@ fn in_names(names : Array[String], name : String) -> Bool {
 }
 
 ///|
-fn find_arity(functions : Array[(String, Int)], name : String) -> Int? {
+fn find_arity(functions : Array[(String, Int32)], name : String) -> Int32? {
   for pair in functions {
     let (n, arity) = pair
     if n == name {
@@ -184,7 +184,7 @@ pub fn check_with_ctx(n : ENode, ctx : CheckCtx) -> Unit raise CheckError {
 pub fn check_function_body(
   n : ENode,
   params : Array[String],
-  functions : Array[(String, Int)],
+  functions : Array[(String, Int32)],
   callables : Array[String],
 ) -> Unit raise CheckError {
   let scope : Scope = params.map(fn(p) { (p, UnknownN) })
@@ -434,8 +434,8 @@ fn infer(n : ENode, scope : Scope, ctx : CheckCtx) -> Nature raise CheckError {
 fn check_builtin_arg(
   name : String,
   t : Nature,
-  line : Int,
-  col : Int,
+  line : Int32,
+  col : Int32,
 ) -> Unit raise CheckError {
   match name {
     "len" =>
@@ -534,8 +534,8 @@ fn check_binary(
   l : ENode,
   r : ENode,
   scope : Scope,
-  op_line : Int,
-  op_col : Int,
+  op_line : Int32,
+  op_col : Int32,
   ctx : CheckCtx,
 ) -> Nature raise CheckError {
   let lt = infer(l, scope, ctx)

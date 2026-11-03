@@ -19,7 +19,7 @@ fn main {
 /// in the error envelope (`$error`, optional `$code`); `limits` lists
 /// the engine's default resource budgets.
 pub fn describe_abi() -> String {
-  "{\"abiVersion\":1,\"engineVersion\":\"0.4.0\",\"functionsFileVersion\":1," +
+  "{\"abiVersion\":1,\"engineVersion\":\"0.4.1\",\"functionsFileVersion\":1," +
   "\"exports\":[" +
   "{\"name\":\"describe_abi\",\"kind\":\"function\",\"params\":[],\"returns\":\"json\"}," +
   "{\"name\":\"describe_functions\",\"kind\":\"function\",\"params\":[\"funcs_json\"],\"returns\":\"json\"}," +
@@ -256,7 +256,7 @@ fn canon_str(s : String) -> String {
 }
 
 ///|
-fn hex4(code : Int) -> String {
+fn hex4(code : Int32) -> String {
   let digits = "0123456789abcdef".to_array()
   let out = StringBuilder::new()
   for i in 0..<4 {
@@ -412,7 +412,7 @@ fn parse_user_functions(j : Json) -> Result[Array[UserFnSpec], String] {
     if !has_body {
       return Err("functions[" + i.to_string() + "]: missing \"body\"")
     }
-    specs.push({ name, params, body, description })
+    specs.push({ name, params, body, description, })
   }
   Ok(specs)
 }
@@ -492,7 +492,7 @@ pub fn eval_with_functions(
   }
   let defs : Array[@engine.UserFunctionDef] = []
   for sp in specs {
-    defs.push({ name: sp.name, params: sp.params, body: sp.body })
+    defs.push({ name: sp.name, params: sp.params, body: sp.body, })
   }
   // non-object envs simply provide no default bindings
   let defaults : @ast.Value? = match ctx {

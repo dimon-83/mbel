@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "dexter/mbel/cmd/main"
+package "dimon-83/mbel/cmd/main"
 
 // Values
 
@@ -10,4 +10,3 @@ package "dexter/mbel/cmd/main"
 // Type aliases
 
 // Traits
-

@@ -210,6 +210,7 @@ JSON file (the playground's 🧩 card) or built directly:
 
 ```moonbit nocheck
 // params omitted: auto-extracted from the body's free identifiers
+
 ///|
 let resolved = @engine.Engine::add_expression_functions(
   inst,

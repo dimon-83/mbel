@@ -1,13 +1,24 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "dexter/mbel/parser"
+package "dimon-83/mbel/parser"
 
 import {
-  "dexter/mbel/ast",
-  "dexter/mbel/lexer",
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/grammar",
+  "dimon-83/mbel/lexer",
 }
 
 // Values
+pub fn default_max_nesting() -> Int32
+
+pub fn default_max_nodes() -> Int32
+
 pub fn parse(Array[@lexer.Token]) -> @ast.AstNode? raise ParseError
+
+pub fn parse_with(Array[@lexer.Token], Array[@grammar.ElementDef]) -> @ast.AstNode? raise ParseError
+
+pub fn parse_with_budgets(Array[@lexer.Token], Array[@grammar.ElementDef], Int32, Int32) -> @ast.AstNode? raise ParseError
+
+pub fn parse_with_limits(Array[@lexer.Token], Array[@grammar.ElementDef], Int32) -> @ast.AstNode? raise ParseError
 
 // Errors
 pub(all) suberror ParseError {
@@ -19,4 +30,3 @@ pub(all) suberror ParseError {
 // Type aliases
 
 // Traits
-

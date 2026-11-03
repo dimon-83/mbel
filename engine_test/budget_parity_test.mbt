@@ -11,7 +11,7 @@
 //    legacy jexl path.
 
 ///|
-fn deep_unary(n : Int, tail : String) -> String {
+fn deep_unary(n : Int32, tail : String) -> String {
   let mut s = tail
   for _ in 0..<n {
     s = "!" + s
@@ -26,9 +26,9 @@ fn eval_limited(
   mode : @engine.EngineMode,
   src : String,
   ctx : @ast.Value,
-  max_nodes : Int,
-  max_depth : Int,
-  max_steps : Int,
+  max_nodes : Int32,
+  max_depth : Int32,
+  max_steps : Int32,
 ) -> Result[@ast.Value, String] {
   let inst = @engine.new()
   @engine.Engine::set_engine(inst, mode)
@@ -43,9 +43,9 @@ fn eval_expr_limited(
   mode : @engine.EngineMode,
   src : String,
   ctx : @ast.Value,
-  max_nodes : Int,
-  max_depth : Int,
-  max_steps : Int,
+  max_nodes : Int32,
+  max_depth : Int32,
+  max_steps : Int32,
 ) -> Result[@ast.Value, String] {
   let inst = @engine.new()
   @engine.Engine::set_engine(inst, mode)

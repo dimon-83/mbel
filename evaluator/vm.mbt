@@ -26,10 +26,10 @@ pub(all) enum Const {
   CAst(@ast.AstNode)
   CRaise(String) // unconditional runtime error (reached branch)
   CKeys(Array[String])
-  CFunc(String, String, Int) // name, pool, argc
+  CFunc(String, String, Int32) // name, pool, argc
   CFn((@ast.Value, @ast.Value) -> @ast.Value raise EvalError)
   CUFn((@ast.Value) -> @ast.Value raise EvalError)
-  CAgg(String, Int, Program?) // name, non-predicate argc, predicate program
+  CAgg(String, Int32, Program?) // name, non-predicate argc, predicate program
 }
 
 ///|
@@ -114,38 +114,38 @@ const OP_ENV = 25
 ///|
 /// A compiled program.
 pub struct Program {
-  opcodes : Array[Int]
-  operands : Array[Int]
+  opcodes : Array[Int32]
+  operands : Array[Int32]
   consts : Array[Const]
-  max_stack : Int
+  max_stack : Int32
   // Per-instruction source AST depth (tree depth of the node the
   // instruction belongs to) plus its maximum — lets the Vm enforce
   // the same max_depth budget as the tree-walk engine.
-  depths : Array[Int]
-  max_node_depth : Int
+  depths : Array[Int32]
+  max_node_depth : Int32
 }
 
 ///|
 priv struct Compiler {
-  opcodes : Array[Int]
-  operands : Array[Int]
-  depths : Array[Int]
+  opcodes : Array[Int32]
+  operands : Array[Int32]
+  depths : Array[Int32]
   consts : Array[Const]
   grammar : Grammar
   // stack-depth simulation for max_stack (filter frames tracked)
-  mut cur_depth : Int
-  mut max_depth_seen : Int
-  filter_depths : Array[Int]
+  mut cur_depth : Int32
+  mut max_depth_seen : Int32
+  filter_depths : Array[Int32]
   // statically known let-bindings in scope (name per local slot); the
   // mirror of the runtime locals array order
   local_names : Array[String]
   // source AST depth of the node currently being compiled (for the
   // per-instruction depth budget); max over all emitted instructions
-  mut node_depth : Int
-  mut max_node_depth : Int
+  mut node_depth : Int32
+  mut max_node_depth : Int32
   // relative-filter predicates compile against a rebased depth (the
   // walk engine evaluates them on a fresh per-element evaluator)
-  mut pred_depth_rebase : Int
+  mut pred_depth_rebase : Int32
 }
 
 ///|
@@ -194,7 +194,7 @@ pub fn compile_program_with_locals(
 }
 
 ///|
-fn Compiler::emit(self : Compiler, op : Int, operand : Int) -> Int {
+fn Compiler::emit(self : Compiler, op : Int32, operand : Int32) -> Int32 {
   self.opcodes.push(op)
   self.operands.push(operand)
   // source-AST depth of the node this instruction belongs to (rebased
@@ -208,12 +208,12 @@ fn Compiler::emit(self : Compiler, op : Int, operand : Int) -> Int {
 }
 
 ///|
-fn Compiler::patch(self : Compiler, addr : Int, operand : Int) -> Unit {
+fn Compiler::patch(self : Compiler, addr : Int32, operand : Int32) -> Unit {
   self.operands[addr] = operand
 }
 
 ///|
-fn Compiler::const_idx(self : Compiler, c : Const) -> Int {
+fn Compiler::const_idx(self : Compiler, c : Const) -> Int32 {
   match c {
     CVal(v) =>
       for i in 0..<self.consts.length() {
@@ -230,7 +230,7 @@ fn Compiler::const_idx(self : Compiler, c : Const) -> Int {
 
 ///|
 /// Tracks stack depth: `pops` then `pushes`, recording the peak.
-fn Compiler::track(self : Compiler, pops : Int, pushes : Int) -> Unit {
+fn Compiler::track(self : Compiler, pops : Int32, pushes : Int32) -> Unit {
   self.cur_depth -= pops
   self.cur_depth += pushes
   if self.cur_depth > self.max_depth_seen {
@@ -531,7 +531,7 @@ fn Compiler::compile_alt_or_raise(
 ///|
 /// Innermost-first index of a name in the compile-time local table, or
 /// -1 when not bound.
-fn find_local_slot(names : Array[String], name : String) -> Int {
+fn find_local_slot(names : Array[String], name : String) -> Int32 {
   let mut i = names.length() - 1
   while i >= 0 {
     if names[i] == name {
@@ -627,39 +627,39 @@ fn Compiler::compile_filter(
 /// Loop frame for relative filters.
 priv struct LoopFrame {
   list : Array[@ast.Value]
-  mut idx : Int
+  mut idx : Int32
   results : Array[@ast.Value]
   saved_rel : @ast.Value
   saved_elem : @ast.Value
-  saved_idx : Int
+  saved_idx : Int32
   saved_acc : @ast.Value
 }
 
 ///|
 #warnings("-unused_mut")
 priv struct VmState {
-  mut opcodes : Array[Int]
-  mut operands : Array[Int]
+  mut opcodes : Array[Int32]
+  mut operands : Array[Int32]
   mut consts : Array[Const]
-  mut pc : Int
+  mut pc : Int32
   mut stack : Array[@ast.Value]
-  mut sp : Int
+  mut sp : Int32
   frames : Array[LoopFrame]
   grammar : Grammar
   context : @ast.Value
   mut rel_context : @ast.Value
   budget : BudgetCell
-  max_steps : Int
-  max_depth : Int
+  max_steps : Int32
+  max_depth : Int32
   mut slot_elem : @ast.Value
-  mut slot_idx : Int
+  mut slot_idx : Int32
   mut slot_acc : @ast.Value
   // lexical let-bindings (innermost last); names kept so tree-walk
   // callbacks (LAZYBIN) can resolve them by name
   mut locals : Array[(String, @ast.Value)]
   // per-instruction source-AST depths + whether any instruction can
   // exceed max_depth (precomputed so the default budget never checks)
-  mut depths : Array[Int]
+  mut depths : Array[Int32]
   mut depth_check : Bool
 }
 
@@ -671,8 +671,8 @@ pub fn run_program(
   program : Program,
   grammar : Grammar,
   context : @ast.Value,
-  max_depth : Int,
-  max_steps : Int,
+  max_depth : Int32,
+  max_steps : Int32,
 ) -> @ast.Value raise EvalError {
   let vm = {
     opcodes: program.opcodes,
@@ -685,7 +685,7 @@ pub fn run_program(
     grammar,
     context,
     rel_context: context,
-    budget: { steps: 0 },
+    budget: { steps: 0, },
     max_steps,
     max_depth,
     slot_elem: @ast.UndefVal,
@@ -699,7 +699,7 @@ pub fn run_program(
 }
 
 ///|
-fn VmState::charge(self : VmState, n : Int) -> Unit raise EvalError {
+fn VmState::charge(self : VmState, n : Int32) -> Unit raise EvalError {
   if self.max_steps > 0 {
     self.budget.steps = self.budget.steps + n
     if self.budget.steps > self.max_steps {
@@ -724,7 +724,10 @@ fn VmState::pop(self : VmState) -> @ast.Value raise EvalError {
 }
 
 ///|
-fn VmState::popn(self : VmState, n : Int) -> Array[@ast.Value] raise EvalError {
+fn VmState::popn(
+  self : VmState,
+  n : Int32,
+) -> Array[@ast.Value] raise EvalError {
   let out : Array[@ast.Value] = []
   let mut i = 0
   while i < n {
@@ -1153,9 +1156,9 @@ pub fn disassemble(program : Program) -> String {
 ///|
 fn disasm_note(
   program : Program,
-  op : Int,
-  operand : Int,
-  jumps : Array[Int],
+  op : Int32,
+  operand : Int32,
+  jumps : Array[Int32],
 ) -> String {
   if contains_int(jumps, op) {
     return "-> " + operand.to_string()
@@ -1191,7 +1194,7 @@ fn disasm_note(
 }
 
 ///|
-fn contains_int(xs : Array[Int], x : Int) -> Bool {
+fn contains_int(xs : Array[Int32], x : Int32) -> Bool {
   for v in xs {
     if v == x {
       return true

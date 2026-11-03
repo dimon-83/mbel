@@ -1,20 +1,38 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "dexter/mbel/grammar"
+package "dimon-83/mbel/grammar"
 
 import {
   "moonbitlang/core/debug",
 }
 
 // Values
+pub fn default_elements() -> Array[ElementDef]
+
+pub fn element_def(String, TokenType, Int32) -> ElementDef
+
 pub fn element_type(String) -> TokenType?
+
+pub fn find_element(Array[ElementDef], String) -> ElementDef?
+
+pub fn is_aggregate(String) -> Bool
+
+pub fn is_ident_like(String) -> Bool
 
 pub fn minus_negates_after(TokenType) -> Bool
 
-pub fn precedence(String) -> Int
+pub fn precedence(String) -> Int32
+
+pub fn precedence_of(Array[ElementDef], String) -> Int32
 
 // Errors
 
 // Types and methods
+pub struct ElementDef {
+  symbol : String
+  elem_type : TokenType
+  precedence : Int32
+}
+
 pub(all) enum TokenType {
   Literal
   Identifier
@@ -31,9 +49,9 @@ pub(all) enum TokenType {
   OpenParen
   CloseParen
   Question
+  Pointer
 } derive(Eq, @debug.Debug)
 
 // Type aliases
 
 // Traits
-

@@ -36,7 +36,7 @@ fn sec_legacy(code : String, ctx : @ast.Value) -> String raise {
 }
 
 ///|
-fn long_source(n : Int) -> String {
+fn long_source(n : Int32) -> String {
   let b = StringBuilder::new()
   for _ in 0..<n {
     b.write_char('x')
@@ -47,7 +47,7 @@ fn long_source(n : Int) -> String {
 ///|
 /// A value nested `depth` container levels deep: objects {"a": {...}}
 /// or arrays [[[...]]].
-fn deep_value(depth : Int, arrays : Bool) -> @ast.Value {
+fn deep_value(depth : Int32, arrays : Bool) -> @ast.Value {
   let mut v : @ast.Value = if arrays {
     @ast.ArrayVal([])
   } else {
@@ -62,8 +62,8 @@ fn deep_value(depth : Int, arrays : Bool) -> @ast.Value {
 ///|
 test "security: user-function recursion raises, then the engine recovers" {
   let defs : Array[@engine.UserFunctionDef] = [
-    { name: "loop", params: None, body: "loop()" },
-    { name: "fact", params: Some(["n"]), body: "n <= 1 ? 1 : n * fact(n - 1)" },
+    { name: "loop", params: None, body: "loop()", },
+    { name: "fact", params: Some(["n"]), body: "n <= 1 ? 1 : n * fact(n - 1)", },
   ]
   for vm in [false, true] {
     let got = uf_eval_str(defs, None, "loop()", @ast.ObjectVal([]), vm)
@@ -80,12 +80,16 @@ test "security: user-function recursion raises, then the engine recovers" {
   // the depth counter restores on error: same engine keeps working
   let e = @engine.new()
   ignore(@engine.Engine::add_expression_functions(e, defs, None))
-  let r1 = try? @engine.Engine::eval_expr(e, "loop()", @ast.ObjectVal([]))
+  let r1 = Ok(@engine.Engine::eval_expr(e, "loop()", @ast.ObjectVal([]))) catch {
+    e => Err(e)
+  }
   match r1 {
     Err(_) => ()
     Ok(_) => fail("loop() must raise the depth guard")
   }
-  let r2 = try? @engine.Engine::eval_expr(e, "fact(5)", @ast.ObjectVal([]))
+  let r2 = Ok(@engine.Engine::eval_expr(e, "fact(5)", @ast.ObjectVal([]))) catch {
+    e => Err(e)
+  }
   match r2 {
     Ok(@ast.IntVal(120L)) => ()
     other => fail("engine must recover after the guard: " + uf_dbg(other))
@@ -95,8 +99,8 @@ test "security: user-function recursion raises, then the engine recovers" {
 ///|
 test "security: mutual recursion across definitions is capped" {
   let defs : Array[@engine.UserFunctionDef] = [
-    { name: "ping", params: None, body: "pong()" },
-    { name: "pong", params: None, body: "ping()" },
+    { name: "ping", params: None, body: "pong()", },
+    { name: "pong", params: None, body: "ping()", },
   ]
   for vm in [false, true] {
     let got = uf_eval_str(defs, None, "ping()", @ast.ObjectVal([]), vm)

@@ -21,14 +21,14 @@
 ///|
 /// Fields recovered from a layout match, plus which of them were present.
 struct GoTimeFields {
-  mut year : Int
-  mut month : Int
-  mut day : Int
-  mut hour : Int
-  mut minute : Int
-  mut second : Int
-  mut nanosecond : Int
-  mut offset_minutes : Int
+  mut year : Int32
+  mut month : Int32
+  mut day : Int32
+  mut hour : Int32
+  mut minute : Int32
+  mut second : Int32
+  mut nanosecond : Int32
+  mut offset_minutes : Int32
   mut has_year : Bool
   mut has_month : Bool
   mut has_day : Bool
@@ -38,7 +38,7 @@ struct GoTimeFields {
   mut has_offset : Bool
   mut pm : Bool
   mut has_pm : Bool
-  mut weekday : Int
+  mut weekday : Int32
   mut has_weekday : Bool
 }
 
@@ -68,7 +68,7 @@ fn new_go_time_fields() -> GoTimeFields {
 }
 
 ///|
-fn gt_month_names() -> Array[(String, Int)] {
+fn gt_month_names() -> Array[(String, Int32)] {
   [
     ("january", 1),
     ("february", 2),
@@ -86,7 +86,7 @@ fn gt_month_names() -> Array[(String, Int)] {
 }
 
 ///|
-fn gt_day_names() -> Array[(String, Int)] {
+fn gt_day_names() -> Array[(String, Int32)] {
   [
     ("sunday", 0),
     ("monday", 1),
@@ -106,10 +106,10 @@ fn gt_day_names() -> Array[(String, Int)] {
 /// for the name to be recognised when more input follows it.
 fn gt_match_name(
   s : Array[Char],
-  i : Int,
-  names : Array[(String, Int)],
-  fixed_len : Int,
-) -> (Int, Int)? {
+  i : Int32,
+  names : Array[(String, Int32)],
+  fixed_len : Int32,
+) -> (Int32, Int32)? {
   for pair in names {
     let (nm, v) = pair
     let nc = nm.to_array()
@@ -143,19 +143,25 @@ fn gt_match_name(
 ///|
 /// Lowercases up to `len` characters of `s` from `start` (used for the
 /// two-letter AM/PM marker).
-fn gt_lower2(s : Array[Char], start : Int, len : Int) -> String {
+fn gt_lower2(s : Array[Char], start : Int32, len : Int32) -> String {
   let buf = StringBuilder::new()
   let mut i = 0
   while i < len && start + i < s.length() {
     let c = s[start + i]
-    buf.write_char(if c >= 'A' && c <= 'Z' { (c.to_int() + 32).unsafe_to_char() } else { c })
+    buf.write_char(
+      if c >= 'A' && c <= 'Z' {
+        (c.to_int() + 32).unsafe_to_char()
+      } else {
+        c
+      },
+    )
     i += 1
   }
   buf.to_string()
 }
 
 ///|
-fn gt_digits(s : Array[Char], start : Int, want : Int) -> Int? {
+fn gt_digits(s : Array[Char], start : Int32, want : Int32) -> Int32? {
   if start + want > s.length() {
     return None
   }
@@ -171,7 +177,12 @@ fn gt_digits(s : Array[Char], start : Int, want : Int) -> Int? {
 }
 
 ///|
-fn gt_digits_var(s : Array[Char], start : Int, want_min : Int, want_max : Int) -> (Int, Int)? {
+fn gt_digits_var(
+  s : Array[Char],
+  start : Int32,
+  want_min : Int32,
+  want_max : Int32,
+) -> (Int32, Int32)? {
   let mut i = start
   let mut v = 0
   let mut n = 0
@@ -193,10 +204,10 @@ fn gt_digits_var(s : Array[Char], start : Int, want_min : Int, want_max : Int) -
 ///|
 fn gt_parse_signed_offset(
   s : Array[Char],
-  start : Int,
+  start : Int32,
   colon : Bool,
   two_digit_hour : Bool,
-) -> (Int, Int)? {
+) -> (Int32, Int32)? {
   let n = s.length()
   if start >= n {
     return None
@@ -207,7 +218,7 @@ fn gt_parse_signed_offset(
     _ => return None
   }
   let mut i = start + 1
-  let hour : Int = if two_digit_hour {
+  let hour : Int32 = if two_digit_hour {
     match gt_digits(s, i, 2) {
       Some(h) => {
         i += 2
@@ -253,11 +264,11 @@ fn gt_parse_signed_offset(
 /// in the layout at that position.
 fn gt_try_element(
   lay : Array[Char],
-  li : Int,
+  li : Int32,
   s : Array[Char],
-  i : Int,
+  i : Int32,
   f : GoTimeFields,
-) -> Int? raise @evaluator.EvalError {
+) -> Int32? raise @evaluator.EvalError {
   let ln = lay.length()
   let sn = s.length()
   let at = fn(text : String) -> Bool {
@@ -593,12 +604,12 @@ fn gt_try_element(
 }
 
 ///|
-fn gt_layout_len(lay : Array[Char], li : Int) -> Int {
+fn gt_layout_len(lay : Array[Char], li : Int32) -> Int32 {
   matcher(lay, li)
 }
 
 ///|
-fn matcher(lay : Array[Char], li : Int) -> Int {
+fn matcher(lay : Array[Char], li : Int32) -> Int32 {
   let ln = lay.length()
   let at = fn(text : String) -> Bool {
     let t = text.to_array()
@@ -612,11 +623,12 @@ fn matcher(lay : Array[Char], li : Int) -> Int {
     }
     true
   }
-  for e in [
-    "Z07:00", "Z0700", "-07:00", "-0700", "January", "Monday", "Z07", "-07", "2006",
-    "MST", "Jan", "Mon", "15", "01", "02", "_2", "03", "04", "05", "06", ".000", ".999",
-    "PM", "pm", "1", "2", "3", "4", "5",
-  ] {
+  for
+    e in [
+      "Z07:00", "Z0700", "-07:00", "-0700", "January", "Monday", "Z07", "-07", "2006",
+      "MST", "Jan", "Mon", "15", "01", "02", "_2", "03", "04", "05", "06", ".000",
+      ".999", "PM", "pm", "1", "2", "3", "4", "5",
+    ] {
     if at(e) {
       return e.to_array().length()
     }
@@ -625,12 +637,12 @@ fn matcher(lay : Array[Char], li : Int) -> Int {
 }
 
 ///|
-fn is_leap(y : Int) -> Bool {
+fn is_leap(y : Int32) -> Bool {
   (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
 }
 
 ///|
-fn days_in_month(y : Int, m : Int) -> Int {
+fn days_in_month(y : Int32, m : Int32) -> Int32 {
   match m {
     1 | 3 | 5 | 7 | 8 | 10 | 12 => 31
     4 | 6 | 9 | 11 => 30
@@ -641,7 +653,7 @@ fn days_in_month(y : Int, m : Int) -> Int {
 
 ///|
 /// The weekday of a civil date (0 = Sunday), for Go's weekday validation.
-fn civil_weekday(y : Int, m : Int, d : Int) -> Int {
+fn civil_weekday(y : Int32, m : Int32, d : Int32) -> Int32 {
   let days = days_from_civil(y, m, d)
   let w = (days + 4L) % 7L
   (if w < 0L { w + 7L } else { w }).to_int()
@@ -650,7 +662,10 @@ fn civil_weekday(y : Int, m : Int, d : Int) -> Int {
 ///|
 /// Parses `s` with a Go reference layout, returning nanoseconds since the
 /// Unix epoch, or None when the input does not match.
-fn go_parse_layout(s : String, layout : String) -> Int64? raise @evaluator.EvalError {
+fn go_parse_layout(
+  s : String,
+  layout : String,
+) -> Int64? raise @evaluator.EvalError {
   let sc = s.to_array()
   let lay = layout.to_array()
   let f = new_go_time_fields()
@@ -677,7 +692,7 @@ fn go_parse_layout(s : String, layout : String) -> Int64? raise @evaluator.EvalE
         // After a seconds element Go also accepts a fractional part that
         // the layout does not mention.
         let is_second = el_len == 2 &&
-          (lay[li] == '0' && lay[li + 1] == '5' || lay[li] == '5')
+          ((lay[li] == '0' && lay[li + 1] == '5') || lay[li] == '5')
         i = j
         if is_second && i < sn && sc[i] == '.' {
           match gt_try_element("05".to_array(), 0, sc, i, f) {

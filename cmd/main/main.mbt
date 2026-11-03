@@ -209,7 +209,7 @@ fn canon_str(s : String) -> String {
 }
 
 ///|
-fn hex4(code : Int) -> String {
+fn hex4(code : Int32) -> String {
   let digits = "0123456789abcdef".to_array()
   let out = StringBuilder::new()
   for i in 0..<4 {

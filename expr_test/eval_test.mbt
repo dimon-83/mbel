@@ -356,7 +356,7 @@ fn bytes_lit(s : String) -> Bytes {
 }
 
 ///|
-fn bytes_lit_raw(xs : Array[Int]) -> Bytes {
+fn bytes_lit_raw(xs : Array[Int32]) -> Bytes {
   let arr : Array[Byte] = xs.map(fn(x) { x.to_byte() })
   Bytes::from_array(arr)
 }

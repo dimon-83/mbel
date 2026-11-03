@@ -6,7 +6,7 @@
 ///|
 fn arg(
   args : Array[@ast.Value],
-  i : Int,
+  i : Int32,
   name : String,
 ) -> @ast.Value raise @evaluator.EvalError {
   if i >= args.length() {
@@ -92,7 +92,7 @@ fn collect_numbers(
 // uniq concat flatten sort) ---
 
 ///|
-fn value_len(v : @ast.Value) -> Int {
+fn value_len(v : @ast.Value) -> Int32 {
   match v {
     @ast.ArrayVal(xs) => xs.length()
     @ast.ObjectVal(pairs) => pairs.length()
@@ -109,7 +109,7 @@ fn value_len(v : @ast.Value) -> Int {
 /// expr counts runes: `len('👍')` is 1 while JS `.length` — and therefore
 /// the legacy dialect — says 2. The standard dialect lowers `len` here so
 /// both can be right at once; see expr/lower.mbt.
-fn value_len_runes(v : @ast.Value) -> Int {
+fn value_len_runes(v : @ast.Value) -> Int32 {
   match v {
     @ast.StrVal(s) => {
       let mut n = 0
@@ -311,7 +311,7 @@ pub fn parse_duration(s : String) -> Int64? {
 ///|
 /// Days from civil date (Howard Hinnant's algorithm) — days since
 /// 1970-01-01 for a proleptic Gregorian date.
-fn days_from_civil(y : Int, m : Int, d : Int) -> Int64 {
+fn days_from_civil(y : Int32, m : Int32, d : Int32) -> Int64 {
   let y2 = if m <= 2 { y - 1 } else { y }
   let era = (if y2 >= 0 { y2 } else { y2 - 399 }) / 400
   let yoe = y2 - era * 400
@@ -330,7 +330,7 @@ pub fn parse_iso_date(s : String) -> Int64? {
   if n < 10 {
     return None
   }
-  let digits_of = fn(a : Array[Char], from : Int, len : Int) -> Int? {
+  let digits_of = fn(a : Array[Char], from : Int32, len : Int32) -> Int32? {
     let mut v = 0
     for k in 0..<len {
       let c = a[from + k]
@@ -518,8 +518,8 @@ fn write_json_string(b : StringBuilder, s : String) -> Unit {
 }
 
 ///|
-fn hex2(u : Int) -> String {
-  let hex_c = fn(x : Int) -> Char {
+fn hex2(u : Int32) -> String {
+  let hex_c = fn(x : Int32) -> Char {
     if x < 10 {
       ('0'.to_int() + x).unsafe_to_char()
     } else {

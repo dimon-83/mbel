@@ -4,7 +4,7 @@
 // MaxNodes + memory protections).
 
 ///|
-fn repeat_str(s : String, n : Int) -> String {
+fn repeat_str(s : String, n : Int32) -> String {
   let out = StringBuilder::new()
   for _ in 0..<n {
     out.write_string(s)

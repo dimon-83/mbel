@@ -9,7 +9,7 @@ fn wb_match(inst : Engine, subject : String, pattern : String) -> Unit {
     ("s", @ast.StrVal(subject)),
     ("p", @ast.StrVal(pattern)),
   ])
-  ignore(try? Engine::eval_expr(inst, "s matches p", ctx))
+  ignore(Ok(Engine::eval_expr(inst, "s matches p", ctx)) catch { e => Err(e) })
 }
 
 ///|

@@ -15,7 +15,7 @@ pub(all) suberror ParseError {
 ///|
 /// Default expression node limit, mirroring expr's MaxNodes (1e4).
 /// 0 disables the limit.
-pub fn default_max_nodes() -> Int {
+pub fn default_max_nodes() -> Int32 {
   10000
 }
 
@@ -24,7 +24,7 @@ pub fn default_max_nodes() -> Int {
 /// has a fixed stack, so the recursive sub-parser chain must be
 /// capped independently of the node budget (expr relies on Go's
 /// growing stack for this).
-pub fn default_max_nesting() -> Int {
+pub fn default_max_nesting() -> Int32 {
   1000
 }
 
@@ -43,11 +43,11 @@ priv struct Parser {
   mut expr_str : String
   mut relative : Bool
   stop_map : Array[(@grammar.TokenType, String)]
-  prec : (String) -> Int
-  node_limit : Int
-  mut node_count : Int
-  max_nesting : Int
-  mut nesting : Int
+  prec : (String) -> Int32
+  node_limit : Int32
+  mut node_count : Int32
+  max_nesting : Int32
+  mut nesting : Int32
   mut sub_parser : Parser?
   mut parent_stop : Bool
   mut next_ident_encapsulate : Bool
@@ -56,7 +56,7 @@ priv struct Parser {
   // Predicate-argument tracking: the name of the function whose args
   // are being parsed and the 0-based index of the current argument.
   mut cur_func_name : String
-  mut cur_arg_idx : Int
+  mut cur_arg_idx : Int32
 }
 
 ///|
@@ -85,7 +85,7 @@ pub fn parse_with(
 pub fn parse_with_limits(
   tokens : Array[@lexer.Token],
   elements : Array[@grammar.ElementDef],
-  max_nodes : Int,
+  max_nodes : Int32,
 ) -> @ast.AstNode? raise ParseError {
   parse_with_budgets(tokens, elements, max_nodes, default_max_nesting())
 }
@@ -96,8 +96,8 @@ pub fn parse_with_limits(
 pub fn parse_with_budgets(
   tokens : Array[@lexer.Token],
   elements : Array[@grammar.ElementDef],
-  max_nodes : Int,
-  max_nesting : Int,
+  max_nodes : Int32,
+  max_nesting : Int32,
 ) -> @ast.AstNode? raise ParseError {
   let p : Parser = new_parser([], "", elements, max_nodes, max_nesting)
   for token in tokens {
@@ -112,8 +112,8 @@ fn new_parser(
   stop_map : Array[(@grammar.TokenType, String)],
   prefix : String,
   elements : Array[@grammar.ElementDef],
-  node_limit : Int,
-  max_nesting : Int,
+  node_limit : Int32,
+  max_nesting : Int32,
 ) -> Parser {
   {
     state: "expectOperand",
@@ -122,7 +122,7 @@ fn new_parser(
     expr_str: prefix,
     relative: false,
     stop_map,
-    prec: fn(op : String) -> Int { @grammar.precedence_of(elements, op) },
+    prec: fn(op : String) -> Int32 { @grammar.precedence_of(elements, op) },
     node_limit,
     node_count: 0,
     max_nesting,

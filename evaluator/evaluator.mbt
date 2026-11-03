@@ -283,7 +283,7 @@ fn range_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 /// low-code platforms) would otherwise grow without limit — both in
 /// memory and in per-match scan time. Once full, the oldest half is
 /// dropped, which keeps inserts amortized O(1).
-pub fn regex_cache_capacity() -> Int {
+pub fn regex_cache_capacity() -> Int32 {
   256
 }
 
@@ -291,14 +291,14 @@ pub fn regex_cache_capacity() -> Int {
 /// Upper bound on remembered *failing* patterns. Small on purpose: the
 /// point is to keep repeat failures reporting one consistent message,
 /// not to memoize every bad pattern ever seen.
-pub fn regex_failed_capacity() -> Int {
+pub fn regex_failed_capacity() -> Int32 {
   64
 }
 
 ///|
 /// Drops the oldest half of `cache` once it is at `cap`, so the retained
 /// set stays bounded without shifting on every insert.
-fn[T] trim_cache(cache : Array[T], cap : Int) -> Unit {
+fn[T] trim_cache(cache : Array[T], cap : Int32) -> Unit {
   if cache.length() < cap {
     return
   }
@@ -349,14 +349,11 @@ fn grammar_regex_match(
   }
   // Translate and compile without touching the grammar inside a handler:
   // failures are turned into values first, then folded into one message.
-  let compiled : Result[@string.Regex, String] = match translate_re2_pattern(
-    pattern,
-  ) {
+  let compiled : Result[@string.Regex, String] = match
+    translate_re2_pattern(pattern) {
     Err(detail) => Err(detail)
     Ok(translated) =>
-      try {
-        Ok(@string.Regex::Regex(translated))
-      } catch {
+      Ok(@string.Regex::Regex(translated)) catch {
         // The engine's own diagnostic names the offending construct,
         // which is far more useful than a bare "invalid regex".
         e => Err(e.to_string())
@@ -542,7 +539,7 @@ fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
     @ast.ObjectVal(pairs) => {
       let mut found = false
       match a {
-        @ast.StrVal(s) => {
+        @ast.StrVal(s) =>
           for pair in pairs {
             let (k, _) = pair
             if k == s {
@@ -550,7 +547,6 @@ fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
               break
             }
           }
-        }
         _ => ()
       }
       @ast.BoolVal(found)
@@ -565,9 +561,9 @@ fn in_op(a : @ast.Value, b : @ast.Value) -> @ast.Value raise EvalError {
 /// serialization: env data nested deeper than the cap would overflow
 /// the host stack inside the recursive comparator/serializer, so the
 /// raising entries reject it first with a clean error.
-pub fn value_nesting_depth(root : @ast.Value) -> Int {
+pub fn value_nesting_depth(root : @ast.Value) -> Int32 {
   let vals : Array[@ast.Value] = [root]
-  let depths : Array[Int] = [1]
+  let depths : Array[Int32] = [1]
   let mut max = 0
   let mut i = 0
   while i < vals.length() {
@@ -598,7 +594,7 @@ pub fn value_nesting_depth(root : @ast.Value) -> Int {
 /// Deep-nesting cap for structural equality and serialization — mirrors
 /// core json's parser limit; 1024 recursion frames sit far below every
 /// target's host stack.
-pub fn max_value_nesting() -> Int {
+pub fn max_value_nesting() -> Int32 {
   1024
 }
 
@@ -720,7 +716,7 @@ pub fn slice_value(
 
 ///|
 /// A slice bound must be an integral number.
-fn bound_int(v : @ast.Value) -> Int raise EvalError {
+fn bound_int(v : @ast.Value) -> Int32 raise EvalError {
   match v {
     @ast.NumVal(d) =>
       if d != d.floor() || d != d {
@@ -735,7 +731,7 @@ fn bound_int(v : @ast.Value) -> Int raise EvalError {
 
 ///|
 /// Clamps a slice bound into [0, n] after negative normalization.
-fn clamp_bound(x : Int, n : Int) -> Int {
+fn clamp_bound(x : Int32, n : Int32) -> Int32 {
   let mut v = if x < 0 { n + x } else { x }
   if v < 0 {
     v = 0
@@ -882,7 +878,7 @@ fn key_of(pairs : Array[(String, @ast.Value)], k : String) -> @ast.Value {
 ///|
 /// Default max evaluation depth, mirroring expr's nesting protection.
 /// 0 disables the limit.
-pub fn default_max_depth() -> Int {
+pub fn default_max_depth() -> Int32 {
   10000
 }
 
@@ -890,7 +886,7 @@ pub fn default_max_depth() -> Int {
 /// Default max evaluation steps (charged at allocation points only —
 /// array/object literals, ranges, relative filters), mirroring
 /// expr's memory budget magnitude. 0 disables the limit.
-pub fn default_max_steps() -> Int {
+pub fn default_max_steps() -> Int32 {
   1000000
 }
 
@@ -899,7 +895,7 @@ pub fn default_max_steps() -> Int {
 /// element on a fresh Evaluator that shares this cell, so the whole
 /// expression draws from one budget (expr's VM-wide memory budget).
 pub(all) struct BudgetCell {
-  mut steps : Int
+  mut steps : Int32
 }
 
 ///|
@@ -911,14 +907,14 @@ pub struct Evaluator {
   grammar : Grammar
   context : @ast.Value
   rel_context : @ast.Value
-  mut depth : Int
-  max_depth : Int
+  mut depth : Int32
+  max_depth : Int32
   budget : BudgetCell
-  max_steps : Int
+  max_steps : Int32
   // Predicate slots (expr # / #index / #acc), set while evaluating a
   // predicate for aggregates; default to undefined elsewhere.
   mut slot_elem : @ast.Value
-  mut slot_idx : Int
+  mut slot_idx : Int32
   mut slot_acc : @ast.Value
   // Lexical let-bindings (expr `let`/sequences): innermost last. Empty
   // for every legacy (Jexl) evaluation, so legacy behavior is unchanged.
@@ -939,8 +935,8 @@ pub fn new_evaluator(grammar : Grammar, context : @ast.Value) -> Evaluator {
 pub fn new_evaluator_limited(
   grammar : Grammar,
   context : @ast.Value,
-  max_depth : Int,
-  max_steps : Int,
+  max_depth : Int32,
+  max_steps : Int32,
 ) -> Evaluator {
   {
     grammar,
@@ -948,7 +944,7 @@ pub fn new_evaluator_limited(
     rel_context: context,
     depth: 0,
     max_depth,
-    budget: { steps: 0 },
+    budget: { steps: 0, },
     max_steps,
     slot_elem: @ast.UndefVal,
     slot_idx: 0,
@@ -969,7 +965,7 @@ pub fn new_relative_evaluator(
     rel_context,
     depth: 0,
     max_depth: default_max_depth(),
-    budget: { steps: 0 },
+    budget: { steps: 0, },
     max_steps: default_max_steps(),
     slot_elem: @ast.UndefVal,
     slot_idx: 0,
@@ -1015,7 +1011,7 @@ pub fn Evaluator::eval(
 ///|
 /// Charges `n` allocation units against the shared budget (expr's
 /// memGrow analogue).
-fn Evaluator::charge_alloc(self : Evaluator, n : Int) -> Unit raise EvalError {
+fn Evaluator::charge_alloc(self : Evaluator, n : Int32) -> Unit raise EvalError {
   if self.max_steps > 0 {
     self.budget.steps = self.budget.steps + n
     if self.budget.steps > self.max_steps {

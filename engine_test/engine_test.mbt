@@ -437,7 +437,7 @@ test "allows binaryOps with manual operand evaluation" {
       r()
     }
   })
-  let cell : Array[Int] = [0]
+  let cell : Array[Int32] = [0]
   @engine.Engine::add_transform(inst, "inc", fn(
     args : Array[@ast.Value],
   ) -> @ast.Value {

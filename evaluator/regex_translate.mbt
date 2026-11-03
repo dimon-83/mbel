@@ -43,8 +43,8 @@ fn re_cut(what : String, hint : String) -> EvalError {
 /// was terminated by `:` (group form) rather than `)` (bare form).
 fn re_parse_flags(
   src : Array[Char],
-  start : Int,
-) -> (String, String, Int, Bool) raise EvalError {
+  start : Int32,
+) -> (String, String, Int32, Bool) raise EvalError {
   let on = StringBuilder::new()
   let off = StringBuilder::new()
   let mut minus = false
@@ -59,7 +59,9 @@ fn re_parse_flags(
     }
     if c == '-' {
       if minus {
-        raise re_cut("(?-…-…)", "at most one '-' is allowed in a flag group")
+        raise re_cut(
+          "(?-…-…)", "at most one '-' is allowed in a flag group",
+        )
       }
       minus = true
       i = i + 1
@@ -101,8 +103,7 @@ fn re_apply_flags(
       's' => s = true
       'm' =>
         raise re_cut(
-          "(?m)",
-          "multiline mode is not supported (use explicit anchors)",
+          "(?m)", "multiline mode is not supported (use explicit anchors)",
         )
       _ => raise re_cut("(?U)", "ungreedy mode is not supported")
     }
@@ -124,9 +125,9 @@ fn re_apply_flags(
 /// index just past the escape.
 fn re_translate_escape(
   src : Array[Char],
-  start : Int,
+  start : Int32,
   out : StringBuilder,
-) -> Int raise EvalError {
+) -> Int32 raise EvalError {
   if start + 1 >= src.length() {
     out.write_char('\\')
     return start + 1
@@ -176,8 +177,20 @@ fn re_translate_escape(
 /// True for the characters that must be escaped to be literal.
 fn is_regex_metachar(c : Char) -> Bool {
   match c {
-    '.' | '^' | '$' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '\\' =>
-      true
+    '.'
+    | '^'
+    | '$'
+    | '*'
+    | '+'
+    | '?'
+    | '('
+    | ')'
+    | '['
+    | ']'
+    | '{'
+    | '}'
+    | '|'
+    | '\\' => true
     _ => false
   }
 }
@@ -187,9 +200,9 @@ fn is_regex_metachar(c : Char) -> Bool {
 /// `\u00HH` and `\u{H…}`. Returns the index just past the escape.
 fn re_translate_hex_escape(
   src : Array[Char],
-  start : Int,
+  start : Int32,
   out : StringBuilder,
-) -> Int raise EvalError {
+) -> Int32 raise EvalError {
   let n = src.length()
   let i = start + 2
   if i < n && src[i] == '{' {
@@ -218,7 +231,7 @@ fn re_translate_hex_escape(
 
 ///|
 /// Uppercase hex, for the `\u{H…}` ranges a class expansion is built from.
-fn hex_upper(v : Int) -> String {
+fn hex_upper(v : Int32) -> String {
   let digits : Array[Char] = [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
   ]
@@ -243,8 +256,8 @@ fn hex_upper(v : Int) -> String {
 /// the index just past the escape.
 fn re_unicode_class_name(
   src : Array[Char],
-  start : Int,
-) -> (String, Int) raise EvalError {
+  start : Int32,
+) -> (String, Int32) raise EvalError {
   let n = src.length()
   let i = start + 2
   if i < n && src[i] == '{' {
@@ -269,7 +282,10 @@ fn re_unicode_class_name(
 
 ///|
 /// Writes the ranges of a `\p{…}` name to `out`.
-fn re_write_unicode_ranges(out : StringBuilder, name : String) -> Unit raise EvalError {
+fn re_write_unicode_ranges(
+  out : StringBuilder,
+  name : String,
+) -> Unit raise EvalError {
   let rs = match unicode_class(name) {
     Some(r) => r
     None =>
@@ -290,10 +306,10 @@ fn re_write_unicode_ranges(out : StringBuilder, name : String) -> Unit raise Eva
 /// evaluator/unicode_classes.mbt), so `\p{…}` matches expr exactly.
 fn re_translate_unicode_class(
   src : Array[Char],
-  start : Int,
+  start : Int32,
   out : StringBuilder,
   negated : Bool,
-) -> Int raise EvalError {
+) -> Int32 raise EvalError {
   let (name, next) = re_unicode_class_name(src, start)
   out.write_char('[')
   if negated {
@@ -310,9 +326,9 @@ fn re_translate_unicode_class(
 /// class set algebra, so it stays a cut — like `\D`/`\W`/`\S`.
 fn re_translate_unicode_class_inline(
   src : Array[Char],
-  start : Int,
+  start : Int32,
   out : StringBuilder,
-) -> Int raise EvalError {
+) -> Int32 raise EvalError {
   let (name, next) = re_unicode_class_name(src, start)
   re_write_unicode_ranges(out, name)
   next
@@ -321,7 +337,7 @@ fn re_translate_unicode_class_inline(
 ///|
 fn is_hex(c : Char) -> Bool {
   match c {
-    '0'..='9' | 'a'..='f' | 'A'..='F' => true
+    '0'..<='9' | 'a'..<='f' | 'A'..<='F' => true
     _ => false
   }
 }
@@ -333,9 +349,9 @@ fn is_hex(c : Char) -> Bool {
 /// they are rejected.
 fn re_translate_class_escape(
   src : Array[Char],
-  start : Int,
+  start : Int32,
   out : StringBuilder,
-) -> Int raise EvalError {
+) -> Int32 raise EvalError {
   if start + 1 >= src.length() {
     out.write_char('\\')
     return start + 1
@@ -347,29 +363,24 @@ fn re_translate_class_escape(
     's' => out.write_string("\\t\\n\\f\\r ")
     'D' =>
       raise re_cut(
-        "\\D inside a character class",
-        "write the negation as [^[:digit:]] or list the set explicitly",
+        "\\D inside a character class", "write the negation as [^[:digit:]] or list the set explicitly",
       )
     'W' =>
       raise re_cut(
-        "\\W inside a character class",
-        "write the negation as [^[:word:]] or list the set explicitly",
+        "\\W inside a character class", "write the negation as [^[:word:]] or list the set explicitly",
       )
     'S' =>
       raise re_cut(
-        "\\S inside a character class",
-        "write the negation as [^\\t\\n\\f\\r ] or list the set explicitly",
+        "\\S inside a character class", "write the negation as [^\\t\\n\\f\\r ] or list the set explicitly",
       )
     'p' => return re_translate_unicode_class_inline(src, start, out)
     'P' =>
       raise re_cut(
-        "\\P{…} inside a character class",
-        "write the class complement instead ([^…])",
+        "\\P{…} inside a character class", "write the class complement instead ([^…])",
       )
     'Q' | 'E' =>
       raise re_cut(
-        "\\Q…\\E inside a character class",
-        "escape the literal characters instead",
+        "\\Q…\\E inside a character class", "escape the literal characters instead",
       )
     // RE2 rejects these inside a class (they are anchors, word boundaries
     // or backreferences there, none of which is a class member); core would
@@ -381,7 +392,7 @@ fn re_translate_class_escape(
         c.to_string() +
         " is not valid inside a character class",
       )
-    '1'..='9' =>
+    '1'..<='9' =>
       raise EvalError::EvalErr(
         "invalid regex: backreferences are not supported",
       )
@@ -402,9 +413,9 @@ fn re_translate_class_escape(
 /// are escaped.
 fn re_translate_class(
   src : Array[Char],
-  start : Int,
+  start : Int32,
   out : StringBuilder,
-) -> Int raise EvalError {
+) -> Int32 raise EvalError {
   out.write_char('[')
   let n = src.length()
   let mut i = start + 1
@@ -464,7 +475,8 @@ fn re_translate_class(
         "cntrl" => "\\u{0}-\\u{1F}\\u{7F}"
         "graph" => "\\u{21}-\\u{7E}"
         "print" => "\\u{20}-\\u{7E}"
-        "punct" => "\\u{21}-\\u{2F}\\u{3A}-\\u{40}\\u{5B}-\\u{60}\\u{7B}-\\u{7E}"
+        "punct" =>
+          "\\u{21}-\\u{2F}\\u{3A}-\\u{40}\\u{5B}-\\u{60}\\u{7B}-\\u{7E}"
         _ => ""
       }
       if expanded != "" {
@@ -493,9 +505,9 @@ fn re_translate_class(
 /// wrapper around that remainder — hence the wrapper bookkeeping here.
 fn re_translate_seq(
   src : Array[Char],
-  start : Int,
+  start : Int32,
   flags : ReFlags,
-) -> (String, Int) raise EvalError {
+) -> (String, Int32) raise EvalError {
   let out = StringBuilder::new()
   let inherited_i = flags.case_insensitive
   let mut cur_i = flags.case_insensitive

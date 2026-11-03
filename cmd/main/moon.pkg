@@ -7,6 +7,4 @@ import {
   "moonbitlang/core/json",
 }
 
-options(
-  "is-main": true,
-)
+pkgtype(kind: "executable")

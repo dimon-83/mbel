@@ -360,14 +360,14 @@ test "expr want table: expr-lang TestExpr rows on both engines" {
         @engine.Walk => "walk"
         @engine.Vm => "vm"
       }
-      let made = try? want_new_engine(mode)
+      let made = Ok(want_new_engine(mode)) catch { e => Err(e) }
       match made {
         Ok(e) => {
-          let res = try? @engine.Engine::eval_expr(
-            e,
-            code,
-            @ast.ObjectVal(want_row_env()),
-          )
+          let res = Ok(
+            @engine.Engine::eval_expr(e, code, @ast.ObjectVal(want_row_env())),
+          ) catch {
+            e => Err(e)
+          }
           match res {
             Ok(v) => {
               ran += 1

@@ -326,9 +326,21 @@ test "matches operator (regex semantics)" {
   expect_v("\"hello\" matches \"xyz\"", @ast.BoolVal(false), "matches miss")
   expect_v("\"hello\" matches \"hello\"", @ast.BoolVal(true), "matches full")
   // Anchors and the `.` wildcard are regex, not literal text.
-  expect_v("\"hello\" matches \"^h.*o$\"", @ast.BoolVal(true), "matches anchors")
-  expect_v("\"hello\" matches \"h.llo\"", @ast.BoolVal(true), "matches wildcard")
-  expect_v("\"hello\" matches \"^e\"", @ast.BoolVal(false), "matches anchor miss")
+  expect_v(
+    "\"hello\" matches \"^h.*o$\"",
+    @ast.BoolVal(true),
+    "matches anchors",
+  )
+  expect_v(
+    "\"hello\" matches \"h.llo\"",
+    @ast.BoolVal(true),
+    "matches wildcard",
+  )
+  expect_v(
+    "\"hello\" matches \"^e\"",
+    @ast.BoolVal(false),
+    "matches anchor miss",
+  )
   expect_v("\"hello\" matches \"o$\"", @ast.BoolVal(true), "matches end anchor")
   // Character classes and quantifiers.
   expect_v("\"abc123\" matches \"[0-9]+\"", @ast.BoolVal(true), "matches class")

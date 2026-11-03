@@ -9,7 +9,7 @@
 ///|
 fn to_int64_arg(
   args : Array[@ast.Value],
-  i : Int,
+  i : Int32,
   name : String,
 ) -> Int64 raise @evaluator.EvalError {
   let x = num(arg(args, i, name), name)

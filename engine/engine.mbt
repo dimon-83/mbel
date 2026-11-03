@@ -41,24 +41,24 @@ pub struct Engine {
   grammar : @evaluator.Grammar
   // Resource budgets, mirroring expr's MaxNodes / memory protections.
   // 0 disables a limit.
-  mut max_nodes : Int
-  mut max_depth : Int
-  mut max_steps : Int
+  mut max_nodes : Int32
+  mut max_depth : Int32
+  mut max_steps : Int32
   mut engine : EngineMode
   // Expression-defined user-function call depth (userfuncs.mbt):
   // incremented per user-function call on this instance so recursion
   // across any registration batch raises instead of overflowing the
   // host stack.
-  mut userfn_depth : Int
+  mut userfn_depth : Int32
   // Exact arity of every registered user function (checked-mode P2):
   // call sites in the main expression and in checked bodies are
   // rejected when the argument count differs.
-  userfn_arities : Array[(String, Int)]
+  userfn_arities : Array[(String, Int32)]
   // Resource-gate observability: how often each budget was hit, keyed by
   // reason ("nodes", "nesting", "depth", "steps", "memory",
   // "value_nesting"). Budget *messages* are contract-locked (AGENTS.md),
   // so this is where the outcome of the gate is reported instead.
-  budget_stats : Array[(String, Int)]
+  budget_stats : Array[(String, Int32)]
 }
 
 ///|
@@ -90,9 +90,9 @@ pub fn new() -> Engine {
 /// budget options.
 pub fn Engine::set_limits(
   self : Engine,
-  max_nodes : Int,
-  max_depth : Int,
-  max_steps : Int,
+  max_nodes : Int32,
+  max_depth : Int32,
+  max_steps : Int32,
 ) -> Unit {
   self.max_nodes = max_nodes
   self.max_depth = max_depth
@@ -160,9 +160,7 @@ fn[T] Engine::guard_budget(
   self : Engine,
   f : () -> T raise EngineError,
 ) -> T raise EngineError {
-  let r : Result[T, String] = try {
-    Ok(f())
-  } catch {
+  let r : Result[T, String] = Ok(f()) catch {
     EngineError::EngineErr(m) => Err(m)
   }
   match r {
@@ -181,7 +179,7 @@ fn[T] Engine::guard_budget(
 /// without it a tripped limit is invisible to the embedder. `reason` is
 /// one of `nodes`, `nesting`, `depth`, `steps`, `memory`,
 /// `value_nesting`, `flatten_depth`.
-pub fn Engine::budget_stats(self : Engine) -> Array[(String, Int)] {
+pub fn Engine::budget_stats(self : Engine) -> Array[(String, Int32)] {
   self.budget_stats.copy()
 }
 
@@ -311,7 +309,7 @@ pub fn Engine::get_function(self : Engine, name : String) -> Fn? {
 pub fn Engine::add_binary_op(
   self : Engine,
   operator : String,
-  precedence : Int,
+  precedence : Int32,
   f : (@ast.Value, @ast.Value) -> @ast.Value,
 ) -> Unit {
   self.upsert_element(
@@ -340,7 +338,7 @@ pub fn Engine::add_binary_op(
 pub fn Engine::add_binary_op_manual(
   self : Engine,
   operator : String,
-  precedence : Int,
+  precedence : Int32,
   f : (@evaluator.Lazy, @evaluator.Lazy) -> @ast.Value raise @evaluator.EvalError,
 ) -> Unit {
   self.upsert_element(
@@ -393,7 +391,7 @@ pub fn Engine::create_expression(
   self : Engine,
   expr_str : String,
 ) -> Expression {
-  Expression::{ engine: self, expr_str, compiled: None, program: None }
+  Expression::{ engine: self, expr_str, compiled: None, program: None, }
 }
 
 ///|

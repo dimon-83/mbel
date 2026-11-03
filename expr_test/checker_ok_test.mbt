@@ -97,7 +97,7 @@ test "checker compile-ok table: expr TestCheck rows compile" {
   for row in check_ok_rows {
     // TestCheck asserts the CHECKER accepts these programs — the row
     // is never executed. mbel's checked compile = check + lower.
-    let r = try? @expr.compile_expr_checked_limited(row, 0)
+    let r = Ok(@expr.compile_expr_checked_limited(row, 0)) catch { e => Err(e) }
     match r {
       Ok(_) => ran += 1
       Err(@evaluator.EvalErr(m)) =>

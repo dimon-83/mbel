@@ -1,0 +1,81 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "dimon-83/mbel/engine"
+
+import {
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/evaluator",
+  "dimon-83/mbel/grammar",
+}
+
+// Values
+pub fn new() -> Engine
+
+pub fn user_function_params(String, String) -> Array[String] raise EngineError
+
+// Errors
+pub(all) suberror EngineError {
+  EngineErr(String)
+}
+
+// Types and methods
+pub struct Engine {
+  elements : Array[@grammar.ElementDef]
+  grammar : @evaluator.Grammar
+  mut max_nodes : Int32
+  mut max_depth : Int32
+  mut max_steps : Int32
+  mut engine : EngineMode
+  mut userfn_depth : Int32
+  userfn_arities : Array[(String, Int32)]
+  budget_stats : Array[(String, Int32)]
+}
+pub fn Engine::add_binary_op(Self, String, Int32, (@ast.Value, @ast.Value) -> @ast.Value) -> Unit
+pub fn Engine::add_binary_op_manual(Self, String, Int32, (() -> @ast.Value raise @evaluator.EvalError, () -> @ast.Value raise @evaluator.EvalError) -> @ast.Value raise @evaluator.EvalError) -> Unit
+pub fn Engine::add_expression_functions(Self, Array[UserFunctionDef], @ast.Value?) -> Array[(String, Array[String])] raise EngineError
+pub fn Engine::add_expression_functions_checked(Self, Array[UserFunctionDef], @ast.Value?) -> Array[(String, Array[String])] raise EngineError
+pub fn Engine::add_function(Self, String, (Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError) -> Unit
+pub fn Engine::add_functions(Self, Array[(String, (Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError)]) -> Unit
+pub fn Engine::add_transform(Self, String, (Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError) -> Unit
+pub fn Engine::add_transforms(Self, Array[(String, (Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError)]) -> Unit
+pub fn Engine::add_unary_op(Self, String, (@ast.Value) -> @ast.Value) -> Unit
+pub fn Engine::budget_stats(Self) -> Array[(String, Int32)]
+pub fn Engine::clear_caches(Self) -> Unit
+pub fn Engine::compile(Self, String) -> Expression raise EngineError
+pub fn Engine::create_expression(Self, String) -> Expression
+pub fn Engine::eval(Self, String, @ast.Value) -> @ast.Value raise EngineError
+pub fn Engine::eval_ast(Self, @ast.AstNode, @ast.Value) -> @ast.Value raise EngineError
+pub fn Engine::eval_default(Self, String) -> @ast.Value raise EngineError
+pub fn Engine::eval_expr(Self, String, @ast.Value) -> @ast.Value raise EngineError
+pub fn Engine::eval_expr_checked(Self, String, @ast.Value) -> @ast.Value raise EngineError
+pub fn Engine::get_function(Self, String) -> ((Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError)?
+pub fn Engine::get_transform(Self, String) -> ((Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError)?
+pub fn Engine::remove_op(Self, String) -> Unit
+pub fn Engine::reset_budget_stats(Self) -> Unit
+pub fn Engine::set_engine(Self, EngineMode) -> Unit
+pub fn Engine::set_limits(Self, Int32, Int32, Int32) -> Unit
+
+pub(all) enum EngineMode {
+  Walk
+  Vm
+}
+
+pub struct Expression {
+  engine : Engine
+  expr_str : String
+  mut compiled : @ast.AstNode?
+  mut program : @evaluator.Program?
+}
+pub fn Expression::compile(Self) -> Unit raise EngineError
+pub fn Expression::eval(Self, @ast.Value) -> @ast.Value raise EngineError
+pub fn Expression::eval_default(Self) -> @ast.Value raise EngineError
+
+pub(all) struct UserFunctionDef {
+  name : String
+  params : Array[String]?
+  body : String
+}
+
+// Type aliases
+pub type Fn = (Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError
+
+// Traits

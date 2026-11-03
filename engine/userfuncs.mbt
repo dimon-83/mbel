@@ -302,7 +302,7 @@ fn userfn_context(
 /// with a clean error well below the host stack limit on every target
 /// (the js target's stack is the smallest; 256 nested closure +
 /// evaluator frames stay comfortably under it).
-fn userfn_max_call_depth() -> Int {
+fn userfn_max_call_depth() -> Int32 {
   256
 }
 
@@ -391,9 +391,9 @@ fn Engine::checker_callables(self : Engine) -> Array[String] {
 
 ///|
 fn upsert_arity(
-  arities : Array[(String, Int)],
+  arities : Array[(String, Int32)],
   name : String,
-  n : Int,
+  n : Int32,
 ) -> Unit {
   for i in 0..<arities.length() {
     let (existing, _) = arities[i]

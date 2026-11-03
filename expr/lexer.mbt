@@ -25,14 +25,14 @@ pub(all) enum TokenKind {
 pub struct Token {
   kind : TokenKind
   text : String
-  pos : Int
-  line : Int
-  col : Int
+  pos : Int32
+  line : Int32
+  col : Int32
 } derive(Debug, Eq)
 
 ///|
 pub(all) suberror LexError {
-  LexErr(String, Int, Int) // message, line, col
+  LexErr(String, Int32, Int32) // message, line, col
 }
 
 ///|
@@ -43,8 +43,8 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
   let mut i = 0
   let mut line = 1
   let mut line_start = 0
-  fn tok(kind : TokenKind, text : String, pos : Int) -> Token {
-    { kind, text, pos, line, col: pos - line_start + 1 }
+  fn tok(kind : TokenKind, text : String, pos : Int32) -> Token {
+    { kind, text, pos, line, col: pos - line_start + 1, }
   }
   while i < n {
     let c = chars[i]
@@ -476,7 +476,7 @@ pub fn tokenize(source : String) -> Array[Token] raise LexError {
 ///|
 /// Encodes code point `cp` as UTF-8, appending each byte as a 0-255
 /// char so a byte string's text is one char per byte.
-fn write_utf8_bytes(buf : StringBuilder, cp : Int) -> Unit {
+fn write_utf8_bytes(buf : StringBuilder, cp : Int32) -> Unit {
   if cp <= 0x7F {
     buf.write_char(cp.unsafe_to_char())
   } else if cp <= 0x7FF {
@@ -537,7 +537,7 @@ fn is_digit(c : Char) -> Bool {
 }
 
 ///|
-fn hex_val(c : Char) -> Int? {
+fn hex_val(c : Char) -> Int32? {
   if c >= '0' && c <= '9' {
     return Some(c.to_int() - '0'.to_int())
   }
@@ -552,13 +552,14 @@ fn hex_val(c : Char) -> Int? {
 
 ///|
 /// Operators, longest-match first.
+
 ///|
 /// Slices by code point. The lexer tracks indices into `chars`, so slicing
 /// `source[a:b]` (UTF-16 units) silently shifted every token after an
 /// astral character by one unit: `"\u{1F600}" matches "x"` lexed the
 /// operator as ` matche`, and `len("\u{1F600}") + 1` evaluated to 1
 /// instead of 2.
-fn cp_slice(chars : Array[Char], start : Int, stop : Int) -> String {
+fn cp_slice(chars : Array[Char], start : Int32, stop : Int32) -> String {
   let buf = StringBuilder::new()
   for k in start..<stop {
     buf.write_char(chars[k])
@@ -566,7 +567,8 @@ fn cp_slice(chars : Array[Char], start : Int, stop : Int) -> String {
   buf.to_string()
 }
 
-fn scan_operator(chars : Array[Char], i : Int, n : Int) -> (String, Int) {
+///|
+fn scan_operator(chars : Array[Char], i : Int32, n : Int32) -> (String, Int32) {
   let two = if i + 1 < n {
     String::from_array([chars[i], chars[i + 1]])
   } else {
@@ -608,9 +610,9 @@ fn scan_operator(chars : Array[Char], i : Int, n : Int) -> (String, Int) {
 /// Scans `[0-9]*\.[0-9]+([eE][+-]?d+)?` starting at a '.'.
 fn scan_float(
   chars : Array[Char],
-  start : Int,
+  start : Int32,
   source : String,
-) -> (String, Int) {
+) -> (String, Int32) {
   let n = chars.length()
   let mut i = start
   if i < n && chars[i] == '.' {
@@ -640,9 +642,9 @@ fn scan_float(
 /// prefixes, `_` separators, fraction and exponent.
 fn scan_number(
   chars : Array[Char],
-  start : Int,
+  start : Int32,
   source : String,
-) -> (TokenKind, String, Int) {
+) -> (TokenKind, String, Int32) {
   let n = chars.length()
   let c0 = chars[start]
   // radix prefixes
@@ -736,7 +738,7 @@ fn strip_underscores(s : String) -> String {
 
 ///|
 /// Radix string to Int64 (digits assumed valid for the radix).
-fn parse_radix(digits : String, radix : Int) -> Int64 {
+fn parse_radix(digits : String, radix : Int32) -> Int64 {
   let mut v = 0L
   let base = radix.to_int64()
   for c in digits {

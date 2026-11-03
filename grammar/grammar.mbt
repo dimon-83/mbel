@@ -40,7 +40,7 @@ pub(all) enum TokenType {
 pub struct ElementDef {
   symbol : String
   elem_type : TokenType
-  precedence : Int
+  precedence : Int32
 }
 
 ///|
@@ -83,9 +83,9 @@ fn is_ident_cont_c(c : Char) -> Bool {
 pub fn element_def(
   symbol : String,
   elem_type : TokenType,
-  precedence : Int,
+  precedence : Int32,
 ) -> ElementDef {
-  { symbol, elem_type, precedence }
+  { symbol, elem_type, precedence, }
 }
 
 ///|
@@ -150,7 +150,7 @@ pub fn find_element(
 ///|
 /// Looks up an operator's precedence in an element list, falling back
 /// to the static default grammar table.
-pub fn precedence_of(elements : Array[ElementDef], op : String) -> Int {
+pub fn precedence_of(elements : Array[ElementDef], op : String) -> Int32 {
   match find_element(elements, op) {
     Some(def) => def.precedence
     None => precedence(op)
@@ -202,7 +202,7 @@ pub fn element_type(s : String) -> TokenType? {
 /// Values from Jexl's grammar.js. `!` (unary) has Infinity there;
 /// the parser walks through unary nodes when placing binary ops, so
 /// it must outrank every finite precedence.
-pub fn precedence(op : String) -> Int {
+pub fn precedence(op : String) -> Int32 {
   match op {
     "!" => 1000000
     "^" | "%" => 50

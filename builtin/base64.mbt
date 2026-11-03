@@ -35,7 +35,7 @@ pub fn utf8_decode(b : Bytes) -> String {
   let mut i = 0
   while i < n {
     let b0 = b[i].to_int()
-    let cp : Int = if b0 < 0x80 {
+    let cp : Int32 = if b0 < 0x80 {
       b0
     } else if b0 >= 0xC0 && b0 < 0xE0 && i + 1 < n {
       ((b0 & 0x1F) << 6) | (b[i + 1].to_int() & 0x3F)
@@ -51,7 +51,7 @@ pub fn utf8_decode(b : Bytes) -> String {
     } else {
       0xFFFD
     }
-    let width : Int = if b0 < 0x80 {
+    let width : Int32 = if b0 < 0x80 {
       1
     } else if b0 >= 0xC0 && b0 < 0xE0 {
       2
@@ -154,7 +154,7 @@ pub fn decode64(s : String) -> String raise @evaluator.EvalError {
 }
 
 ///|
-fn alpha_index(c : Char) -> Int {
+fn alpha_index(c : Char) -> Int32 {
   if c >= 'A' && c <= 'Z' {
     return c.to_int() - 'A'.to_int()
   }

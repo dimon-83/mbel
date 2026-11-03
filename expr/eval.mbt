@@ -18,7 +18,7 @@ pub fn compile_expr(
 /// legacy parser's node budget (engine `set_limits` max_nodes).
 pub fn compile_expr_limited(
   source : String,
-  max_tokens : Int,
+  max_tokens : Int32,
 ) -> @ast.AstNode? raise @evaluator.EvalError {
   let node = parse_limited(source, max_tokens) catch {
     ParseErrExpr(msg, line, col) =>
@@ -43,7 +43,7 @@ pub fn compile_expr_limited(
 /// violations (the strict/Compile-mode counterpart of compile_expr).
 pub fn compile_expr_checked_limited(
   source : String,
-  max_tokens : Int,
+  max_tokens : Int32,
 ) -> @ast.AstNode? raise @evaluator.EvalError {
   let node = parse_limited(source, max_tokens) catch {
     ParseErrExpr(msg, line, col) =>
@@ -73,8 +73,8 @@ pub fn compile_expr_checked_limited(
 /// same symbol table as the function bodies.
 pub fn compile_expr_checked_with_functions_limited(
   source : String,
-  max_tokens : Int,
-  functions : Array[(String, Int)],
+  max_tokens : Int32,
+  functions : Array[(String, Int32)],
   callables : Array[String],
 ) -> @ast.AstNode? raise @evaluator.EvalError {
   let node = parse_limited(source, max_tokens) catch {
@@ -114,9 +114,9 @@ pub fn compile_function_body_checked_limited(
   name : String,
   body : String,
   params : Array[String],
-  functions : Array[(String, Int)],
+  functions : Array[(String, Int32)],
   callables : Array[String],
-  max_tokens : Int,
+  max_tokens : Int32,
 ) -> @ast.AstNode raise @evaluator.EvalError {
   let node = parse_limited(body, max_tokens) catch {
     ParseErrExpr(msg, line, col) =>
@@ -153,8 +153,8 @@ pub fn compile_function_body_checked_limited(
 ///    | ..^
 fn positioned(
   msg : String,
-  line : Int,
-  col : Int,
+  line : Int32,
+  col : Int32,
   source : String,
 ) -> String {
   let lines = source.split("\n").map(fn(v) { v.to_owned() }).to_array()

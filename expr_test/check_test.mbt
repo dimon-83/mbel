@@ -58,7 +58,7 @@ fn expect_checked(
 fn expect_checked_err(
   src : String,
   msg_line : String,
-  dots : Int,
+  dots : Int32,
   label : String,
 ) -> Unit raise {
   let mut caret = ""
@@ -218,20 +218,16 @@ test "strict mode: byte strings type as []uint8" {
 /// element type (expr types it as a plain `array`, not an error).
 test "checker: in checks membership types like expr" {
   expect_checked_err(
-    "1 in [\"a\"]", "cannot use int as type string in array (1:3)", 2,
-    "int in [string]",
+    "1 in [\"a\"]", "cannot use int as type string in array (1:3)", 2, "int in [string]",
   )
   expect_checked_err(
-    "\"a\" in [1]", "cannot use string as type int in array (1:5)", 4,
-    "string in [int]",
+    "\"a\" in [1]", "cannot use string as type int in array (1:5)", 4, "string in [int]",
   )
   expect_checked_err(
-    "true in [1]", "cannot use bool as type int in array (1:6)", 5,
-    "bool in [int]",
+    "true in [1]", "cannot use bool as type int in array (1:6)", 5, "bool in [int]",
   )
   expect_checked_err(
-    "1 in [b\"x\"]", "cannot use int as type []uint8 in array (1:3)", 2,
-    "int in [bytes]",
+    "1 in [b\"x\"]", "cannot use int as type []uint8 in array (1:3)", 2, "int in [bytes]",
   )
   // Compatible operands still evaluate; `1 in [1.0]` agrees with
   // `1 == 1.0` (true) because membership uses the operator's equality.
@@ -253,8 +249,7 @@ test "checker: in checks map key types like expr" {
     "1 in {a: 1}", "cannot use int as type string in map key (1:3)", 2, "int key",
   )
   expect_checked_err(
-    "1.5 in {a: 1}", "cannot use float as type string in map key (1:5)", 4,
-    "float key",
+    "1.5 in {a: 1}", "cannot use float as type string in map key (1:5)", 4, "float key",
   )
   expect_checked_err(
     "true in {a: 1}", "cannot use bool as type string in map key (1:6)", 5, "bool key",

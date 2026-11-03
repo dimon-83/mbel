@@ -63,8 +63,7 @@ test "expr parser: chained comparisons" {
     "1 < x < 10", "bin(&&,bin(<,int:1,id:x),bin(<,id:x,int:10))", "chain",
   )
   expect_dump(
-    "1 < x <= 5 < y",
-    "bin(&&,bin(&&,bin(<,int:1,id:x),bin(<=,id:x,int:5)),bin(<,int:5,id:y))",
+    "1 < x <= 5 < y", "bin(&&,bin(&&,bin(<,int:1,id:x),bin(<=,id:x,int:5)),bin(<,int:5,id:y))",
     "chain 3 (each link compares the last operand — expr semantics)",
   )
 }
@@ -215,8 +214,14 @@ test "expr lexer: astral characters do not shift later tokens" {
   // string, which indexes UTF-16 units: after an astral character every
   // later token moved by one unit. `"😀" matches "x"` lexed the operator
   // as ` matche` (a parse error) and `len("😀") + 1` evaluated to 1.
-  expect_dump("len(\"😀\") + 1", "bin(+,call(id:len,str:😀),int:1)", "astral then +")
-  expect_dump("len('👍') + 1", "bin(+,call(id:len,str:👍),int:1)", "astral single-quoted")
-  expect_dump("\"😀\" matches \"x\"", "bin(matches,str:😀,str:x)", "astral then word operator")
+  expect_dump(
+    "len(\"😀\") + 1", "bin(+,call(id:len,str:😀),int:1)", "astral then +",
+  )
+  expect_dump(
+    "len('👍') + 1", "bin(+,call(id:len,str:👍),int:1)", "astral single-quoted",
+  )
+  expect_dump(
+    "\"😀\" matches \"x\"", "bin(matches,str:😀,str:x)", "astral then word operator",
+  )
   expect_dump("\"a😀b\" + \"c\"", "bin(+,str:a😀b,str:c)", "astral inside")
 }

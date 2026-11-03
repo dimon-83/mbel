@@ -11,32 +11,32 @@
 /// position of the infix OPERATOR, matching expr's caret placement).
 /// Tests assert structure via dump(), which ignores positions.
 pub(all) enum ENode {
-  ENil(Int, Int)
-  EBool(Bool, Int, Int)
-  EInt(Int64, Int, Int) // decimal/hex/octal/binary, `_` separators
+  ENil(Int32, Int32)
+  EBool(Bool, Int32, Int32)
+  EInt(Int64, Int32, Int32) // decimal/hex/octal/binary, `_` separators
   // folded out
-  EFloat(Double, Int, Int)
-  EStr(String, Int, Int)
-  EBytes(Bytes, Int, Int)
-  EIdent(String, Int, Int) // identifiers and $env
-  EMember(ENode, String, Bool, Int, Int) // base.name (opt for ?.name)
-  EIndex(ENode, ENode, Int, Int) // base[index]
-  ESlice(ENode, ENode?, ENode?, Int, Int) // base[from:to]
-  ECall(ENode, Array[ENode], Int, Int) // callee(args...)
-  EPred(ENode, Int, Int) // brace-wrapped/predicate-position expr
-  EArray(Array[ENode], Int, Int)
-  EMap(Array[(ENode, ENode)], Int, Int)
-  EUnary(String, ENode, Int, Int) // ! - + not
-  EBinary(String, ENode, ENode, Int, Int) // infix; pos = the operator
-  ECond(ENode, ENode?, ENode?, Int, Int) // ternary ?: and if/else
-  ELet(String, ENode, ENode, Int, Int) // let x = value; rest
-  ESeq(Array[ENode], Int, Int) // a; b; c
-  EPointer(String, Int, Int) // # / #index / #acc
+  EFloat(Double, Int32, Int32)
+  EStr(String, Int32, Int32)
+  EBytes(Bytes, Int32, Int32)
+  EIdent(String, Int32, Int32) // identifiers and $env
+  EMember(ENode, String, Bool, Int32, Int32) // base.name (opt for ?.name)
+  EIndex(ENode, ENode, Int32, Int32) // base[index]
+  ESlice(ENode, ENode?, ENode?, Int32, Int32) // base[from:to]
+  ECall(ENode, Array[ENode], Int32, Int32) // callee(args...)
+  EPred(ENode, Int32, Int32) // brace-wrapped/predicate-position expr
+  EArray(Array[ENode], Int32, Int32)
+  EMap(Array[(ENode, ENode)], Int32, Int32)
+  EUnary(String, ENode, Int32, Int32) // ! - + not
+  EBinary(String, ENode, ENode, Int32, Int32) // infix; pos = the operator
+  ECond(ENode, ENode?, ENode?, Int32, Int32) // ternary ?: and if/else
+  ELet(String, ENode, ENode, Int32, Int32) // let x = value; rest
+  ESeq(Array[ENode], Int32, Int32) // a; b; c
+  EPointer(String, Int32, Int32) // # / #index / #acc
 }
 
 ///|
 /// Node start position (1-based). EBinary reports its operator token.
-pub fn node_line(n : ENode) -> Int {
+pub fn node_line(n : ENode) -> Int32 {
   match n {
     ENil(l, _)
     | EBool(_, l, _)
@@ -63,7 +63,7 @@ pub fn node_line(n : ENode) -> Int {
 
 ///|
 /// Node start column (1-based; EBinary = the operator's column).
-pub fn node_col(n : ENode) -> Int {
+pub fn node_col(n : ENode) -> Int32 {
   match n {
     ENil(_, c)
     | EBool(_, _, c)
@@ -91,7 +91,7 @@ pub fn node_col(n : ENode) -> Int {
 ///|
 /// Binary operator precedences (expr parser/operator/operator.go):
 /// higher binds tighter; `**`/`^` are right-associative.
-pub fn binary_prec(op : String) -> Int {
+pub fn binary_prec(op : String) -> Int32 {
   match op {
     "|" => 0
     "or" | "||" => 10

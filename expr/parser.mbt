@@ -13,13 +13,13 @@
 
 ///|
 pub(all) suberror ParseErrorExpr {
-  ParseErrExpr(String, Int, Int) // message, line, col
+  ParseErrExpr(String, Int32, Int32) // message, line, col
 }
 
 ///|
 /// Default token budget for expr-source parsing, mirroring the legacy
 /// parser's node budget (expr's MaxNodes). 0 disables the limit.
-pub fn default_max_tokens() -> Int {
+pub fn default_max_tokens() -> Int32 {
   10000
 }
 
@@ -31,22 +31,22 @@ pub fn default_max_tokens() -> Int {
 /// capped conservatively (each nesting level costs several parser
 /// frames; 1000 frames ≈ 250 construct levels). Mirrors the legacy
 /// parser's nesting budget spirit.
-pub fn default_max_parse_frames() -> Int {
+pub fn default_max_parse_frames() -> Int32 {
   1000
 }
 
 ///|
 struct Parser {
   toks : Array[Token]
-  mut pos : Int
+  mut pos : Int32
   mut in_predicate : Bool
   // Whether the expression being parsed began at precedence 0 (a
   // top-level/program site): expr only accepts `if`/`let` at those
   // sites, never as a binary operand (`1 + if …` is a parse error).
   mut at_expr0 : Bool
   // budget: recursion-frame guard
-  max_frames : Int
-  mut frames : Int
+  max_frames : Int32
+  mut frames : Int32
 }
 
 ///|
@@ -63,7 +63,7 @@ pub fn parse(source : String) -> ENode raise ParseErrorExpr {
 /// guard always applies.
 pub fn parse_limited(
   source : String,
-  max_tokens : Int,
+  max_tokens : Int32,
 ) -> ENode raise ParseErrorExpr {
   // Source-length cap: tokenization materializes the whole token array
   // (and a single huge string literal is ONE token), so node budgets
@@ -100,7 +100,7 @@ pub fn parse_limited(
 /// later phases that recurse over the AST (lowering, constant
 /// folding, the walk engine's eval recursion) within the host stack,
 /// mirroring the legacy parser's nesting budget.
-pub fn default_max_ast_depth() -> Int {
+pub fn default_max_ast_depth() -> Int32 {
   1000
 }
 
@@ -109,8 +109,8 @@ pub fn default_max_ast_depth() -> Int {
 /// unlimited) and tracks the maximum tree depth without host
 /// recursion, so deep-but-legally-parsed shapes are rejected here
 /// rather than overflowing the stack in lowering/folding.
-fn ast_budget_check(n : ENode, max_nodes : Int) -> Unit raise ParseErrorExpr {
-  let stack : Array[(ENode, Int)] = [(n, 1)]
+fn ast_budget_check(n : ENode, max_nodes : Int32) -> Unit raise ParseErrorExpr {
+  let stack : Array[(ENode, Int32)] = [(n, 1)]
   let mut count = 0
   while stack.length() > 0 {
     let (node, depth) = stack.pop().unwrap()
@@ -483,7 +483,7 @@ fn op_of(t : Token) -> String? {
 ///|
 fn Parser::parse_binary(
   self : Parser,
-  min_prec : Int,
+  min_prec : Int32,
 ) -> ENode raise ParseErrorExpr {
   self.enter()
   let r = self.parse_binary_inner(min_prec)
@@ -494,7 +494,7 @@ fn Parser::parse_binary(
 ///|
 fn Parser::parse_binary_inner(
   self : Parser,
-  min_prec : Int,
+  min_prec : Int32,
 ) -> ENode raise ParseErrorExpr {
   // Only precedence-0 sites accept `if` at expression start; deeper
   // operand parses clear the flag so `1 + if …` errors.
@@ -913,7 +913,7 @@ fn Parser::is_kw_text(self : Parser, t : Token) -> Bool {
 }
 
 ///|
-fn Parser::next_is_colon_or_comma_like(self : Parser, offset : Int) -> Bool {
+fn Parser::next_is_colon_or_comma_like(self : Parser, offset : Int32) -> Bool {
   let idx = self.pos + 1 + offset
   if idx >= self.toks.length() {
     return false
@@ -925,7 +925,7 @@ fn Parser::next_is_colon_or_comma_like(self : Parser, offset : Int) -> Bool {
 ///|
 /// After `{` + `(`, decides if the parenthesized expression is a map
 /// key: scans to the matching `)` and checks for `:`.
-fn Parser::paren_is_key(self : Parser, offset : Int) -> Bool {
+fn Parser::paren_is_key(self : Parser, offset : Int32) -> Bool {
   let mut depth = 0
   let mut idx = self.pos + 1 + offset
   while idx < self.toks.length() {
@@ -1260,8 +1260,8 @@ fn int_from_text(text : String) -> ENode raise ParseErrorExpr {
 /// digits), rejecting values beyond int64 range like expr does.
 fn int_from_text_at(
   text : String,
-  line : Int,
-  col : Int,
+  line : Int32,
+  col : Int32,
 ) -> ENode raise ParseErrorExpr {
   let chars = text.to_array()
   let digits = if chars.length() > 4 && chars[0] == 'i' && chars[1] == 'n' {
@@ -1298,7 +1298,7 @@ fn parse_int64_checked(digits : String) -> Int64? {
 }
 
 ///|
-fn float_from_text(text : String, line : Int, col : Int) -> ENode {
+fn float_from_text(text : String, line : Int32, col : Int32) -> ENode {
   let chars = text.to_array()
   if chars.length() > 6 && chars[0] == 'f' && chars[1] == 'l' {
     EFloat(parse_float_str(text[6:].to_owned()), line, col)

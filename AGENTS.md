@@ -33,19 +33,21 @@ You can browse and install extra skills here:
 ## Tooling
 
 - `moon fmt` is used to format your code properly.
-  **Toolchain caveat (2026-11-03):** the repo's formatting baseline predates
-  the moon `0.1.20261012` toolchain. Newer toolchains' `moon fmt` is NOT a
-  pure formatter — it also rewrites `Int` to `Int32`, converts
-  `try { Ok(f()) } catch {}` to `Ok(f()) catch {}`, and adds trailing commas,
-  churning dozens of unrelated files (~9k lines observed). Do NOT run
-  `moon fmt` unless your toolchain matches the repo baseline; a deliberate
-  toolchain upgrade (bump + full reformat + three-target tests + generated
-  files) must land as a single standalone commit.
+  **Toolchain: match the pin.** The repo formats and compiles against the
+  toolchain in `.moonbit-version` (`0.10.19+97801ee1b` = moon CLI
+  `0.1.20261029`), which CI installs. Formatting with an older toolchain
+  leaves the tree unformatted; formatting with a newer one may introduce
+  migrations the pin does not cover. Before bumping the pin, run the
+  three-target suite against the new toolchain and land the bump together
+  with the full `moon info && moon fmt` output in one standalone commit.
 
-- The repo pins its MoonBit toolchain via `.moonbit-version` (moonc-style
-  version `0.10.15+943464bfa` = moon CLI `0.1.20261012`); CI installs exactly
-  that build. Note the code still uses `try?`, which newer toolchains have
-  removed — migrating off it belongs to the toolchain-upgrade commit above.
+- The repo pins its MoonBit toolchain via `.moonbit-version`; the install
+  script takes that moonc-style version directly
+  (`curl ... | bash -s -- "$(cat .moonbit-version)"`). `mooncakes.io` builds
+  documentation with the **latest** toolchain, not the pin — so source must
+  keep compiling on latest even while the pin stays put. That is why the
+  `try?` syntax is gone (removed upstream in October 2026) and why test
+  packages must import core packages explicitly.
 
 - `moon ide` provides project navigation helpers like `peek-def`, `outline`, and
   `find-references`. See $moonbit-agent-guide for details.

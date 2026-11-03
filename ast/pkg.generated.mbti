@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "dexter/mbel/ast"
+package "dimon-83/mbel/ast"
 
 import {
   "moonbitlang/core/debug",
@@ -24,9 +24,17 @@ pub fn literal(Value) -> AstNode
 
 pub fn object_literal() -> AstNode
 
+pub fn pointer(String) -> AstNode
+
+pub fn sequence() -> AstNode
+
+pub fn slice_node(AstNode, AstNode?, AstNode?) -> AstNode
+
 pub fn unary_expr(String) -> AstNode
 
 pub fn value_equal(Value, Value) -> Bool
+
+pub fn variable_declarator(String, AstNode) -> AstNode
 
 // Errors
 
@@ -51,7 +59,10 @@ pub(all) struct AstNode {
   mut func_name : String
   mut args : Array[AstNode]
   mut pool : String
+  mut slice_from : AstNode?
+  mut slice_to : AstNode?
   mut parent : AstNode?
+  mut is_pred : Bool
 }
 
 pub(all) enum NodeType {
@@ -64,11 +75,17 @@ pub(all) enum NodeType {
   ObjectLiteralNode
   FilterExpressionNode
   FunctionCallNode
+  PointerNode
+  VariableDeclaratorNode
+  SequenceNode
+  SliceNode
 } derive(Eq, @debug.Debug)
 
 pub(all) enum Value {
   BoolVal(Bool)
   NumVal(Double)
+  IntVal(Int64)
+  BytesVal(Bytes)
   StrVal(String)
   ArrayVal(Array[Value])
   ObjectVal(Array[(String, Value)])
@@ -79,4 +96,3 @@ pub(all) enum Value {
 // Type aliases
 
 // Traits
-

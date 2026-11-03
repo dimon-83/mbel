@@ -1,0 +1,45 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "dimon-83/mbel/builtin"
+
+import {
+  "dimon-83/mbel/ast",
+  "dimon-83/mbel/evaluator",
+}
+
+// Values
+pub fn all_ints(Array[@ast.Value]) -> Bool
+
+pub fn decode64(String) -> String raise @evaluator.EvalError
+
+pub fn encode64(String) -> String
+
+pub fn encode64_bytes(Bytes) -> String
+
+pub fn flat_values(Array[@ast.Value]) -> Array[@ast.Value]
+
+pub fn functions() -> Array[(String, (Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError)]
+
+pub fn json_to_value(Json) -> @ast.Value
+
+pub fn now_ms() -> Int64
+
+pub fn now_ns() -> Int64
+
+pub fn parse_duration(String) -> Int64?
+
+pub fn parse_iso_date(String) -> Int64?
+
+pub fn to_json_string(@ast.Value) -> String raise @evaluator.EvalError
+
+pub fn utf8_decode(Bytes) -> String
+
+pub fn utf8_encode(String) -> Bytes
+
+// Errors
+
+// Types and methods
+type GoTimeFields
+
+// Type aliases
+
+// Traits

@@ -20,15 +20,11 @@
 /// The layouts expr's `date(string)` tries, in expr's order.
 fn go_date_layouts() -> Array[String] {
   [
-    "2006-01-02",
-    "15:04:05",
-    "2006-01-02 15:04:05",
+    "2006-01-02", "15:04:05", "2006-01-02 15:04:05",
     // time.RFC3339
-    "2006-01-02T15:04:05Z07:00",
+     "2006-01-02T15:04:05Z07:00",
     // time.RFC822, time.RFC850, time.RFC1123
-    "02 Jan 06 15:04 MST",
-    "Monday, 02-Jan-06 15:04:05 MST",
-    "Mon, 02 Jan 2006 15:04:05 MST",
+     "02 Jan 06 15:04 MST", "Monday, 02-Jan-06 15:04:05 MST", "Mon, 02 Jan 2006 15:04:05 MST",
   ]
 }
 
@@ -58,7 +54,9 @@ fn is_location(v : @ast.Value) -> Bool {
 /// represent is accepted; a numeric offset inside the string is applied
 /// (that is where expr supports fixed offsets — `timezone("+08:00")` is an
 /// error in Go too).
-fn date_value(args : Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError {
+fn date_value(
+  args : Array[@ast.Value],
+) -> @ast.Value raise @evaluator.EvalError {
   let n = args.length()
   if n == 0 {
     raise @evaluator.EvalErr(
@@ -131,6 +129,9 @@ fn time_functions() -> Array[(String, @evaluator.FnA)] {
       },
     ),
     ("date", fn(args) { date_value(args) }),
-    ("timezone", fn(args) { @ast.StrVal(location_name(arg(args, 0, "timezone"))) }),
+    (
+      "timezone",
+      fn(args) { @ast.StrVal(location_name(arg(args, 0, "timezone"))) },
+    ),
   ]
 }

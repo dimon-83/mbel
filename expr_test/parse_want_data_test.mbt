@@ -44,7 +44,9 @@ let parse_want_cases : Array[(String, String)] = [
   ("foo[3]", "index(id:foo,int:3)"),
   ("true ? true : false", "cond(true,true,false)"),
   ("a?[b]:c", "cond(id:a,arr[id:b],id:c)"),
-  ("a.b().c().d[33]", "index(member(call(member(call(member(id:a.b)).c)).d),int:33)"),
+  (
+    "a.b().c().d[33]", "index(member(call(member(call(member(id:a.b)).c)).d),int:33)",
+  ),
   ("'a' == 'b'", "bin(==,str:a,str:b)"),
   ("+0 != -0", "bin(!=,un(+,int:0),un(-,int:0))"),
   ("[a, b, c]", "arr[id:a,id:b,id:c]"),
@@ -64,14 +66,28 @@ let parse_want_cases : Array[(String, String)] = [
   ("1..9", "bin(..,int:1,int:9)"),
   ("0 in []", "bin(in,int:0,arr[])"),
   ("not in_var", "un(not,id:in_var)"),
-  ("-1 not in [1, 2, 3, 4]", "un(not,bin(in,un(-,int:1),arr[int:1,int:2,int:3,int:4]))"),
-  ("1*8 not in [1, 2, 3, 4]", "un(not,bin(in,bin(*,int:1,int:8),arr[int:1,int:2,int:3,int:4]))"),
-  ("2==2 ? false : 3 not in [1, 2, 5]", "cond(bin(==,int:2,int:2),false,un(not,bin(in,int:3,arr[int:1,int:2,int:5])))"),
-  ("'foo' + 'bar' not matches 'foobar'", "un(not,bin(matches,bin(+,str:foo,str:bar),str:foobar))"),
+  (
+    "-1 not in [1, 2, 3, 4]", "un(not,bin(in,un(-,int:1),arr[int:1,int:2,int:3,int:4]))",
+  ),
+  (
+    "1*8 not in [1, 2, 3, 4]", "un(not,bin(in,bin(*,int:1,int:8),arr[int:1,int:2,int:3,int:4]))",
+  ),
+  (
+    "2==2 ? false : 3 not in [1, 2, 5]", "cond(bin(==,int:2,int:2),false,un(not,bin(in,int:3,arr[int:1,int:2,int:5])))",
+  ),
+  (
+    "'foo' + 'bar' not matches 'foobar'", "un(not,bin(matches,bin(+,str:foo,str:bar),str:foobar))",
+  ),
   ("all(Tickets, #)", "call(id:all,id:Tickets,ptr:#)"),
-  ("all(Tickets, {.Price > 0})", "call(id:all,id:Tickets,pred(bin(>,member(ptr:#.Price),int:0)))"),
-  ("one(Tickets, {#.Price > 0})", "call(id:one,id:Tickets,pred(bin(>,member(ptr:#.Price),int:0)))"),
-  ("filter(Prices, {# > 100})", "call(id:filter,id:Prices,pred(bin(>,ptr:#,int:100)))"),
+  (
+    "all(Tickets, {.Price > 0})", "call(id:all,id:Tickets,pred(bin(>,member(ptr:#.Price),int:0)))",
+  ),
+  (
+    "one(Tickets, {#.Price > 0})", "call(id:one,id:Tickets,pred(bin(>,member(ptr:#.Price),int:0)))",
+  ),
+  (
+    "filter(Prices, {# > 100})", "call(id:filter,id:Prices,pred(bin(>,ptr:#,int:100)))",
+  ),
   ("array[1:2]", "slice(id:array,int:1,int:2)"),
   ("array[:2]", "slice(id:array,?,int:2)"),
   ("array[1:]", "slice(id:array,int:1,?)"),
@@ -86,31 +102,54 @@ let parse_want_cases : Array[(String, String)] = [
   ("let foo = a + b; foo + c", "let(foo,bin(+,id:a,id:b),bin(+,id:foo,id:c))"),
   ("map([], #index)", "call(id:map,arr[],ptr:#index)"),
   ("::split(\"a,b,c\", \",\")", "call(id:split,str:a,b,c,str:,)"),
-  ("::split(\"a,b,c\", \",\")[0]", "index(call(id:split,str:a,b,c,str:,),int:0)"),
+  (
+    "::split(\"a,b,c\", \",\")[0]", "index(call(id:split,str:a,b,c,str:,),int:0)",
+  ),
   ("\"hello\"[1:3]", "slice(str:hello,int:1,int:3)"),
   ("1 < 2 > 3", "bin(&&,bin(<,int:1,int:2),bin(>,int:2,int:3))"),
-  ("1 < 2 < 3 < 4", "bin(&&,bin(&&,bin(<,int:1,int:2),bin(<,int:2,int:3)),bin(<,int:3,int:4))"),
-  ("1 < 2 < 3 == true", "bin(==,bin(&&,bin(<,int:1,int:2),bin(<,int:2,int:3)),true)"),
+  (
+    "1 < 2 < 3 < 4", "bin(&&,bin(&&,bin(<,int:1,int:2),bin(<,int:2,int:3)),bin(<,int:3,int:4))",
+  ),
+  (
+    "1 < 2 < 3 == true", "bin(==,bin(&&,bin(<,int:1,int:2),bin(<,int:2,int:3)),true)",
+  ),
   ("if a>b {true} else {x}", "cond(bin(>,id:a,id:b),true,id:x)"),
-  ("if a { 1 } else if b { 2 } else { 3 }", "cond(id:a,int:1,cond(id:b,int:2,int:3))"),
-  ("if a { 1 } else if b { 2 } else if c { 3 } else { 4 }", "cond(id:a,int:1,cond(id:b,int:2,cond(id:c,int:3,int:4)))"),
+  (
+    "if a { 1 } else if b { 2 } else { 3 }", "cond(id:a,int:1,cond(id:b,int:2,int:3))",
+  ),
+  (
+    "if a { 1 } else if b { 2 } else if c { 3 } else { 4 }", "cond(id:a,int:1,cond(id:b,int:2,cond(id:c,int:3,int:4)))",
+  ),
   ("1; 2; 3", "seq[int:1;int:2;int:3]"),
   ("1; (2; 3)", "seq[int:1;seq[int:2;int:3]]"),
   ("true ? 1 : 2; 3 ; 4", "seq[cond(true,int:1,int:2);int:3;int:4]"),
   ("true ? 1 : ( 2; 3; 4 )", "cond(true,int:1,seq[int:2;int:3;int:4])"),
   ("true ?: 1; 2; 3", "seq[cond(true,true,int:1);int:2;int:3]"),
   ("let x = true ? 1 : 2; x", "let(x,cond(true,int:1,int:2),id:x)"),
-  ("let x = true ? 1 : ( 2; 3; 4 ); x", "let(x,cond(true,int:1,seq[int:2;int:3;int:4]),id:x)"),
-  ("if true { 1; 2; 3 } else { 4; 5; 6 }", "cond(true,seq[int:1;int:2;int:3],seq[int:4;int:5;int:6])"),
-  ("all(ls, if true { 1 } else { 2 })", "call(id:all,id:ls,pred(cond(true,int:1,int:2)))"),
+  (
+    "let x = true ? 1 : ( 2; 3; 4 ); x", "let(x,cond(true,int:1,seq[int:2;int:3;int:4]),id:x)",
+  ),
+  (
+    "if true { 1; 2; 3 } else { 4; 5; 6 }", "cond(true,seq[int:1;int:2;int:3],seq[int:4;int:5;int:6])",
+  ),
+  (
+    "all(ls, if true { 1 } else { 2 })", "call(id:all,id:ls,pred(cond(true,int:1,int:2)))",
+  ),
   ("let x = if true { 1 } else { 2 }; x", "let(x,cond(true,int:1,int:2),id:x)"),
   ("call(if true { 1 } else { 2 })", "call(id:call,cond(true,int:1,int:2))"),
   ("[if true { 1 } else { 2 }]", "arr[cond(true,int:1,int:2)]"),
   ("map(ls, { 1; 2; 3 })", "call(id:map,id:ls,pred(seq[int:1;int:2;int:3]))"),
   ("let x = 1; 2; 3 + x", "let(x,int:1,seq[int:2;bin(+,int:3,id:x)])"),
-  ("let x = 1; let y = 2; 3; 4; x + y", "let(x,int:1,let(y,int:2,seq[int:3;int:4;bin(+,id:x,id:y)]))"),
+  (
+    "let x = 1; let y = 2; 3; 4; x + y", "let(x,int:1,let(y,int:2,seq[int:3;int:4;bin(+,id:x,id:y)]))",
+  ),
   ("let x = (1; 2; 3); x", "let(x,seq[int:1;int:2;int:3],id:x)"),
-  ("all(\n\t\t\t\t[\n\t\t\t\t  true,\n\t\t\t\t  false,\n\t\t\t\t],\n\t\t\t\t#,\n\t\t\t)", "call(id:all,arr[true,false],ptr:#)"),
+  (
+    "all(\n\t\t\t\t[\n\t\t\t\t  true,\n\t\t\t\t  false,\n\t\t\t\t],\n\t\t\t\t#,\n\t\t\t)",
+    "call(id:all,arr[true,false],ptr:#)",
+  ),
   ("list | all(#,)", "call(id:all,id:list,ptr:#)"),
-  ("func(\n\t\t\t\tparameter1,\n\t\t\t\tparameter2,\n\t\t\t)", "call(id:func,id:parameter1,id:parameter2)"),
+  (
+    "func(\n\t\t\t\tparameter1,\n\t\t\t\tparameter2,\n\t\t\t)", "call(id:func,id:parameter1,id:parameter2)",
+  ),
 ]

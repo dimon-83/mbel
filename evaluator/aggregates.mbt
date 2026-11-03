@@ -10,7 +10,7 @@
 ///|
 /// The predicate runner contract: evaluate the predicate for element
 /// `elem` at `idx` with reducer accumulator `acc`.
-pub type PredRunner = (Int, @ast.Value, @ast.Value) -> @ast.Value raise EvalError
+pub type PredRunner = (Int32, @ast.Value, @ast.Value) -> @ast.Value raise EvalError
 
 ///|
 /// Drives an aggregate over `list`. `extra` holds the already-evaluated
@@ -196,7 +196,7 @@ pub fn aggregate_call(
         Some(@ast.StrVal(o)) => o
         _ => "asc"
       }
-      let idxs : Array[Int] = []
+      let idxs : Array[Int32] = []
       for i in 0..<n {
         idxs.push(i)
       }
@@ -224,7 +224,7 @@ pub fn aggregate_call(
       // expr semantics: without an explicit init, #acc starts as the
       // first element and iteration begins at index 1.
       let mut acc : @ast.Value = @ast.UndefVal
-      let start : Int = match extra.get(0) {
+      let start : Int32 = match extra.get(0) {
         Some(init) => {
           acc = init
           0
@@ -246,7 +246,7 @@ pub fn aggregate_call(
 ///|
 /// Comparison for sortBy keys: numbers numerically, strings
 /// lexicographically, anything else falls back to string form.
-fn key_compare(a : @ast.Value, b : @ast.Value) -> Int {
+fn key_compare(a : @ast.Value, b : @ast.Value) -> Int32 {
   match (a, b) {
     (@ast.NumVal(x), @ast.NumVal(y)) =>
       if x < y {

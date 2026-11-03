@@ -63,7 +63,7 @@ fn replace_all(s : String, old : String, new : String) -> String {
 
 ///|
 /// Last index of sub in s, or -1.
-fn last_index_of(s : String, sub : String) -> Int {
+fn last_index_of(s : String, sub : String) -> Int32 {
   if sub == "" {
     return s.length()
   }

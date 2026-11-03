@@ -551,7 +551,7 @@ fn collection_functions() -> Array[(String, @evaluator.FnA)] {
 /// mirrors the deep-value limit (1024).
 fn flatten_value(
   v : @ast.Value,
-  depth : Int,
+  depth : Int32,
 ) -> Array[@ast.Value] raise @evaluator.EvalError {
   if depth > 1024 {
     raise @evaluator.EvalErr("cannot flatten nested array: max depth reached")

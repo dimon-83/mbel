@@ -14,7 +14,11 @@
 // visible (they print identically).
 
 ///|
-fn expect_expr_both(src : String, expected : @ast.Value, label : String) -> Unit {
+fn expect_expr_both(
+  src : String,
+  expected : @ast.Value,
+  label : String,
+) -> Unit {
   for mode in [@engine.Walk, @engine.Vm] {
     let inst = @engine.new()
     @engine.Engine::set_engine(inst, mode)
@@ -65,7 +69,10 @@ test "sort keeps exact int64 order above 2^53" {
   // order would be arbitrary.
   expect_expr_both(
     "sort([9007199254740993, 9007199254740992])",
-    @ast.ArrayVal([@ast.IntVal(9007199254740992L), @ast.IntVal(9007199254740993L)]),
+    @ast.ArrayVal([
+      @ast.IntVal(9007199254740992L),
+      @ast.IntVal(9007199254740993L),
+    ]),
     "sort large ints",
   )
 }
@@ -157,7 +164,9 @@ test "standard dialect uses expr's type names and code-point len" {
   // expr counts code points, not UTF-16 code units.
   expect_expr_both("len('\u{1F44D}')", @ast.IntVal(1L), "one code point")
   expect_expr_both(
-    "len('\u{1F44D}\u{1F3FB}')", @ast.IntVal(2L), "two code points",
+    "len('\u{1F44D}\u{1F3FB}')",
+    @ast.IntVal(2L),
+    "two code points",
   )
   expect_expr_both("len('\u{4EAC}\u{5317}')", @ast.IntVal(2L), "BMP unchanged")
 }

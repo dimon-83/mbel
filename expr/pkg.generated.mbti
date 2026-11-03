@@ -8,23 +8,55 @@ import {
 }
 
 // Values
-pub fn binary_prec(String) -> Int
+pub fn binary_prec(String) -> Int32
+
+pub fn check(ENode) -> Unit raise CheckError
+
+pub fn check_function_body(ENode, Array[String], Array[(String, Int32)], Array[String]) -> Unit raise CheckError
+
+pub fn check_with_ctx(ENode, CheckCtx) -> Unit raise CheckError
 
 pub fn compile_expr(String) -> @ast.AstNode? raise @evaluator.EvalError
+
+pub fn compile_expr_checked_limited(String, Int32) -> @ast.AstNode? raise @evaluator.EvalError
+
+pub fn compile_expr_checked_with_functions_limited(String, Int32, Array[(String, Int32)], Array[String]) -> @ast.AstNode? raise @evaluator.EvalError
+
+pub fn compile_expr_limited(String, Int32) -> @ast.AstNode? raise @evaluator.EvalError
+
+pub fn compile_function_body_checked_limited(String, String, Array[String], Array[(String, Int32)], Array[String], Int32) -> @ast.AstNode raise @evaluator.EvalError
+
+pub fn default_max_ast_depth() -> Int32
+
+pub fn default_max_parse_frames() -> Int32
+
+pub fn default_max_tokens() -> Int32
 
 pub fn dump(ENode) -> String
 
 pub fn lower(ENode) -> @ast.AstNode raise LowerError
 
+pub fn nature_name(Nature) -> String
+
+pub fn node_col(ENode) -> Int32
+
+pub fn node_line(ENode) -> Int32
+
 pub fn parse(String) -> ENode raise ParseErrorExpr
+
+pub fn parse_limited(String, Int32) -> ENode raise ParseErrorExpr
 
 pub fn right_assoc(String) -> Bool
 
 pub fn tokenize(String) -> Array[Token] raise LexError
 
 // Errors
+pub(all) suberror CheckError {
+  CheckErr(String, Int32, Int32)
+}
+
 pub(all) suberror LexError {
-  LexErr(String, Int, Int)
+  LexErr(String, Int32, Int32)
 }
 
 pub(all) suberror LowerError {
@@ -32,41 +64,60 @@ pub(all) suberror LowerError {
 }
 
 pub(all) suberror ParseErrorExpr {
-  ParseErrExpr(String, Int, Int)
+  ParseErrExpr(String, Int32, Int32)
 }
 
 // Types and methods
-pub(all) enum ENode {
-  ENil
-  EBool(Bool)
-  EInt(Int64)
-  EFloat(Double)
-  EStr(String)
-  EBytes(Bytes)
-  EIdent(String)
-  EMember(ENode, String, Bool)
-  EIndex(ENode, ENode)
-  ESlice(ENode, ENode?, ENode?)
-  ECall(ENode, Array[ENode])
-  EPred(ENode)
-  EArray(Array[ENode])
-  EMap(Array[(ENode, ENode)])
-  EUnary(String, ENode)
-  EBinary(String, ENode, ENode)
-  ECond(ENode, ENode?, ENode?)
-  ELet(String, ENode, ENode)
-  ESeq(Array[ENode])
-  EPointer(String)
+pub(all) struct CheckCtx {
+  functions : Array[(String, Int32)]
+  callables : Array[String]
+  strict_names : Bool
+  strict_calls : Bool
 }
+
+pub(all) enum ENode {
+  ENil(Int32, Int32)
+  EBool(Bool, Int32, Int32)
+  EInt(Int64, Int32, Int32)
+  EFloat(Double, Int32, Int32)
+  EStr(String, Int32, Int32)
+  EBytes(Bytes, Int32, Int32)
+  EIdent(String, Int32, Int32)
+  EMember(ENode, String, Bool, Int32, Int32)
+  EIndex(ENode, ENode, Int32, Int32)
+  ESlice(ENode, ENode?, ENode?, Int32, Int32)
+  ECall(ENode, Array[ENode], Int32, Int32)
+  EPred(ENode, Int32, Int32)
+  EArray(Array[ENode], Int32, Int32)
+  EMap(Array[(ENode, ENode)], Int32, Int32)
+  EUnary(String, ENode, Int32, Int32)
+  EBinary(String, ENode, ENode, Int32, Int32)
+  ECond(ENode, ENode?, ENode?, Int32, Int32)
+  ELet(String, ENode, ENode, Int32, Int32)
+  ESeq(Array[ENode], Int32, Int32)
+  EPointer(String, Int32, Int32)
+}
+
+pub(all) enum Nature {
+  IntN
+  FloatN
+  StringN
+  BytesN
+  BoolN
+  NilN
+  ArrN(Nature)
+  MapN(Nature)
+  UnknownN
+} derive(Eq, @debug.Debug)
 
 type Parser
 
 pub struct Token {
   kind : TokenKind
   text : String
-  pos : Int
-  line : Int
-  col : Int
+  pos : Int32
+  line : Int32
+  col : Int32
 } derive(Eq, @debug.Debug)
 
 pub(all) enum TokenKind {
@@ -84,4 +135,3 @@ pub(all) enum TokenKind {
 // Type aliases
 
 // Traits
-

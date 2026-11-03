@@ -54,14 +54,21 @@ test "time: expr date() results" {
       }
       if got != want {
         fails.write_string(
-          "---\n" + src + " (" + mode_name + ")\n  got  " + got + "\n  want " + want + "\n",
+          "---\n" +
+          src +
+          " (" +
+          mode_name +
+          ")\n  got  " +
+          got +
+          "\n  want " +
+          want +
+          "\n",
         )
       }
     }
   }
   let total = time_want_cases.length()
-  let summary = (
-    "matched " +
+  let summary = "matched " +
     matched.to_string() +
     "/" +
     total.to_string() +
@@ -69,7 +76,6 @@ test "time: expr date() results" {
     skipped.to_string() +
     ")\n" +
     fails.to_string()
-  )
   if matched + skipped != total {
     inspect(summary, content="")
   }

@@ -38,8 +38,7 @@ fn parse_want_skips() -> Array[(String, String)] {
     // mbel marks only brace-wrapped bodies, so an if/else predicate
     // appears bare.
     (
-      "all(ls, if true { 1 } else { 2 })",
-      "predicate wrapper: mbel marks only brace-wrapped bodies",
+      "all(ls, if true { 1 } else { 2 })", "predicate wrapper: mbel marks only brace-wrapped bodies",
     ),
   ]
 }
@@ -63,11 +62,7 @@ test "parser: expr TestParse AST shape parity" {
       skipped = skipped + 1
       continue
     }
-    let got : String = try {
-      @expr.dump(@expr.parse(src))
-    } catch {
-      _ => "PARSE-ERROR"
-    }
+    let got : String = @expr.dump(@expr.parse(src)) catch { _ => "PARSE-ERROR" }
     if got == want {
       matched = matched + 1
     } else {
@@ -77,8 +72,7 @@ test "parser: expr TestParse AST shape parity" {
     }
   }
   let total = parse_want_cases.length()
-  let summary = (
-    "matched " +
+  let summary = "matched " +
     matched.to_string() +
     "/" +
     total.to_string() +
@@ -86,7 +80,6 @@ test "parser: expr TestParse AST shape parity" {
     skipped.to_string() +
     ")\n" +
     fails.to_string()
-  )
   if matched + skipped != total {
     inspect(summary, content="")
   }

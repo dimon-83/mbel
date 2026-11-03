@@ -40,7 +40,11 @@ test "matches: RE2 differential parity on both engines" {
         ("s", @ast.StrVal(subject)),
         ("p", @ast.StrVal(pattern)),
       ])
-      let res = try? @engine.Engine::eval_expr(re2_engine(mode), "s matches p", ctx)
+      let res = Ok(
+        @engine.Engine::eval_expr(re2_engine(mode), "s matches p", ctx),
+      ) catch {
+        e => Err(e)
+      }
       ran += 1
       match res {
         Ok(@ast.BoolVal(got)) =>
@@ -86,7 +90,12 @@ test "matches: RE2 differential parity on both engines" {
           }
         Err(_) =>
           fails.write_string(
-            mode_name + " /" + pattern + "/ on " + subject + " : unknown error\n",
+            mode_name +
+            " /" +
+            pattern +
+            "/ on " +
+            subject +
+            " : unknown error\n",
           )
       }
     }

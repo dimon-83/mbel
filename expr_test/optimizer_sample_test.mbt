@@ -71,8 +71,7 @@ test "optimizer sample: expr's optimizer table evaluates identically" {
     }
   }
   let total = optimizer_sample_cases.length()
-  let summary = (
-    "matched " +
+  let summary = "matched " +
     matched.to_string() +
     "/" +
     total.to_string() +
@@ -80,7 +79,6 @@ test "optimizer sample: expr's optimizer table evaluates identically" {
     skipped.to_string() +
     ")\n" +
     fails.to_string()
-  )
   if matched + skipped != total {
     inspect(summary, content="")
   }

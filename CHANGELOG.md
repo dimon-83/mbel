@@ -4,6 +4,29 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [0.4.1] - 2026-11-03
+
+### Fixed
+
+- **Documentation failed to generate on mooncakes for 0.4.0.** The registry
+  builds docs with the latest MoonBit toolchain, which removed the `try?`
+  syntax (`Error 3002`) and no longer auto-imports core packages inside test
+  packages. All 25 `try?` sites are migrated to
+  `try Ok(expr) catch { e => Err(e) }` and `expr_test` declares
+  `moonbitlang/core/json` explicitly; the source now compiles on both the
+  previous and the latest toolchain.
+
+### Changed
+
+- **Toolchain alignment.** `.moonbit-version` pins `0.10.19+97801ee1b`
+  (moon CLI `0.1.20261029`, the toolchain the registry uses) instead of
+  `0.10.15+943464bfa`, and CI installs exactly that build. A full
+  `moon fmt` + `moon info` pass lands in the same commit: `Int` is spelled
+  `Int32` in annotations and exported signatures (same width, source
+  compatible), `moon.pkg` uses `pkgtype(kind: "executable")`, and the
+  generated `.mbti` files are refreshed (they still carried the pre-rename
+  `dexter/mbel` package path).
+
 ## [0.4.0] - 2026-11-03
 
 ### Added

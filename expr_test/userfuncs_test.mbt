@@ -241,11 +241,15 @@ test "env defaults: unpassed params fall back, explicit args win" {
 test "strict mode: registered functions pass the whitelist" {
   let e = @engine.new()
   ignore(@engine.Engine::add_expression_functions(e, uf_double(), None))
-  let got = try? @engine.Engine::eval_expr_checked(
-    e,
-    "double(2) + double(3)",
-    @ast.ObjectVal([]),
-  )
+  let got = Ok(
+    @engine.Engine::eval_expr_checked(
+      e,
+      "double(2) + double(3)",
+      @ast.ObjectVal([]),
+    ),
+  ) catch {
+    e => Err(e)
+  }
   match got {
     Ok(@ast.IntVal(10L)) => ()
     other => fail("checked double: unexpected " + uf_dbg(other))
@@ -253,11 +257,11 @@ test "strict mode: registered functions pass the whitelist" {
   // unknown names still fail: the env whitelist catches bare
   // identifiers, unregistered CALLS are rejected by the checked-call
   // whitelist before evaluation
-  let bad = try? @engine.Engine::eval_expr_checked(
-    e,
-    "nosuch(1)",
-    @ast.ObjectVal([]),
-  )
+  let bad = Ok(
+    @engine.Engine::eval_expr_checked(e, "nosuch(1)", @ast.ObjectVal([])),
+  ) catch {
+    e => Err(e)
+  }
   match bad {
     Err(@engine.EngineErr(m)) =>
       assert_eq(m, "unknown function nosuch (1:1)\n | nosuch(1)\n | ^")
@@ -341,12 +345,16 @@ test "validation is atomic: a failing def leaves nothing registered" {
   ]
   assert_eq(uf_register_err(defs, None).contains("parse error"), true)
   let e = @engine.new()
-  let res = try? @engine.Engine::add_expression_functions(e, defs, None)
+  let res = Ok(@engine.Engine::add_expression_functions(e, defs, None)) catch {
+    e => Err(e)
+  }
   match res {
     Err(_) => ()
     Ok(_) => fail("registration should have failed")
   }
-  let after = try? @engine.Engine::eval_expr(e, "good(1)", @ast.ObjectVal([]))
+  let after = Ok(@engine.Engine::eval_expr(e, "good(1)", @ast.ObjectVal([]))) catch {
+    e => Err(e)
+  }
   match after {
     Err(@engine.EngineErr(m)) =>
       assert_eq(m, "Jexl Function good is not defined.")
@@ -380,13 +388,17 @@ test "engine mode may switch after registration" {
   let e = @engine.new()
   ignore(@engine.Engine::add_expression_functions(e, uf_double(), None))
   @engine.Engine::set_engine(e, @engine.Vm)
-  let vm = try? @engine.Engine::eval_expr(e, "double(4)", @ast.ObjectVal([]))
+  let vm = Ok(@engine.Engine::eval_expr(e, "double(4)", @ast.ObjectVal([]))) catch {
+    e => Err(e)
+  }
   match vm {
     Ok(@ast.IntVal(8L)) => ()
     other => fail("vm after switch: " + uf_dbg(other))
   }
   @engine.Engine::set_engine(e, @engine.Walk)
-  let walk = try? @engine.Engine::eval_expr(e, "double(4)", @ast.ObjectVal([]))
+  let walk = Ok(@engine.Engine::eval_expr(e, "double(4)", @ast.ObjectVal([]))) catch {
+    e => Err(e)
+  }
   match walk {
     Ok(@ast.IntVal(8L)) => ()
     other => fail("walk after switch: " + uf_dbg(other))
@@ -513,16 +525,18 @@ test "checked registration is atomic: a failing body registers nothing" {
   ]
   assert_true(uf_checked_register_err(defs, None).contains("invalid operation"))
   let e = @engine.new()
-  let res = try? @engine.Engine::add_expression_functions_checked(e, defs, None)
+  let res = Ok(@engine.Engine::add_expression_functions_checked(e, defs, None)) catch {
+    e => Err(e)
+  }
   match res {
     Err(_) => ()
     Ok(_) => fail("checked registration should have failed")
   }
-  let after = try? @engine.Engine::eval_expr_checked(
-    e,
-    "good(1)",
-    @ast.ObjectVal([]),
-  )
+  let after = Ok(
+    @engine.Engine::eval_expr_checked(e, "good(1)", @ast.ObjectVal([])),
+  ) catch {
+    e => Err(e)
+  }
   match after {
     Err(@engine.EngineErr(m)) =>
       assert_eq(m, "unknown function good (1:1)\n | good(1)\n | ^")
