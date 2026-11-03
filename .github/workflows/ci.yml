@@ -36,3 +36,37 @@ jobs:
 
       - name: Test (${{ matrix.target }})
         run: moon test --target ${{ matrix.target }}
+
+  abi:
+    runs-on: ubuntu-latest
+    name: wasm ABI manifest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+
+      - name: Update MoonBit dependencies
+        run: |
+          moon version --all
+          moon update
+
+      # js-string wasm builtins need Node's V8 support; pin a release
+      # that has it so the ABI check is not runner-version dependent.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # The committed artifact is what embedders vendor; verify it
+      # before rebuilding so a stale wasm fails on its own.
+      - name: Verify committed wasm against the manifest
+        run: node tools/check_abi.mjs
+
+      - name: Rebuild wasm and verify the fresh artifact
+        run: |
+          moon build --target wasm-gc --release
+          cp _build/wasm-gc/release/build/playground/web/web.wasm playground/mbel.wasm
+          node tools/check_abi.mjs

@@ -118,6 +118,39 @@ let resolved = @engine.Engine::add_expression_functions(
   `function call depth exceeded (more than 256 levels)` — see the
   Security model below.
 
+### Checked registration (P2)
+
+`add_expression_functions_checked(defs, defaults)` runs the same
+pipeline with the static checker on every body. It is the mode behind
+`eval_with_functions(..., mode="checked")`.
+
+- **Lexical parameters**: parameters are the body's only lexical
+  bindings (plus let bindings inside the body). An identifier that is
+  neither is rejected (`unknown name x`), so a missing argument cannot
+  silently read a same-named env key. `$env.member` remains available
+  as an explicit escape hatch.
+- **Complete symbol table first**: the batch's function names and
+  arities are collected before any body is checked (along with
+  already-registered functions, builtins and aggregates), so bodies may
+  forward-reference functions or recurse (`fact(n - 1)`).
+- **Exact arity**: a call must match the callee's registered arity —
+  explicit `params` or the auto-extracted list — otherwise checking
+  fails with `invalid number of arguments for f (expected 1, got 2)`.
+  Builtins and aggregates are callable, but their arity is not
+  constrained.
+- **Positioned errors**: body errors carry the function name and a
+  body position, e.g.
+  `function "bad": invalid operation: + (mismatched types int and string) (1:3)`
+  followed by the body line and a caret.
+- **Atomic**: a failing body registers nothing and leaves the instance's
+  arity table unchanged.
+
+Checked expressions (`eval_expr_checked`) also consult the registered
+arity table: unknown call targets and wrong argument counts are
+compile-mode errors (`unknown function nosuch (1:1)`) instead of runtime
+pool errors. Unchecked `add_expression_functions` keeps its dynamic
+behavior (env fallback, extra arguments ignored) for compatibility.
+
 ### Functions file format v1 (playground)
 
 The playground's "🧩 Custom functions" drawer (opened from the control
@@ -140,7 +173,7 @@ row) loads UTF-8 JSON (see `playground/functions.example.json`):
 | `functions` | required array (may be empty) |
 | `functions[].name` | required, valid identifier, not a keyword / aggregate / `$env`, unique in the file |
 | `functions[].params` | optional (auto-extracted); array of strings, each a valid non-keyword identifier, unique |
-| `functions[].body` | required, standard-dialect expression |
+| `functions[].body` | required, standard-dialect expression (type-checked in `checked` mode) |
 | `functions[].description` | optional, shown in the card tooltip |
 | `env` | optional object, **page-level example environment**: the page fills the env box on load; the engine ignores it |
 
@@ -153,9 +186,11 @@ custom functions. The playground stores the file in localStorage and
 restores it on page load; applications embedding mbel.wasm must persist
 the JSON themselves and pass it on every
 `eval_with_functions(code, env, funcs_json, mode, engine)` call
-(`mode` ∈ `eval`/`checked`/`legacy`). Hosts using the MoonBit API
-directly are unaffected: a long-lived Engine instance keeps its
-registrations.
+(`mode` ∈ `eval`/`checked`/`legacy`). With `mode="checked"` the file is
+validated more strictly: every body is type-checked and every call is
+arity-checked before evaluation (see "Checked registration"). Hosts using
+the MoonBit API directly are unaffected: a long-lived Engine instance
+keeps its registrations.
 
 ## Security model
 

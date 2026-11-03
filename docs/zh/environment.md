@@ -22,10 +22,10 @@ let ctx = @ast.ObjectVal([
 
 ```moonbit
 let j = @json.parse("{\"user\": {\"age\": 36}}") catch { _ => abort("bad json") }
-let ctx = @builtin.json_to_value(j) // ObjectVal[("user", ObjectVal[("age", NumVal 36.0)])]
+let ctx = @builtin.json_to_value(j) // ObjectVal[("user", ObjectVal[("age", IntVal 36)])]
 ```
 
-JSON 映射:`null` → `NullVal`,数字 → 浮点 `NumVal`,字符串/布尔/数组/对象 1:1 映射。JSON 数字是 double,因此上下文中超过 2^53 的整数会损失精度;精确整数来自整数字面量与整数运算(见[语言定义](language-definition.md)→ 类型)。
+JSON 映射:`null` → `NullVal`,**取整数值且在 ±(2^53 − 1) 内的数字 → `IntVal`**(精确;`5` 与 `5.0` 在 JSON 层不可区分,都映射为 `IntVal`),其余数字 → 浮点 `NumVal`,字符串/布尔/数组/对象 1:1 映射。达到或超过 2^53 的整数保持 `NumVal` 并损失精度——double 在那里会撞名(2^53 + 1 与 2^53 解析成同一个 double),边界因此拒绝背负它保证不了的精确性。int64 以内的精确大整数仍来自整数字面量与整数运算(见[语言定义](language-definition.md)→ 类型)。
 
 表达式内:
 

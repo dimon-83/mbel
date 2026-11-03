@@ -13,6 +13,13 @@
 // elements), plus static argument checks for the core builtins. Error
 // messages follow expr's compile-mode wording. Env values, dynamic
 // members and heterogeneous containers stay unknown/legal.
+//
+// Checked user-function registration (P2) adds a second context: the
+// body's parameters are its only lexical bindings, and the complete
+// symbol table (every function in the batch plus the instance's
+// callables) is known before checking — so unknown names, unknown
+// calls, and arity mismatches are compile errors rather than runtime
+// surprises, including forward references.
 
 ///|
 pub(all) suberror CheckError {
@@ -90,7 +97,8 @@ fn nature_comparable(l : Nature, r : Nature) -> Bool {
 fn nature_assignable(l : Nature, target : Nature) -> Bool {
   match (l, target) {
     (UnknownN, _) | (_, UnknownN) => true
-    (StringN, StringN) | (IntN, IntN) | (FloatN, FloatN) | (BoolN, BoolN) => true
+    (StringN, StringN) | (IntN, IntN) | (FloatN, FloatN) | (BoolN, BoolN) =>
+      true
     (BytesN, BytesN) | (ArrN(_), ArrN(_)) | (MapN(_), MapN(_)) => true
     _ => false
   }
@@ -100,10 +108,93 @@ fn nature_assignable(l : Nature, target : Nature) -> Bool {
 type Scope = Array[(String, Nature)]
 
 ///|
+/// Call-resolution context threaded through the checker. The lenient
+/// context is the historical behaviour: bare identifiers may come from
+/// the environment and unknown calls surface at runtime. Checked
+/// user-function registration turns both strict flags on once the whole
+/// symbol table (the batch plus the instance's callables) is built.
+pub(all) struct CheckCtx {
+  // exact arity of every registered user function, by name
+  functions : Array[(String, Int)]
+  // names callable in the standard dialect (instance pool functions)
+  callables : Array[String]
+  // reject identifiers that are neither bound nor `$env`
+  strict_names : Bool
+  // reject calls to names outside `callables`/aggregates
+  strict_calls : Bool
+}
+
+///|
+fn lenient_ctx() -> CheckCtx {
+  { functions: [], callables: [], strict_names: false, strict_calls: false, }
+}
+
+///|
+fn in_names(names : Array[String], name : String) -> Bool {
+  for n in names {
+    if n == name {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn find_arity(functions : Array[(String, Int)], name : String) -> Int? {
+  for pair in functions {
+    let (n, arity) = pair
+    if n == name {
+      return Some(arity)
+    }
+  }
+  None
+}
+
+///|
+/// Whether a standard-dialect call may resolve at runtime: a registered
+/// user function (exact arity known), an instance-pool function, or an
+/// aggregate (intercepted before the pool lookup).
+fn is_known_callable(name : String, ctx : CheckCtx) -> Bool {
+  find_arity(ctx.functions, name) is Some(_) ||
+  in_names(ctx.callables, name) ||
+  @grammar.is_aggregate(name)
+}
+
+///|
 /// Type-checks a parsed expr AST. Raises CheckError on the first
 /// violation with expr's compile-mode message wording.
 pub fn check(n : ENode) -> Unit raise CheckError {
-  ignore(infer(n, []))
+  check_with_ctx(n, lenient_ctx())
+}
+
+///|
+/// Type-checks with an explicit call-resolution context (see
+/// `CheckCtx`). Strictness only affects identifiers and calls; operator
+/// and builtin argument rules are unchanged.
+pub fn check_with_ctx(n : ENode, ctx : CheckCtx) -> Unit raise CheckError {
+  ignore(infer(n, [], ctx))
+}
+
+///|
+/// Type-checks a user-function body (P2). The parameter list — explicit
+/// or auto-extracted — is the body's lexical scope, so an identifier
+/// that is neither a parameter, a let binding, nor `$env` is an unknown
+/// name; calls must target a function in `functions`/`callables` or an
+/// aggregate, with exact arity for the former. Both strict flags are on.
+pub fn check_function_body(
+  n : ENode,
+  params : Array[String],
+  functions : Array[(String, Int)],
+  callables : Array[String],
+) -> Unit raise CheckError {
+  let scope : Scope = params.map(fn(p) { (p, UnknownN) })
+  let ctx : CheckCtx = {
+    functions,
+    callables,
+    strict_names: true,
+    strict_calls: true,
+  }
+  ignore(infer(n, scope, ctx))
 }
 
 ///|
@@ -121,7 +212,7 @@ fn scope_get(scope : Scope, name : String) -> Nature? {
 
 ///|
 /// Infers the static nature of a node under a let scope.
-fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
+fn infer(n : ENode, scope : Scope, ctx : CheckCtx) -> Nature raise CheckError {
   match n {
     ENil(_, _) => NilN
     EBool(_, _, _) => BoolN
@@ -129,29 +220,36 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
     EFloat(_, _, _) => FloatN
     EStr(_, _, _) => StringN
     EBytes(_, _, _) => BytesN
-    EIdent(name, _, _) =>
+    EIdent(name, line, col) =>
       match scope_get(scope, name) {
         Some(t) => t
-        None => UnknownN
+        None => {
+          // `$env` is the documented escape hatch for environment reads;
+          // it is never an unknown name.
+          if ctx.strict_names && name != "$env" {
+            raise CheckError::CheckErr("unknown name " + name, line, col)
+          }
+          UnknownN
+        }
       }
     EPointer(_, _, _) => UnknownN
     EMember(base, _, _, _, _) => {
-      ignore(infer(base, scope))
+      ignore(infer(base, scope, ctx))
       UnknownN
     }
     EIndex(base, idx, _, _) => {
-      ignore(infer(base, scope))
-      ignore(infer(idx, scope))
+      ignore(infer(base, scope, ctx))
+      ignore(infer(idx, scope, ctx))
       UnknownN
     }
     ESlice(base, f, t, _, _) => {
-      ignore(infer(base, scope))
+      ignore(infer(base, scope, ctx))
       match f {
-        Some(x) => ignore(infer(x, scope))
+        Some(x) => ignore(infer(x, scope, ctx))
         None => ()
       }
       match t {
-        Some(x) => ignore(infer(x, scope))
+        Some(x) => ignore(infer(x, scope, ctx))
         None => ()
       }
       UnknownN
@@ -160,7 +258,7 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       let mut elem = UnknownN
       let mut first = true
       for x in items {
-        let t = infer(x, scope)
+        let t = infer(x, scope, ctx)
         if first {
           elem = t
           first = false
@@ -175,7 +273,7 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       let mut first = true
       for kv in pairs {
         let (_, v) = kv
-        let t = infer(v, scope)
+        let t = infer(v, scope, ctx)
         if first {
           vt = t
           first = false
@@ -190,21 +288,64 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
         EIdent(f, _, _) => f
         _ => ""
       }
-      // static argument checks for the core builtins (expr messages);
-      // expr points the caret at the call start
-      if callee_name != "" && args.length() > 0 {
-        let arg0 = infer(args[0], scope)
-        check_builtin_arg(callee_name, arg0, line, col)
+      let arity = if callee_name == "" {
+        None
+      } else {
+        find_arity(ctx.functions, callee_name)
       }
-      ignore(infer(callee, scope))
+      if callee_name != "" {
+        if ctx.strict_calls && !is_known_callable(callee_name, ctx) {
+          raise CheckError::CheckErr(
+            "unknown function " + callee_name,
+            line,
+            col,
+          )
+        }
+        // exact arity for registered user functions (explicit or
+        // auto-extracted params); aggregate/builtin arity stays dynamic
+        match arity {
+          Some(n) =>
+            if args.length() != n {
+              raise CheckError::CheckErr(
+                "invalid number of arguments for " +
+                callee_name +
+                " (expected " +
+                n.to_string() +
+                ", got " +
+                args.length().to_string() +
+                ")",
+                line,
+                col,
+              )
+            }
+          None => ()
+        }
+      }
+      // static argument checks for the core builtins (expr messages);
+      // expr points the caret at the call start. User functions and
+      // aggregates are exempt: their argument rules are their own.
+      match arity {
+        Some(_) => ()
+        None =>
+          if callee_name != "" && args.length() > 0 {
+            let arg0 = infer(args[0], scope, ctx)
+            check_builtin_arg(callee_name, arg0, line, col)
+          }
+      }
+      // A bare callee is a name, not an identifier read: it is resolved
+      // by the call checks above, never by the strict-name rule.
+      match callee {
+        EIdent(_, _, _) => ()
+        _ => ignore(infer(callee, scope, ctx))
+      }
       for a in args {
-        ignore(infer(a, scope))
+        ignore(infer(a, scope, ctx))
       }
       UnknownN
     }
-    EPred(inner, _, _) => infer(inner, scope)
+    EPred(inner, _, _) => infer(inner, scope, ctx)
     EUnary(op, x, line, col) => {
-      let t = infer(x, scope)
+      let t = infer(x, scope, ctx)
       match op {
         "not" | "!" =>
           match t {
@@ -234,9 +375,10 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
         _ => UnknownN
       }
     }
-    EBinary(op, l, r, line, col) => check_binary(op, l, r, scope, line, col)
+    EBinary(op, l, r, line, col) =>
+      check_binary(op, l, r, scope, line, col, ctx)
     ECond(t, c, a, _, _) => {
-      let tt = infer(t, scope)
+      let tt = infer(t, scope, ctx)
       match tt {
         BoolN | UnknownN => ()
         other =>
@@ -249,17 +391,17 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
           )
       }
       match c {
-        Some(x) => ignore(infer(x, scope))
+        Some(x) => ignore(infer(x, scope, ctx))
         None => ()
       }
       match a {
-        Some(x) => ignore(infer(x, scope))
+        Some(x) => ignore(infer(x, scope, ctx))
         None => ()
       }
       UnknownN
     }
     ELet(name, v, rest, _, _) => {
-      let vt = infer(v, scope)
+      let vt = infer(v, scope, ctx)
       // shadowing replaces the binding (Eval-mode lets redeclare)
       let scope2 = scope.copy()
       let mut replaced = false
@@ -273,13 +415,13 @@ fn infer(n : ENode, scope : Scope) -> Nature raise CheckError {
       if !replaced {
         scope2.push((name, vt))
       }
-      infer(rest, scope2)
+      infer(rest, scope2, ctx)
     }
     ESeq(items, _, _) => {
       let mut last = UnknownN
       for x in items {
         // each item is self-contained: parse_let wraps its whole rest
-        last = infer(x, scope)
+        last = infer(x, scope, ctx)
       }
       last
     }
@@ -394,9 +536,10 @@ fn check_binary(
   scope : Scope,
   op_line : Int,
   op_col : Int,
+  ctx : CheckCtx,
 ) -> Nature raise CheckError {
-  let lt = infer(l, scope)
-  let rt = infer(r, scope)
+  let lt = infer(l, scope, ctx)
+  let rt = infer(r, scope, ctx)
   let lname = nature_name(lt)
   let rname = nature_name(rt)
   fn mismatch() -> CheckError {

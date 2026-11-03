@@ -159,7 +159,9 @@ test "conversion builtins follow expr semantics" {
     @ast.StrVal("{\"a\":1,\"b\":[true]}"),
     "toJSON",
   )
-  expect_v("fromJSON(\"[1,2,3]\")[1]", @ast.NumVal(2.0), "fromJSON")
+  // 0002 P2a: fromJSON inherits the integer-exact boundary — integer-valued
+  // numbers within ±(2^53 - 1) are IntVal now.
+  expect_v("fromJSON(\"[1,2,3]\")[1]", @ast.IntVal(2L), "fromJSON")
   expect_v("toPairs({a:1})[0][0]", @ast.StrVal("a"), "toPairs key")
   expect_v("fromPairs([[\"a\", 1]]).a", @ast.NumVal(1.0), "fromPairs")
 }
@@ -335,14 +337,36 @@ test "matches operator (regex semantics)" {
     @ast.BoolVal(true),
     "matches POSIX class",
   )
-  expect_v("\"abc\" matches \"^[0-9]+$\"", @ast.BoolVal(false), "matches class miss")
+  expect_v(
+    "\"abc\" matches \"^[0-9]+$\"",
+    @ast.BoolVal(false),
+    "matches class miss",
+  )
   // Alternation and groups.
-  expect_v("\"b\" matches \"a|b\"", @ast.BoolVal(true), "matches alternation hit")
-  expect_v("\"x\" matches \"a|b\"", @ast.BoolVal(false), "matches alternation miss")
-  expect_v("\"ab\" matches \"^(a|b)+$\"", @ast.BoolVal(true), "matches grouped alt")
-  expect_v("\"HELLO\" matches \"(?i:hello)\"", @ast.BoolVal(true), "matches (?i:...)")
+  expect_v(
+    "\"b\" matches \"a|b\"",
+    @ast.BoolVal(true),
+    "matches alternation hit",
+  )
+  expect_v(
+    "\"x\" matches \"a|b\"",
+    @ast.BoolVal(false),
+    "matches alternation miss",
+  )
+  expect_v(
+    "\"ab\" matches \"^(a|b)+$\"",
+    @ast.BoolVal(true),
+    "matches grouped alt",
+  )
+  expect_v(
+    "\"HELLO\" matches \"(?i:hello)\"",
+    @ast.BoolVal(true),
+    "matches (?i:...)",
+  )
   // A malformed pattern is a runtime error, never a silent false.
-  expect_err("\"hello\" matches \"[\"", "invalid regex", "matches invalid pattern")
+  expect_err(
+    "\"hello\" matches \"[\"", "invalid regex", "matches invalid pattern",
+  )
 }
 
 // --- Constant folding (stage 4.3) ---

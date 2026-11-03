@@ -22,6 +22,7 @@ Pages: [Getting started](getting-started.md) ·
 
 Related developer documentation:
 
+- [Proposal 0001: first-class expression-defined functions for stateless embedders](../proposals/0001-user-functions-for-embedders.md) (draft).
 - docs/parity-contract.md — classic-dialect parity contract and JS-semantics pitfalls (English).
 - docs/coverage-vs-expr.md — coverage matrix vs the reference semantics, measurements, roadmap status (Chinese).
 - docs/expr-gap-analysis.md — gap analysis and cut items (Chinese).

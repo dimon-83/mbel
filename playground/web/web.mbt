@@ -12,6 +12,29 @@ fn main {
 }
 
 ///|
+/// Machine-readable ABI manifest (P0): the same document as
+/// playground/mbel.abi.json, checked in CI by tools/check_abi.mjs.
+/// `_start` is wasm-gc's module entry stub, not part of the callable
+/// ABI, hence `abi: false`. Every JSON-returning export wraps failures
+/// in the error envelope (`$error`, optional `$code`); `limits` lists
+/// the engine's default resource budgets.
+pub fn describe_abi() -> String {
+  "{\"abiVersion\":1,\"engineVersion\":\"0.4.0\",\"functionsFileVersion\":1," +
+  "\"exports\":[" +
+  "{\"name\":\"describe_abi\",\"kind\":\"function\",\"params\":[],\"returns\":\"json\"}," +
+  "{\"name\":\"describe_functions\",\"kind\":\"function\",\"params\":[\"funcs_json\"],\"returns\":\"json\"}," +
+  "{\"name\":\"disassemble\",\"kind\":\"function\",\"params\":[\"source\",\"env\"],\"returns\":\"json\"}," +
+  "{\"name\":\"dump_ast\",\"kind\":\"function\",\"params\":[\"source\"],\"returns\":\"json\"}," +
+  "{\"name\":\"eval_checked\",\"kind\":\"function\",\"params\":[\"expr\",\"env\",\"engine\"],\"returns\":\"json\"}," +
+  "{\"name\":\"eval_expr\",\"kind\":\"function\",\"params\":[\"expr\",\"env\",\"engine\"],\"returns\":\"json\"}," +
+  "{\"name\":\"eval_jexl\",\"kind\":\"function\",\"params\":[\"expr\",\"env\",\"engine\"],\"returns\":\"json\"}," +
+  "{\"name\":\"eval_with_functions\",\"kind\":\"function\",\"params\":[\"code\",\"env\",\"funcs_json\",\"mode\",\"engine\"],\"returns\":\"json\"}," +
+  "{\"name\":\"_start\",\"kind\":\"function\",\"abi\":false}]," +
+  "\"errorEnvelope\":{\"message\":\"$error\",\"code\":\"$code\"}," +
+  "\"limits\":{\"maxNodes\":10000,\"maxDepth\":10000,\"maxSteps\":1000000,\"userfnDepth\":256}}"
+}
+
+///|
 /// Runs `f` against a fresh engine instance (dialect demo transforms
 /// registered, execution engine selected) and the parsed env JSON,
 /// canonicalizing the result or formatting the error for the page.
@@ -133,7 +156,23 @@ fn json_to_value(j : Json) -> @ast.Value {
     Null => @ast.NullVal
     True => @ast.BoolVal(true)
     False => @ast.BoolVal(false)
-    Number(d, ..) => @ast.NumVal(d)
+    // Integer-exact input (0002 P2a, Decision 4 = (a)): an integer-valued
+    // JSON number within ±(2^53 - 1) maps to IntVal. `5.0` is indistinguishable
+    // from `5` at the Json layer (core keeps the raw repr only for
+    // non-round-trippable numbers) and becomes IntVal too; NaN/±Inf stay
+    // NumVal. The bound is 2^53 - 1, not 2^53: an integer literal at or
+    // beyond 2^53 arrives as Number(double, repr~Some(_)) where the double
+    // already aliases neighbors (2^53 + 1 parses to the same double as 2^53),
+    // so mapping it to IntVal would claim exactness it does not have — such
+    // numbers stay NumVal (documented out of P2a scope; exact repr-based
+    // int64 mapping is future work). Keep in sync with cmd/main/main.mbt and
+    // builtin/helpers.mbt.
+    Number(d, ..) =>
+      if d.floor() == d && Double::abs(d) <= 9007199254740991.0 {
+        @ast.IntVal(d.to_int64())
+      } else {
+        @ast.NumVal(d)
+      }
     String(s) => @ast.StrVal(s)
     Array(xs) => @ast.ArrayVal(xs.map(json_to_value))
     Object(m) => {
@@ -424,8 +463,11 @@ pub fn describe_functions(funcs_json : String) -> String {
 /// "checked" (standard, strict), "legacy" (classic); `engine` selects
 /// "walk" (default) or "vm". The evaluation env doubles as the
 /// functions' default bindings: unpassed parameters fall back to
-/// same-named env keys, explicit arguments win. All failures (file
-/// format, registration, evaluation) return {"$error": "..."}.
+/// same-named env keys, explicit arguments win. In "checked" mode the
+/// bodies are type-checked at registration (lexical params, complete
+/// symbol table) and the expression's calls are checked against the
+/// registered arities. All failures (file format, registration,
+/// evaluation) return {"$error": "..."}.
 pub fn eval_with_functions(
   expr : String,
   env : String,
@@ -457,9 +499,13 @@ pub fn eval_with_functions(
     @ast.ObjectVal(_) => Some(ctx)
     _ => None
   }
-  let registered = @engine.Engine::add_expression_functions(
-    inst, defs, defaults,
-  ) catch {
+  let registered = try {
+    if mode == "checked" {
+      @engine.Engine::add_expression_functions_checked(inst, defs, defaults)
+    } else {
+      @engine.Engine::add_expression_functions(inst, defs, defaults)
+    }
+  } catch {
     @engine.EngineErr(m) => return error_out(m)
   }
   ignore(registered)

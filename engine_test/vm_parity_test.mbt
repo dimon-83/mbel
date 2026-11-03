@@ -108,6 +108,24 @@ test "vm parity: comparisons and logic (short-circuit)" {
 }
 
 ///|
+test "vm parity: JSON boundary integer-exact input (0002 P2a)" {
+  // Env JSON integers cross the shared boundary as IntVal (Decision 4 = (a));
+  // both engines must agree on the typed results. `/` keeps +Inf — P3
+  // decision (i) maintains expr parity, no divide-by-zero error.
+  expect_parity("n + 1", "{\"n\":5}", "env int add")
+  expect_parity("n + 0.5", "{\"n\":5}", "env mixed promotes")
+  expect_parity("sum(xs)", "{\"xs\":[1,2,3]}", "env sum ints")
+  expect_parity("n == 5", "{\"n\":5}", "env eq cross-class")
+  expect_parity(
+    "a * b", "{\"a\":4294967296,\"b\":2147483648}", "env int multiply wraps",
+  )
+  expect_parity("n / 0", "{\"n\":1}", "env divide by zero is +Inf (decision i)")
+  expect_parity(
+    "type(n)", "{\"n\":9007199254740993}", "beyond 2^53-1 stays double",
+  )
+}
+
+///|
 test "vm parity: ternary and coalescing" {
   expect_parity("\"a\" ? \"b\" : \"c\"", "", "ternary")
   expect_parity("0 ? 1 : 2", "", "ternary false")

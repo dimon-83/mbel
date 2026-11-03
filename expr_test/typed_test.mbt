@@ -5,27 +5,43 @@
 // alone cannot (IntVal 50 and NumVal 50.0 print identically).
 
 ///|
+fn typed_render(v : @ast.Value) -> String {
+  match v {
+    @ast.IntVal(x) => "int:" + x.to_string()
+    @ast.NumVal(d) =>
+      if d != d {
+        "float:nan"
+      } else if d == 1.0 / 0.0 {
+        "float:inf"
+      } else if d == -1.0 / 0.0 {
+        "float:-inf"
+      } else {
+        "float:" + d.to_string()
+      }
+    @ast.BoolVal(b) => "bool:" + (if b { "true" } else { "false" })
+    @ast.StrVal(s) => "str:" + s
+    other => "other:" + @evaluator.to_string(other)
+  }
+}
+
+///|
 fn typed_of(src : String) -> String raise {
   let i = @engine.new()
-  try {
-    let v = @engine.Engine::eval_expr(i, src, @ast.ObjectVal([]))
-    match v {
-      @ast.IntVal(x) => "int:" + x.to_string()
-      @ast.NumVal(d) =>
-        if d != d {
-          "float:nan"
-        } else if d == 1.0 / 0.0 {
-          "float:inf"
-        } else if d == -1.0 / 0.0 {
-          "float:-inf"
-        } else {
-          "float:" + d.to_string()
-        }
-      @ast.BoolVal(b) => "bool:" + (if b { "true" } else { "false" })
-      @ast.StrVal(s) => "str:" + s
-      other => "other:" + @evaluator.to_string(other)
-    }
-  } catch {
+  typed_render(@engine.Engine::eval_expr(i, src, @ast.ObjectVal([]))) catch {
+    @engine.EngineErr(m) => "ERR:" + m
+  }
+}
+
+///|
+fn typed_of_env(src : String, ctx_json : String) -> String raise {
+  // 0002 P2a (Decision 4 = (a)): env JSON numbers integer-valued within
+  // ±(2^53 - 1) cross the shared boundary as IntVal.
+  let j = @json.parse(ctx_json) catch {
+    _ => abort("bad test ctx json: " + ctx_json)
+  }
+  let ctx = @builtin.json_to_value(j)
+  let i = @engine.new()
+  typed_render(@engine.Engine::eval_expr(i, src, ctx)) catch {
     @engine.EngineErr(m) => "ERR:" + m
   }
 }
@@ -33,6 +49,17 @@ fn typed_of(src : String) -> String raise {
 ///|
 fn expect_typed(src : String, expected : String, label : String) -> Unit raise {
   let got = typed_of(src)
+  inspect(got, content=expected)
+}
+
+///|
+fn expect_typed_env(
+  src : String,
+  ctx_json : String,
+  expected : String,
+  label : String,
+) -> Unit raise {
+  let got = typed_of_env(src, ctx_json)
   inspect(got, content=expected)
 }
 
@@ -137,4 +164,48 @@ test "typed: toJSON emits exact int64 digits" {
     "toJSON([1, 9223372036854775807])", "str:[1,9223372036854775807]", "nested exact int64",
   )
   expect_typed("toJSON(1.5 + 1)", "str:2.5", "float json ok")
+}
+
+///|
+test "typed: JSON boundary maps integer-valued env numbers to IntVal (P2a)" {
+  // 0002 P2a, Decision 4 = (a): `5` and `5.0` are indistinguishable at the
+  // Json layer (core keeps the raw repr only for non-round-trippable
+  // numbers), so both map to IntVal. The bound is ±(2^53 - 1): at 2^53 and
+  // beyond, doubles alias neighbors (2^53 + 1 parses to the same double as
+  // 2^53), so such numbers stay NumVal rather than claim false exactness.
+  expect_typed_env(
+    "n + 1", "{\"n\":5}", "int:6", "env int arithmetic stays int",
+  )
+  expect_typed_env("type(n)", "{\"n\":5}", "str:int", "env 5 is IntVal")
+  expect_typed_env("type(n)", "{\"n\":5.0}", "str:int", "env 5.0 is IntVal too")
+  expect_typed_env(
+    "n + 0.5", "{\"n\":5}", "float:5.5", "env int + float promotes",
+  )
+  expect_typed_env(
+    "type(n)", "{\"n\":5.5}", "str:float", "fractional stays NumVal",
+  )
+  expect_typed_env(
+    "type(n)", "{\"n\":9.2e18}", "str:float", "beyond 2^53-1 stays NumVal",
+  )
+  expect_typed_env(
+    "type(n)", "{\"n\":9007199254740993}", "str:float", "2^53+1 double-aliases to 2^53; stays NumVal",
+  )
+  expect_typed_env(
+    "type(n)", "{\"n\":9007199254740991}", "str:int", "2^53-1 boundary maps",
+  )
+  expect_typed_env(
+    "type(n)", "{\"n\":9007199254740992}", "str:float", "2^53 itself arrives repr-tagged from int literals; stays NumVal",
+  )
+  expect_typed_env(
+    "sum(xs)", "{\"xs\":[1,2,3]}", "int:6", "sum over env ints stays int",
+  )
+  expect_typed_env(
+    "sum(xs)", "{\"xs\":[1,2,3.5]}", "float:6.5", "sum promotes on float",
+  )
+  expect_typed_env(
+    "a * b", "{\"a\":4294967296,\"b\":2147483648}", "int:-9223372036854775808", "env int multiply wraps (Go parity; documented, Decision 5)",
+  )
+  expect_typed_env(
+    "n == 5", "{\"n\":5}", "bool:true", "int == float cross-class",
+  )
 }

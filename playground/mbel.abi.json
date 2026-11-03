@@ -1,0 +1,70 @@
+{
+  "abiVersion": 1,
+  "engineVersion": "0.4.0",
+  "functionsFileVersion": 1,
+  "exports": [
+    {
+      "name": "describe_abi",
+      "kind": "function",
+      "params": [],
+      "returns": "json"
+    },
+    {
+      "name": "describe_functions",
+      "kind": "function",
+      "params": ["funcs_json"],
+      "returns": "json"
+    },
+    {
+      "name": "disassemble",
+      "kind": "function",
+      "params": ["source", "env"],
+      "returns": "json"
+    },
+    {
+      "name": "dump_ast",
+      "kind": "function",
+      "params": ["source"],
+      "returns": "json"
+    },
+    {
+      "name": "eval_checked",
+      "kind": "function",
+      "params": ["expr", "env", "engine"],
+      "returns": "json"
+    },
+    {
+      "name": "eval_expr",
+      "kind": "function",
+      "params": ["expr", "env", "engine"],
+      "returns": "json"
+    },
+    {
+      "name": "eval_jexl",
+      "kind": "function",
+      "params": ["expr", "env", "engine"],
+      "returns": "json"
+    },
+    {
+      "name": "eval_with_functions",
+      "kind": "function",
+      "params": ["code", "env", "funcs_json", "mode", "engine"],
+      "returns": "json"
+    },
+    {
+      "name": "_start",
+      "kind": "function",
+      "abi": false
+    }
+  ],
+  "errorEnvelope": {
+    "message": "$error",
+    "code": "$code"
+  },
+  "limits": {
+    "maxNodes": 10000,
+    "maxDepth": 10000,
+    "maxSteps": 1000000,
+    "userfnDepth": 256
+  }
+}

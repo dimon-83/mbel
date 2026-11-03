@@ -375,6 +375,37 @@ fn make_userfn_closure(
 }
 
 ///|
+/// Names a checked standard-dialect expression or body may call:
+/// functions in the instance pool. Transforms are excluded — the
+/// standard dialect lowers `x | f(...)` to a FunctionCall in the
+/// `functions` pool, so a transform-only name would fail at runtime.
+/// Aggregates are added by the checker itself (`@grammar.is_aggregate`).
+fn Engine::checker_callables(self : Engine) -> Array[String] {
+  let out : Array[String] = []
+  for pair in self.grammar.functions {
+    let (name, _) = pair
+    out.push(name)
+  }
+  out
+}
+
+///|
+fn upsert_arity(
+  arities : Array[(String, Int)],
+  name : String,
+  n : Int,
+) -> Unit {
+  for i in 0..<arities.length() {
+    let (existing, _) = arities[i]
+    if existing == name {
+      arities[i] = (name, n)
+      return
+    }
+  }
+  arities.push((name, n))
+}
+
+///|
 /// Registers expression-defined user functions on this instance.
 /// Validation is atomic: names are checked first (identifier syntax,
 /// not a keyword, not `$env`, not an aggregate name, unique within
@@ -399,6 +430,35 @@ pub fn Engine::add_expression_functions(
   defs : Array[UserFunctionDef],
   defaults : @ast.Value?,
 ) -> Array[(String, Array[String])] raise EngineError {
+  self.add_expression_functions_mode(defs, defaults, false)
+}
+
+///|
+/// Checked registration (P2): identical to `add_expression_functions`,
+/// but every body is type-checked with the same checker as checked
+/// expressions. Parameters are the body's only lexical bindings, so an
+/// identifier that is neither a parameter/let binding nor a callable
+/// (function in the set, builtin, aggregate) is rejected, and call
+/// sites must match the callee's exact arity. The whole set is in the
+/// symbol table before checking, so bodies may forward-reference
+/// functions registered later in the same batch. Errors carry the
+/// function name and a position in its body.
+pub fn Engine::add_expression_functions_checked(
+  self : Engine,
+  defs : Array[UserFunctionDef],
+  defaults : @ast.Value?,
+) -> Array[(String, Array[String])] raise EngineError {
+  self.add_expression_functions_mode(defs, defaults, true)
+}
+
+///|
+/// Shared registration pipeline; `checked` selects the body checker.
+fn Engine::add_expression_functions_mode(
+  self : Engine,
+  defs : Array[UserFunctionDef],
+  defaults : @ast.Value?,
+  checked : Bool,
+) -> Array[(String, Array[String])] raise EngineError {
   match defaults {
     Some(@ast.ObjectVal(_)) | None => ()
     Some(_) =>
@@ -421,27 +481,50 @@ pub fn Engine::add_expression_functions(
       None => ()
     }
   }
-  // phase 2: compile bodies and resolve parameter lists
-  let closures : Array[(String, Fn)] = []
-  let resolved : Array[(String, Array[String])] = []
+  // phase 2a: resolve every parameter list before checking any body —
+  // the symbol table must be complete for forward references.
+  let params_list : Array[Array[String]] = []
   for def in defs {
-    let node = @expr.compile_expr_limited(def.body, self.max_nodes) catch {
-      @evaluator.EvalErr(msg) =>
-        raise EngineError::EngineErr("function \"" + def.name + "\": " + msg)
-    }
-    let folded = match node {
-      Some(n) => @evaluator.constant_fold(n)
-      None =>
-        raise EngineError::EngineErr(
-          "function \"" + def.name + "\": body must not be empty",
-        )
-    }
     let params = match def.params {
       Some(ps) => ps
-      None => {
-        let out : Array[String] = []
-        collect_free_identifiers(folded, [], out)
-        out
+      None => user_function_params(def.name, def.body)
+    }
+    params_list.push(params)
+  }
+  let arities = self.userfn_arities.copy()
+  for i in 0..<defs.length() {
+    upsert_arity(arities, defs[i].name, params_list[i].length())
+  }
+  let callables = self.checker_callables()
+  // phase 2b: compile (and, in checked mode, type-check) every body
+  let closures : Array[(String, Fn)] = []
+  let resolved : Array[(String, Array[String])] = []
+  for i in 0..<defs.length() {
+    let def = defs[i]
+    let params = params_list[i]
+    let folded = if checked {
+      let lowered = @expr.compile_function_body_checked_limited(
+        def.name,
+        def.body,
+        params,
+        arities,
+        callables,
+        self.max_nodes,
+      ) catch {
+        @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
+      }
+      @evaluator.constant_fold(lowered)
+    } else {
+      let node = @expr.compile_expr_limited(def.body, self.max_nodes) catch {
+        @evaluator.EvalErr(msg) =>
+          raise EngineError::EngineErr("function \"" + def.name + "\": " + msg)
+      }
+      match node {
+        Some(n) => @evaluator.constant_fold(n)
+        None =>
+          raise EngineError::EngineErr(
+            "function \"" + def.name + "\": body must not be empty",
+          )
       }
     }
     closures.push(
@@ -449,11 +532,15 @@ pub fn Engine::add_expression_functions(
     )
     resolved.push((def.name, params))
   }
-  // phase 3: register into both pools (functions + transforms)
+  // phase 3: register into both pools (functions + transforms) and
+  // record arities only after the whole batch succeeded
   for pair in closures {
     let (name, f) = pair
     upsert_fn(self.grammar.functions, name, f)
     upsert_fn(self.grammar.transforms, name, f)
+  }
+  for i in 0..<defs.length() {
+    upsert_arity(self.userfn_arities, defs[i].name, params_list[i].length())
   }
   resolved
 }

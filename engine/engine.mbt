@@ -50,6 +50,10 @@ pub struct Engine {
   // across any registration batch raises instead of overflowing the
   // host stack.
   mut userfn_depth : Int
+  // Exact arity of every registered user function (checked-mode P2):
+  // call sites in the main expression and in checked bodies are
+  // rejected when the argument count differs.
+  userfn_arities : Array[(String, Int)]
   // Resource-gate observability: how often each budget was hit, keyed by
   // reason ("nodes", "nesting", "depth", "steps", "memory",
   // "value_nesting"). Budget *messages* are contract-locked (AGENTS.md),
@@ -74,6 +78,7 @@ pub fn new() -> Engine {
     max_steps: @evaluator.default_max_steps(),
     engine: Walk,
     userfn_depth: 0,
+    userfn_arities: [],
     budget_stats: [],
   }
 }

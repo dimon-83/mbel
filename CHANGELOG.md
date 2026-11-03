@@ -4,7 +4,47 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
-## [Unreleased]
+## [0.4.0] - 2026-11-03
+
+### Added
+
+- **Verified wasm ABI manifest (P0).** `playground/mbel.abi.json` describes
+  the release artifact: ABI version, engine version, functions-file version,
+  every export with its kind/signature, the `$error` envelope and the default
+  limits. The wasm also exports `describe_abi()`, returning the same manifest.
+  `tools/check_abi.mjs` checks export names/kinds against
+  `WebAssembly.Module.exports`, deep-compares `describe_abi()` with the file,
+  cross-checks `engineVersion` against `moon.mod`, and smoke-calls
+  `eval_expr`/`eval_checked`/`describe_functions`. CI runs it on the committed
+  artifact and on a fresh release build.
+- **Checked user-function registration (P2).**
+  `Engine::add_expression_functions_checked` type-checks every body with the
+  static checker: parameters are the body's only lexical bindings, the whole
+  batch is in the symbol table before checking (forward references and
+  recursion work), call sites must match the exact arity (explicit or
+  auto-extracted), and errors carry `function "name":` plus a body position.
+  `eval_with_functions(..., mode="checked")` uses this path. Checked
+  expressions also reject unknown call targets and wrong arity for registered
+  functions (`unknown function f (1:1)`,
+  `invalid number of arguments for f (expected 1, got 2)`).
+
+### Changed
+
+- `eval_expr_checked` now reports an unknown call as `unknown function <name>
+  (L:C)` at check time instead of the runtime pool error
+  `Jexl Function <name> is not defined.`
+- **Integer-exact JSON input boundary (0002 P2a, Decision 4 = (a)).** The
+  shared `json_to_value` (env JSON parsing in the wasm/CLI hosts, and the
+  `fromJSON` builtin) now maps integer-valued JSON numbers within
+  ±(2^53 − 1) to `IntVal` instead of `NumVal`, so environment-sourced
+  integer arithmetic is exact — including Int64 wraparound on int∘int
+  multiply, Go parity. `5.0` is indistinguishable from `5` at the JSON layer
+  and maps to `IntVal` too; fractional numbers, NaN/±Inf, and integers at or
+  beyond 2^53 stay `NumVal` (doubles alias there, so the boundary refuses to
+  claim exactness). Legacy-dialect note: an `IntVal` operand takes the typed
+  operator path, so `"x" + n` over an integer env value is now a type error
+  (`invalid operation: string + int`) instead of string concatenation;
+  purely numeric results are unchanged.
 
 ## [0.3.7] — 2026-10-15
 

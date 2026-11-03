@@ -29,14 +29,17 @@ or from JSON text (CLI contexts, or `@builtin.json_to_value`):
 
 ```moonbit
 let j = @json.parse("{\"user\": {\"age\": 36}}") catch { _ => abort("bad json") }
-let ctx = @builtin.json_to_value(j) // ObjectVal[("user", ObjectVal[("age", NumVal 36.0)])]
+let ctx = @builtin.json_to_value(j) // ObjectVal[("user", ObjectVal[("age", IntVal 36)])]
 ```
 
-JSON mapping: `null` → `NullVal`, numbers → floating-point `NumVal`,
-strings/booleans/arrays/objects map 1:1. JSON numbers are doubles, so
-context integers beyond 2^53 lose precision; exact integers come from
-integer literals and integer arithmetic (see
-[Language definition](language-definition.md) → Types).
+JSON mapping: `null` → `NullVal`, **integer-valued numbers within ±(2^53 − 1) →
+`IntVal`** (exact; `5` and `5.0` are indistinguishable at the JSON layer and
+both map to `IntVal`), other numbers → `NumVal` doubles, strings/booleans/
+arrays/objects map 1:1. Integers at or beyond 2^53 stay `NumVal` and lose
+precision — doubles alias there (2^53 + 1 parses to the same double as 2^53),
+so the boundary refuses to claim exactness it cannot carry. Exact large
+integers up to int64 still come from integer literals and integer arithmetic
+(see [Language definition](language-definition.md) → Types).
 
 Inside an expression:
 

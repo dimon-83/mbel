@@ -18,6 +18,7 @@ options(
         "eval_checked",
         "eval_with_functions",
         "describe_functions",
+        "describe_abi",
         "disassemble",
         "dump_ast",
       ],

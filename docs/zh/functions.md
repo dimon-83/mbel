@@ -74,6 +74,18 @@ let resolved = @engine.Engine::add_expression_functions(
 - **校验原子**:名字必须是合法标识符(禁 13 个关键字、禁 `$env`)、禁与 15 个聚合同名(聚合分发先于函数池,同名注册永远调不到)、定义内重名拒绝;body 编译错误带 `function "名":` 前缀。任何一处失败则什么都不注册。普通内置名允许覆盖(upsert,同 `add_function`)。
 - **求值语义**:函数体在注册它的实例上按当前引擎(Walk/Vm)求值,Vm 字节码按函数缓存;错误带 `function "名":` 前缀上抛。每次调用的深度/步数预算重新计数(与闭包注册一致);递归由**实例级计数器封顶(256 层**,覆盖互递归与跨批次注册),超限报 `function call depth exceeded (more than 256 levels)`——见下方安全模型。
 
+### 严格注册检查(P2)
+
+`add_expression_functions_checked(defs, defaults)` 走同一条注册流水线,但每个函数体都过静态检查器;`eval_with_functions(..., mode="checked")` 用的就是它。
+
+- **参数即词法绑定**:参数(以及体内的 let 绑定)是函数体唯一的词法名字来源。既不是参数、也不是 let 绑定的标识符会被拒(`unknown name x`),所以漏传参数不会静默读到同名 env 值;`$env.member` 仍可作为显式逃生口。
+- **先建完整符号表**:本批次所有函数名与元数在任何函数体被检查前就收集完毕(连同已注册函数、内置与聚合),因此函数体可以前向引用同批次的函数或递归(`fact(n - 1)`)。
+- **元数精确匹配**:调用必须与已注册元数一致——显式 `params` 或自动抽取列表——否则报 `invalid number of arguments for f (expected 1, got 2)`。内置函数与聚合可调用,但其元数不做约束。
+- **带位置的错误**:函数体错误带函数名与体内位置,例如 `function "bad": invalid operation: + (mismatched types int and string) (1:3)`,随后是函数体源码行与插入符。
+- **原子性**:任一函数体失败则整批不注册,实例的元数表也不变。
+
+checked 主表达式(`eval_expr_checked`)同样会查已注册元数表:未知调用与实参数量不符在编译期报错(`unknown function nosuch (1:1)`),不再落到运行时池查找。非严格的 `add_expression_functions` 保持原有动态行为(env 回退、多余实参忽略)以兼容旧调用。
+
 ### 函数文件格式 v1(playground)
 
 playground「🧩 自定义函数」抽屉(控件行按钮弹出)加载 UTF-8 JSON(示例见 `playground/functions.example.json`):
@@ -95,13 +107,13 @@ playground「🧩 自定义函数」抽屉(控件行按钮弹出)加载 UTF-8 JS
 | `functions` | 必填数组(可为空) |
 | `functions[].name` | 必填,合法标识符,非关键字/聚合/`$env`,文件内唯一 |
 | `functions[].params` | 可省略(自动抽取);字符串数组,元素为合法非关键字标识符且不重复 |
-| `functions[].body` | 必填,标准方言表达式 |
+| `functions[].body` | 必填,标准方言表达式(`checked` 模式下会做类型检查) |
 | `functions[].description` | 可选,展示在函数卡片提示里 |
 | `env` | 可选对象,**页面级示例环境**:载入文件时由页面填进「环境变量」框,引擎本身忽略 |
 
 未知字段一律拒绝(防笔误);校验失败不产生半注册状态,错误消息带 `functions[i]` 索引定位。
 
-**持久化语义**:wasm 无状态——每次导出调用都新建引擎,应用重启后自定义函数**不会**自动加载。playground 把文件内容存入 localStorage 并在页面加载时自动恢复;嵌入 mbel.wasm 的应用需自行持久化该 JSON,并在每次调用 `eval_with_functions(code, env, funcs_json, mode, engine)` 时随请求传入(`mode` ∈ `eval`/`checked`/`legacy`)。使用 MoonBit API 的宿主没有这个问题:Engine 实例常驻,注册一次长期有效。
+**持久化语义**:wasm 无状态——每次导出调用都新建引擎,应用重启后自定义函数**不会**自动加载。playground 把文件内容存入 localStorage 并在页面加载时自动恢复;嵌入 mbel.wasm 的应用需自行持久化该 JSON,并在每次调用 `eval_with_functions(code, env, funcs_json, mode, engine)` 时随请求传入(`mode` ∈ `eval`/`checked`/`legacy`)。`mode="checked"` 会在求值前严格校验:每个函数体过类型检查,每个调用过元数检查(见「严格注册检查」)。使用 MoonBit API 的宿主没有这个问题:Engine 实例常驻,注册一次长期有效。
 
 ## 安全模型
 

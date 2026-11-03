@@ -125,10 +125,14 @@ The browser entry lives in `playground/web` and exports
 `eval_expr`/`eval_jexl`/`eval_checked` (each `(expr, env, engine)`),
 `eval_with_functions` `(code, env, funcs_json, mode, engine)` — the env
 doubles as the loaded functions' default bindings — `describe_functions`
-(funcs_json → resolved signature list), `disassemble`/`dump_ast`; all
-callable with plain JS strings via the js-string builtins integration
-(no glue code). Requirements: Chrome/Edge 130+, Firefox 134+, Safari
-18.4+; serve over HTTP, never `file://`. The wasm is stateless —
+(funcs_json → resolved signature list), `describe_abi` (the machine-readable
+ABI manifest), `disassemble`/`dump_ast`; all callable with plain JS strings
+via the js-string builtins integration (no glue code). The manifest is also
+shipped as `playground/mbel.abi.json`; `node tools/check_abi.mjs` checks its
+export names/kinds against the wasm and the `describe_abi()` output (CI runs
+it on the committed artifact and on a fresh release build). Requirements:
+Chrome/Edge 130+, Firefox 134+, Safari 18.4+; serve over HTTP, never
+`file://`. The wasm is stateless —
 custom functions persist on the page (localStorage) and embedding hosts
 must pass the funcs JSON on every call. Build and interop details:
 AGENTS.md "Playground (browser WASM)".
@@ -215,6 +219,15 @@ let resolved = @engine.Engine::add_expression_functions(
 // resolved == [("tax", ["price", "rate"])] — usable as tax(…), x | tax(),
 // and (classic dialect) x|tax; pass None instead for purely lexical params
 ```
+
+`Engine::add_expression_functions_checked` is the strict variant: every
+body is type-checked with the same checker as `eval_expr_checked`, with
+the parameters as the body's only lexical bindings and the complete set
+(forward references included) as the callable symbol table. Call sites —
+in bodies and in the checked main expression — must match each function's
+exact arity (explicit or auto-extracted params; the env fallback is not
+consulted). Errors carry `function "name":` and a `(L:C)` position in the
+body. `eval_with_functions(..., mode="checked")` uses this variant.
 
 Names must be valid identifiers and may not shadow aggregates;
 validation is atomic; bodies run on the instance's current engine with

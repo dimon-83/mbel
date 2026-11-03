@@ -83,7 +83,23 @@ fn json_to_value(j : Json) -> @ast.Value {
     Null => @ast.NullVal
     True => @ast.BoolVal(true)
     False => @ast.BoolVal(false)
-    Number(d, ..) => @ast.NumVal(d)
+    // Integer-exact input (0002 P2a, Decision 4 = (a)): an integer-valued
+    // JSON number within ±(2^53 - 1) maps to IntVal. `5.0` is indistinguishable
+    // from `5` at the Json layer (core keeps the raw repr only for
+    // non-round-trippable numbers) and becomes IntVal too; NaN/±Inf stay
+    // NumVal. The bound is 2^53 - 1, not 2^53: an integer literal at or
+    // beyond 2^53 arrives as Number(double, repr~Some(_)) where the double
+    // already aliases neighbors (2^53 + 1 parses to the same double as 2^53),
+    // so mapping it to IntVal would claim exactness it does not have — such
+    // numbers stay NumVal (documented out of P2a scope; exact repr-based
+    // int64 mapping is future work). Keep in sync with playground/web/web.mbt
+    // and builtin/helpers.mbt.
+    Number(d, ..) =>
+      if d.floor() == d && Double::abs(d) <= 9007199254740991.0 {
+        @ast.IntVal(d.to_int64())
+      } else {
+        @ast.NumVal(d)
+      }
     String(s) => @ast.StrVal(s)
     Array(xs) => @ast.ArrayVal(xs.map(json_to_value))
     Object(m) => {

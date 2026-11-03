@@ -183,39 +183,9 @@ fn sort_values(xs : Array[@ast.Value]) -> Array[@ast.Value] {
 // --- Conversion (expr: int float string type toJSON fromJSON toPairs
 // fromPairs; base64 in base64.mbt) ---
 
-///|
-/// Value → Json for toJSON. NaN/Infinity become null (JSON has no
-/// representation; expr's Go marshal errors there).
-fn value_to_json(v : @ast.Value) -> Json {
-  match v {
-    @ast.BoolVal(b) => Json::boolean(b)
-    @ast.NumVal(d) =>
-      if d != d || d == 1.0 / 0.0 || d == -1.0 / 0.0 {
-        Json::null()
-      } else {
-        Json::number(d)
-      }
-    // note: int64 beyond 2^53 loses precision in JSON (expr emits the
-    // exact digits) — documented divergence until a typed JSON writer
-    @ast.IntVal(i) => Json::number(i.to_double())
-    @ast.StrVal(s) => Json::string(s)
-    // Go's json.Marshal encodes []byte as a base64 string
-    @ast.BytesVal(b) => Json::string(encode64_bytes(b))
-    @ast.NullVal | @ast.UndefVal => Json::null()
-    @ast.ArrayVal(xs) => Json::array(xs.map(value_to_json))
-    @ast.ObjectVal(pairs) => {
-      let map = Map::from_iter(
-        pairs
-        .iter()
-        .map(fn(kv) {
-          let (k, val) = kv
-          (k, value_to_json(val))
-        }),
-      )
-      Json::object(map)
-    }
-  }
-}
+// (Value → Json was removed: the toJSON builtin serializes via the typed
+// writer `to_json_string` below, which emits exact int64 digits; the old
+// Json-tree path with `IntVal` → `to_double()` was dead code.)
 
 ///|
 /// Json → Value (shared with the CLI context parser).
@@ -224,7 +194,23 @@ pub fn json_to_value(j : Json) -> @ast.Value {
     Null => @ast.NullVal
     True => @ast.BoolVal(true)
     False => @ast.BoolVal(false)
-    Number(d, ..) => @ast.NumVal(d)
+    // Integer-exact input (0002 P2a, Decision 4 = (a)): an integer-valued
+    // JSON number within ±(2^53 - 1) maps to IntVal. `5.0` is indistinguishable
+    // from `5` at the Json layer (core keeps the raw repr only for
+    // non-round-trippable numbers) and becomes IntVal too; NaN/±Inf stay
+    // NumVal. The bound is 2^53 - 1, not 2^53: an integer literal at or
+    // beyond 2^53 arrives as Number(double, repr~Some(_)) where the double
+    // already aliases neighbors (2^53 + 1 parses to the same double as 2^53),
+    // so mapping it to IntVal would claim exactness it does not have — such
+    // numbers stay NumVal (documented out of P2a scope; exact repr-based
+    // int64 mapping is future work). Keep in sync with playground/web/web.mbt
+    // and cmd/main/main.mbt.
+    Number(d, ..) =>
+      if d.floor() == d && Double::abs(d) <= 9007199254740991.0 {
+        @ast.IntVal(d.to_int64())
+      } else {
+        @ast.NumVal(d)
+      }
     String(s) => @ast.StrVal(s)
     Array(xs) => @ast.ArrayVal(xs.map(json_to_value))
     Object(m) => {

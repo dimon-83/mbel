@@ -84,13 +84,22 @@ fn Engine::eval_ast_inner(
 /// engine — the expr-lang `Compile`-analogue of eval_expr, which stays
 /// Eval-mode. Type violations raise expr's compile-mode messages
 /// ("invalid operation: + (mismatched types int and string)").
+///
+/// Registered user functions take part in the check (P2): unknown call
+/// targets and calls whose argument count differs from the registered
+/// arity are compile-mode errors.
 pub fn Engine::eval_expr_checked(
   self : Engine,
   source : String,
   ctx : @ast.Value,
 ) -> @ast.Value raise EngineError {
   let node = self.guard_budget(fn() {
-    @expr.compile_expr_checked_limited(source, self.max_nodes) catch {
+    @expr.compile_expr_checked_with_functions_limited(
+      source,
+      self.max_nodes,
+      self.userfn_arities,
+      self.checker_callables(),
+    ) catch {
       @evaluator.EvalErr(msg) => raise EngineError::EngineErr(msg)
     }
   })

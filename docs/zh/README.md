@@ -8,6 +8,7 @@ mbel 是一个 MoonBit 表达式引擎:两种表达式方言——类型化语�
 
 相关开发文档:
 
+- [提案 0001:面向无状态嵌入方的表达式定义函数](../proposals/0001-user-functions-for-embedders.md)(草案,英文)。
 - docs/parity-contract.md — 经典方言 parity 契约与 JS 语义陷阱(英文)。
 - docs/coverage-vs-expr.md — 与参考语义的覆盖对照、实测数据、路线图状态(中文)。
 - docs/expr-gap-analysis.md — 差距分析与裁剪项(中文)。

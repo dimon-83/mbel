@@ -76,6 +76,68 @@ fn uf_register_err(
 }
 
 ///|
+/// Returns the checked-registration error message, or "OK".
+fn uf_checked_register_err(
+  defs : Array[@engine.UserFunctionDef],
+  defaults : @ast.Value?,
+) -> String raise {
+  let e = @engine.new()
+  try {
+    ignore(@engine.Engine::add_expression_functions_checked(e, defs, defaults))
+    "OK"
+  } catch {
+    @engine.EngineErr(m) => m
+  }
+}
+
+///|
+/// Typed discriminator for a Value, shared by checked-mode helpers.
+fn uf_value_str(v : @ast.Value) -> String {
+  match v {
+    @ast.IntVal(x) => "int:" + x.to_string()
+    @ast.NumVal(d) => "float:" + d.to_string()
+    @ast.BoolVal(b) => "bool:" + (if b { "true" } else { "false" })
+    @ast.StrVal(s) => "str:" + s
+    @ast.UndefVal => "undef"
+    @ast.NullVal => "null"
+    other => "other:" + @evaluator.to_string(other)
+  }
+}
+
+///|
+/// Registers with checked registration, then evaluates through the
+/// strict entry; failures return "ERR:<message>".
+fn uf_checked_eval_str(
+  defs : Array[@engine.UserFunctionDef],
+  code : String,
+  env : @ast.Value,
+  vm : Bool,
+) -> String raise {
+  let e = @engine.new()
+  if vm {
+    @engine.Engine::set_engine(e, @engine.Vm)
+  }
+  try {
+    ignore(@engine.Engine::add_expression_functions_checked(e, defs, None))
+    uf_value_str(@engine.Engine::eval_expr_checked(e, code, env))
+  } catch {
+    @engine.EngineErr(m) => "ERR:" + m
+  }
+}
+
+///|
+/// Walk + Vm parity for checked registration + checked evaluation.
+fn uf_checked_both(
+  defs : Array[@engine.UserFunctionDef],
+  code : String,
+  env : @ast.Value,
+  expected : String,
+) -> Unit raise {
+  assert_eq(uf_checked_eval_str(defs, code, env, false), expected)
+  assert_eq(uf_checked_eval_str(defs, code, env, true), expected)
+}
+
+///|
 /// Resolved auto-extracted parameter list as "[a,b]".
 fn uf_params(name : String, body : String) -> String raise {
   @engine.user_function_params(name, body).join(",")
@@ -101,7 +163,7 @@ fn uf_legacy(
 
 ///|
 fn uf_double() -> Array[@engine.UserFunctionDef] {
-  [{ name: "double", params: Some(["x"]), body: "x * 2" }]
+  [{ name: "double", params: Some(["x"]), body: "x * 2", }]
 }
 
 ///|
@@ -146,7 +208,7 @@ test "auto-extracted params: free identifiers, first-appearance order" {
 ///|
 test "auto params bind positionally" {
   let defs : Array[@engine.UserFunctionDef] = [
-    { name: "tax", params: None, body: "price + rate" },
+    { name: "tax", params: None, body: "price + rate", },
   ]
   uf_both(defs, None, "tax(100, 0.5)", @ast.ObjectVal([]), "float:100.5")
 }
@@ -154,7 +216,7 @@ test "auto params bind positionally" {
 ///|
 test "env defaults: unpassed params fall back, explicit args win" {
   let defs : Array[@engine.UserFunctionDef] = [
-    { name: "tax", params: None, body: "price + rate" },
+    { name: "tax", params: None, body: "price + rate", },
   ]
   let env : @ast.Value = @ast.ObjectVal([
     ("price", @ast.NumVal(100.0)),
@@ -189,7 +251,8 @@ test "strict mode: registered functions pass the whitelist" {
     other => fail("checked double: unexpected " + uf_dbg(other))
   }
   // unknown names still fail: the env whitelist catches bare
-  // identifiers, unregistered CALLS surface at the runtime pool lookup
+  // identifiers, unregistered CALLS are rejected by the checked-call
+  // whitelist before evaluation
   let bad = try? @engine.Engine::eval_expr_checked(
     e,
     "nosuch(1)",
@@ -197,7 +260,7 @@ test "strict mode: registered functions pass the whitelist" {
   )
   match bad {
     Err(@engine.EngineErr(m)) =>
-      assert_eq(m, "Jexl Function nosuch is not defined.")
+      assert_eq(m, "unknown function nosuch (1:1)\n | nosuch(1)\n | ^")
     other => fail("unknown call: unexpected " + uf_dbg(other))
   }
 }
@@ -215,26 +278,26 @@ fn uf_dbg(r : Result[@ast.Value, @engine.EngineError]) -> String {
 test "validation errors" {
   // names
   assert_eq(
-    uf_register_err([{ name: "if", params: None, body: "1" }], None),
+    uf_register_err([{ name: "if", params: None, body: "1", }], None),
     "function name \"if\" is a keyword",
   )
   assert_eq(
-    uf_register_err([{ name: "9bad", params: None, body: "1" }], None),
+    uf_register_err([{ name: "9bad", params: None, body: "1", }], None),
     "invalid function name \"9bad\"",
   )
   assert_eq(
-    uf_register_err([{ name: "$env", params: None, body: "1" }], None),
+    uf_register_err([{ name: "$env", params: None, body: "1", }], None),
     "function name \"$env\" is reserved",
   )
   assert_eq(
-    uf_register_err([{ name: "map", params: None, body: "1" }], None),
+    uf_register_err([{ name: "map", params: None, body: "1", }], None),
     "function name \"map\" conflicts with an aggregate",
   )
   assert_eq(
     uf_register_err(
       [
-        { name: "f", params: None, body: "1" },
-        { name: "f", params: None, body: "2" },
+        { name: "f", params: None, body: "1", },
+        { name: "f", params: None, body: "2", },
       ],
       None,
     ),
@@ -242,24 +305,24 @@ test "validation errors" {
   )
   // parameters
   assert_eq(
-    uf_register_err([{ name: "f", params: Some(["a-b"]), body: "1" }], None),
+    uf_register_err([{ name: "f", params: Some(["a-b"]), body: "1", }], None),
     "function \"f\": invalid parameter name \"a-b\"",
   )
   assert_eq(
-    uf_register_err([{ name: "f", params: Some(["in"]), body: "1" }], None),
+    uf_register_err([{ name: "f", params: Some(["in"]), body: "1", }], None),
     "function \"f\": parameter name \"in\" is a keyword",
   )
   assert_eq(
-    uf_register_err([{ name: "f", params: Some(["x", "x"]), body: "1" }], None),
+    uf_register_err([{ name: "f", params: Some(["x", "x"]), body: "1", }], None),
     "function \"f\": duplicate parameter name \"x\"",
   )
   // bodies
   assert_eq(
-    uf_register_err([{ name: "e", params: None, body: "" }], None),
+    uf_register_err([{ name: "e", params: None, body: "", }], None),
     "function \"e\": parse error at 1:1: unexpected end of expression",
   )
   let bad_body = uf_register_err(
-    [{ name: "bad", params: Some(["x"]), body: "x +" }],
+    [{ name: "bad", params: Some(["x"]), body: "x +", }],
     None,
   )
   assert_true(bad_body.contains("function \"bad\": parse error at 1:"))
@@ -273,8 +336,8 @@ test "validation errors" {
 ///|
 test "validation is atomic: a failing def leaves nothing registered" {
   let defs : Array[@engine.UserFunctionDef] = [
-    { name: "good", params: Some(["x"]), body: "x + 1" },
-    { name: "bad", params: Some(["x"]), body: "x +" },
+    { name: "good", params: Some(["x"]), body: "x + 1", },
+    { name: "bad", params: Some(["x"]), body: "x +", },
   ]
   assert_eq(uf_register_err(defs, None).contains("parse error"), true)
   let e = @engine.new()
@@ -294,7 +357,7 @@ test "validation is atomic: a failing def leaves nothing registered" {
 ///|
 test "ordinary builtins may be overridden (upsert)" {
   let defs : Array[@engine.UserFunctionDef] = [
-    { name: "abs", params: Some(["x"]), body: "x * 2" },
+    { name: "abs", params: Some(["x"]), body: "x * 2", },
   ]
   uf_both(defs, None, "abs(-4)", @ast.ObjectVal([]), "int:-8")
 }
@@ -302,12 +365,12 @@ test "ordinary builtins may be overridden (upsert)" {
 ///|
 test "recursion and mutual references, registered out of order" {
   let defs : Array[@engine.UserFunctionDef] = [
-    { name: "fact", params: Some(["n"]), body: "n <= 1 ? 1 : n * fact(n - 1)" },
+    { name: "fact", params: Some(["n"]), body: "n <= 1 ? 1 : n * fact(n - 1)", },
   ]
   uf_both(defs, None, "fact(5)", @ast.ObjectVal([]), "int:120")
   let mutual : Array[@engine.UserFunctionDef] = [
-    { name: "a2", params: Some(["x"]), body: "b2(x) + 1" },
-    { name: "b2", params: Some(["x"]), body: "x * 10" },
+    { name: "a2", params: Some(["x"]), body: "b2(x) + 1", },
+    { name: "b2", params: Some(["x"]), body: "x * 10", },
   ]
   uf_both(mutual, None, "a2(2)", @ast.ObjectVal([]), "int:21")
 }
@@ -333,7 +396,7 @@ test "engine mode may switch after registration" {
 ///|
 test "nullary auto params: body without free identifiers" {
   let defs : Array[@engine.UserFunctionDef] = [
-    { name: "f", params: None, body: "1 + 2" },
+    { name: "f", params: None, body: "1 + 2", },
   ]
   uf_both(defs, None, "f()", @ast.ObjectVal([]), "int:3")
 }
@@ -350,4 +413,119 @@ test "explicit params: clamp through builtins, both engines" {
   uf_both(defs, None, "clamp(5, 1, 3)", @ast.ObjectVal([]), "int:3")
   uf_both(defs, None, "clamp(0, 1, 3)", @ast.ObjectVal([]), "int:1")
   uf_both(defs, None, "clamp(5, 1, 9)", @ast.ObjectVal([]), "int:5")
+}
+
+///|
+test "checked registration: body type error is positioned" {
+  assert_eq(
+    uf_checked_register_err(
+      [{ name: "bad", params: Some(["x"]), body: "1 + \"a\"", }],
+      None,
+    ),
+    "function \"bad\": invalid operation: + (mismatched types int and string) (1:3)\n | 1 + \"a\"\n | ..^",
+  )
+}
+
+///|
+test "checked registration: unknown name in a body" {
+  assert_eq(
+    uf_checked_register_err(
+      [{ name: "g", params: Some(["x"]), body: "x + missing", }],
+      None,
+    ),
+    "function \"g\": unknown name missing (1:5)\n | x + missing\n | ....^",
+  )
+}
+
+///|
+test "checked registration: unknown call in a body" {
+  assert_eq(
+    uf_checked_register_err(
+      [{ name: "g", params: Some(["x"]), body: "nosuch(x)", }],
+      None,
+    ),
+    "function \"g\": unknown function nosuch (1:1)\n | nosuch(x)\n | ^",
+  )
+}
+
+///|
+test "checked registration: arity mismatch inside a body" {
+  let defs : Array[@engine.UserFunctionDef] = [
+    { name: "dbl", params: Some(["x"]), body: "x * 2", },
+    { name: "g", params: Some(["x"]), body: "dbl(x, x)", },
+  ]
+  assert_eq(
+    uf_checked_register_err(defs, None),
+    "function \"g\": invalid number of arguments for dbl (expected 1, got 2) (1:1)\n | dbl(x, x)\n | ^",
+  )
+}
+
+///|
+test "checked calls: unknown function and arity, both engines" {
+  let defs : Array[@engine.UserFunctionDef] = [
+    { name: "dbl", params: Some(["x"]), body: "x * 2", },
+    { name: "tax", params: None, body: "price * rate", },
+  ]
+  let env = @ast.ObjectVal([])
+  uf_checked_both(defs, "dbl(2)", env, "int:4")
+  uf_checked_both(
+    defs, "dbl(1, 2)", env, "ERR:invalid number of arguments for dbl (expected 1, got 2) (1:1)\n | dbl(1, 2)\n | ^",
+  )
+  uf_checked_both(
+    defs, "dbl()", env, "ERR:invalid number of arguments for dbl (expected 1, got 0) (1:1)\n | dbl()\n | ^",
+  )
+  uf_checked_both(
+    defs, "tax(1)", env, "ERR:invalid number of arguments for tax (expected 2, got 1) (1:1)\n | tax(1)\n | ^",
+  )
+  uf_checked_both(
+    defs, "nosuch(1)", env, "ERR:unknown function nosuch (1:1)\n | nosuch(1)\n | ^",
+  )
+}
+
+///|
+test "checked registration: forward references and recursion" {
+  let defs : Array[@engine.UserFunctionDef] = [
+    { name: "a2", params: Some(["x"]), body: "b2(x) + 1", },
+    { name: "b2", params: Some(["x"]), body: "x * 10", },
+    { name: "fact", params: Some(["n"]), body: "n <= 1 ? 1 : n * fact(n - 1)", },
+  ]
+  let env = @ast.ObjectVal([])
+  uf_checked_both(defs, "a2(2)", env, "int:21")
+  uf_checked_both(defs, "fact(5)", env, "int:120")
+}
+
+///|
+test "checked bodies and expressions may call aggregates" {
+  let defs : Array[@engine.UserFunctionDef] = [
+    { name: "total", params: Some(["xs"]), body: "sum(xs)", },
+  ]
+  let env = @ast.ObjectVal([])
+  uf_checked_both(defs, "total([1, 2])", env, "int:3")
+  uf_checked_both(defs, "sum([1, 2])", env, "int:3")
+  uf_checked_both(defs, "map([1, 2], #*2)", env, "other:2,4")
+}
+
+///|
+test "checked registration is atomic: a failing body registers nothing" {
+  let defs : Array[@engine.UserFunctionDef] = [
+    { name: "good", params: Some(["x"]), body: "x + 1", },
+    { name: "bad", params: Some(["x"]), body: "1 + \"a\"", },
+  ]
+  assert_true(uf_checked_register_err(defs, None).contains("invalid operation"))
+  let e = @engine.new()
+  let res = try? @engine.Engine::add_expression_functions_checked(e, defs, None)
+  match res {
+    Err(_) => ()
+    Ok(_) => fail("checked registration should have failed")
+  }
+  let after = try? @engine.Engine::eval_expr_checked(
+    e,
+    "good(1)",
+    @ast.ObjectVal([]),
+  )
+  match after {
+    Err(@engine.EngineErr(m)) =>
+      assert_eq(m, "unknown function good (1:1)\n | good(1)\n | ^")
+    other => fail("good should be unregistered: " + uf_dbg(other))
+  }
 }
