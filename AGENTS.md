@@ -42,6 +42,11 @@ You can browse and install extra skills here:
   toolchain upgrade (bump + full reformat + three-target tests + generated
   files) must land as a single standalone commit.
 
+- The repo pins its MoonBit toolchain via `.moonbit-version` (moonc-style
+  version `0.10.15+943464bfa` = moon CLI `0.1.20261012`); CI installs exactly
+  that build. Note the code still uses `try?`, which newer toolchains have
+  removed — migrating off it belongs to the toolchain-upgrade commit above.
+
 - `moon ide` provides project navigation helpers like `peek-def`, `outline`, and
   `find-references`. See $moonbit-agent-guide for details.
 
