@@ -10,20 +10,56 @@ import {
 
 pkgtype(kind: "executable")
 
+// Two artifacts from one source tree (proposal 0003 P0):
+//
+//   wasm-gc + js-string  → playground/mbel.wasm       (Node >= 24, browsers)
+//   wasm (MVP)           → playground/mbel-cabi.wasm  (any MVP host)
+//
+// Both profiles list every ABI export; a missing entry is silently
+// dead-code-eliminated (a 259-byte artifact exporting only `memory`), so
+// tools/check_abi.mjs compares the artifact's exports against the manifest
+// and would catch the omission.
+
 options(
   link: {
     "wasm-gc": {
       "exports": [
-        "eval_jexl",
-        "eval_expr",
-        "eval_checked",
-        "eval_with_functions",
-        "describe_functions",
+        "abi_layout",
+        "configure_session",
+        "create_session",
         "describe_abi",
+        "describe_functions",
+        "describe_session",
         "disassemble",
         "dump_ast",
+        "eval_checked",
+        "eval_expr",
+        "eval_jexl",
+        "eval_session",
+        "eval_with_functions",
+        "eval_with_limits",
+        "release_session",
       ],
       "use-js-builtin-string": true,
+    },
+    "wasm": {
+      "exports": [
+        "abi_layout",
+        "configure_session",
+        "create_session",
+        "describe_abi",
+        "describe_functions",
+        "describe_session",
+        "disassemble",
+        "dump_ast",
+        "eval_checked",
+        "eval_expr",
+        "eval_jexl",
+        "eval_session",
+        "eval_with_functions",
+        "eval_with_limits",
+        "release_session",
+      ],
     },
   },
 )

@@ -1,0 +1,12 @@
+[package]
+name = "mbel-cabi-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1"
+wasmtime = "24"
+
+[profile.release]
+opt-level = "z"

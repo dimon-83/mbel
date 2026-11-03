@@ -100,6 +100,15 @@ pub fn Engine::set_limits(
 }
 
 ///|
+/// Reads the instance's current budgets as
+/// `(max_nodes, max_depth, max_steps)`. 0 means the guard is disabled.
+/// This is the read side of `set_limits`, so an embedder can report what
+/// an instance is actually running with instead of the compiled default.
+pub fn Engine::limits(self : Engine) -> (Int32, Int32, Int32) {
+  (self.max_nodes, self.max_depth, self.max_steps)
+}
+
+///|
 /// Drops the instance's cross-call caches (the compiled `matches`
 /// patterns). Nothing else is retained between evaluations, so this
 /// returns the instance to its initial memory footprint — an embedder

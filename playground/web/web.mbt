@@ -12,29 +12,6 @@ fn main {
 }
 
 ///|
-/// Machine-readable ABI manifest (P0): the same document as
-/// playground/mbel.abi.json, checked in CI by tools/check_abi.mjs.
-/// `_start` is wasm-gc's module entry stub, not part of the callable
-/// ABI, hence `abi: false`. Every JSON-returning export wraps failures
-/// in the error envelope (`$error`, optional `$code`); `limits` lists
-/// the engine's default resource budgets.
-pub fn describe_abi() -> String {
-  "{\"abiVersion\":1,\"engineVersion\":\"0.4.1\",\"functionsFileVersion\":1," +
-  "\"exports\":[" +
-  "{\"name\":\"describe_abi\",\"kind\":\"function\",\"params\":[],\"returns\":\"json\"}," +
-  "{\"name\":\"describe_functions\",\"kind\":\"function\",\"params\":[\"funcs_json\"],\"returns\":\"json\"}," +
-  "{\"name\":\"disassemble\",\"kind\":\"function\",\"params\":[\"source\",\"env\"],\"returns\":\"json\"}," +
-  "{\"name\":\"dump_ast\",\"kind\":\"function\",\"params\":[\"source\"],\"returns\":\"json\"}," +
-  "{\"name\":\"eval_checked\",\"kind\":\"function\",\"params\":[\"expr\",\"env\",\"engine\"],\"returns\":\"json\"}," +
-  "{\"name\":\"eval_expr\",\"kind\":\"function\",\"params\":[\"expr\",\"env\",\"engine\"],\"returns\":\"json\"}," +
-  "{\"name\":\"eval_jexl\",\"kind\":\"function\",\"params\":[\"expr\",\"env\",\"engine\"],\"returns\":\"json\"}," +
-  "{\"name\":\"eval_with_functions\",\"kind\":\"function\",\"params\":[\"code\",\"env\",\"funcs_json\",\"mode\",\"engine\"],\"returns\":\"json\"}," +
-  "{\"name\":\"_start\",\"kind\":\"function\",\"abi\":false}]," +
-  "\"errorEnvelope\":{\"message\":\"$error\",\"code\":\"$code\"}," +
-  "\"limits\":{\"maxNodes\":10000,\"maxDepth\":10000,\"maxSteps\":1000000,\"userfnDepth\":256}}"
-}
-
-///|
 /// Runs `f` against a fresh engine instance (dialect demo transforms
 /// registered, execution engine selected) and the parsed env JSON,
 /// canonicalizing the result or formatting the error for the page.
@@ -44,15 +21,24 @@ fn with_env(
   f : (@engine.Engine, @ast.Value) -> @ast.Value raise @engine.EngineError,
 ) -> String {
   let ctx = json_to_value(@json.parse(env)) catch {
-    _ => return error_out("env is not valid JSON")
+    _ => return code_out("env is not valid JSON", "ENV_JSON")
   }
+  let inst = make_instance(engine)
+  let v = f(inst, ctx) catch { @engine.EngineErr(msg) => return error_out(msg) }
+  canon(v)
+}
+
+///|
+/// A fresh instance with the dialect demo transforms registered and the
+/// execution engine selected. Shared by the stateless entries and by
+/// session creation so both paths see the same baseline.
+fn make_instance(engine : String) -> @engine.Engine {
   let inst = @engine.new()
   register_demo_transforms(inst)
   if engine == "vm" {
     @engine.Engine::set_engine(inst, Vm)
   }
-  let v = f(inst, ctx) catch { @engine.EngineErr(msg) => return error_out(msg) }
-  canon(v)
+  inst
 }
 
 ///|
@@ -139,11 +125,6 @@ pub fn dump_ast(source : String) -> String {
       )
   }
   @expr.dump(node)
-}
-
-///|
-fn error_out(msg : String) -> String {
-  "{\"$error\":" + canon_str(msg) + "}"
 }
 
 ///|
@@ -424,11 +405,11 @@ fn parse_user_functions(j : Json) -> Result[Array[UserFnSpec], String] {
 /// order). Page-facing: used to render the function chips.
 pub fn describe_functions(funcs_json : String) -> String {
   let fj = @json.parse(funcs_json) catch {
-    _ => return error_out("functions file is not valid JSON")
+    _ => return code_out("functions file is not valid JSON", "FUNCS_JSON")
   }
   let specs = match parse_user_functions(fj) {
     Ok(specs) => specs
-    Err(msg) => return error_out(msg)
+    Err(msg) => return code_out(msg, functions_file_code(msg))
   }
   let out = StringBuilder::new()
   out.write_string("[")
@@ -442,7 +423,7 @@ pub fn describe_functions(funcs_json : String) -> String {
       Some(ps) => ps
       None =>
         @engine.user_function_params(sp.name, sp.body) catch {
-          @engine.EngineErr(m) => return error_out(m)
+          @engine.EngineErr(m) => return code_out(m, registration_code(m))
         }
     }
     out.write_string("{\"name\":")
@@ -476,20 +457,16 @@ pub fn eval_with_functions(
   engine : String,
 ) -> String {
   let ctx = json_to_value(@json.parse(env)) catch {
-    _ => return error_out("env is not valid JSON")
+    _ => return code_out("env is not valid JSON", "ENV_JSON")
   }
   let fj = @json.parse(funcs_json) catch {
-    _ => return error_out("functions file is not valid JSON")
+    _ => return code_out("functions file is not valid JSON", "FUNCS_JSON")
   }
   let specs = match parse_user_functions(fj) {
     Ok(specs) => specs
-    Err(msg) => return error_out(msg)
+    Err(msg) => return code_out(msg, functions_file_code(msg))
   }
-  let inst = @engine.new()
-  register_demo_transforms(inst)
-  if engine == "vm" {
-    @engine.Engine::set_engine(inst, Vm)
-  }
+  let inst = make_instance(engine)
   let defs : Array[@engine.UserFunctionDef] = []
   for sp in specs {
     defs.push({ name: sp.name, params: sp.params, body: sp.body, })
@@ -506,7 +483,7 @@ pub fn eval_with_functions(
       @engine.Engine::add_expression_functions(inst, defs, defaults)
     }
   } catch {
-    @engine.EngineErr(m) => return error_out(m)
+    @engine.EngineErr(m) => return code_out(m, registration_code(m))
   }
   ignore(registered)
   let v = try {

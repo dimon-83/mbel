@@ -49,6 +49,7 @@ pub fn Engine::eval_expr(Self, String, @ast.Value) -> @ast.Value raise EngineErr
 pub fn Engine::eval_expr_checked(Self, String, @ast.Value) -> @ast.Value raise EngineError
 pub fn Engine::get_function(Self, String) -> ((Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError)?
 pub fn Engine::get_transform(Self, String) -> ((Array[@ast.Value]) -> @ast.Value raise @evaluator.EvalError)?
+pub fn Engine::limits(Self) -> (Int32, Int32, Int32)
 pub fn Engine::remove_op(Self, String) -> Unit
 pub fn Engine::reset_budget_stats(Self) -> Unit
 pub fn Engine::set_engine(Self, EngineMode) -> Unit

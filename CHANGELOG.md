@@ -4,6 +4,65 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [0.5.0] - 2026-11-04
+
+Proposal 0003 (`docs/proposals/0003-portable-c-abi-and-host-ergonomics.md`)
+lands in full: mbel is now embeddable from any WebAssembly-MVP host, not
+just JS engines.
+
+### Added
+
+- **A portable C-ABI artifact (P0).** `playground/mbel-cabi.wasm` is built
+  from the same source for the `wasm` (MVP) target: no GC proposal, no
+  js-string builtins, `wasi_snapshot_preview1.fd_write` +
+  `__moonbit_time_unstable.now` imports (stubs are fine). Strings cross the
+  boundary as UTF-16LE pointers with a `u32` character count at `ptr - 4`
+  and a double-NUL terminator; the convention is self-described by the new
+  `abi_layout()` export and written down in `playground/mbel-cabi.md` —
+  including the one real trap: the engine owns all linear memory and
+  bump-allocates over host-written scratch, so hosts must re-write input
+  strings before every call. Verified end to end from Node, Python
+  (`wasmtime`) and Rust (`wasmtime`); runnable examples live in
+  `tools/bindings/`.
+- **Structured errors (P3, absorbs proposal 0001 P5).** Every failure now
+  returns `{"$error", "$code", "$pos"?}`. `$code` is one of 23 declared
+  codes (`PARSE_SYNTAX`, `CHECK_TYPE`, `HANDLE_UNKNOWN`, `RUNTIME_BUDGET`,
+  ...) and `$pos` carries line/col for parse and checked-mode errors.
+  Hosts can branch on `$code` instead of matching message text.
+- **Session handles (P2, absorbs proposal 0001 P1).**
+  `create_session` registers a function set once (any mode, either
+  engine, optional parameter defaults) and returns an opaque handle;
+  `eval_session` evaluates against the prepared instance;
+  `describe_session` reports mode, engine, resolved signatures and live
+  budgets; `release_session` frees the handle. With 200 functions the
+  stateless path costs ~0.475 ms per call; a session amortises that to a
+  ~106× speedup. Handles are capped (`sessionLimit`, 16) and creation is
+  atomic — nothing is registered on a validation error.
+- **Per-call budgets (P4).** `eval_with_limits(expr, env, engine,
+  limits_json)` accepts `maxNodes` / `maxDepth` / `maxSteps` /
+  `allowRaise`; `configure_session` tightens a live session. Without
+  `allowRaise` a request may only lower a budget relative to the compiled
+  default, so a misconfiguration cannot silently disable the DoS guard.
+  Budget exhaustion returns `RUNTIME_BUDGET`.
+- **Embedder documentation and bindings (P6).**
+  `docs/{en,zh}/wasm-embedding.md` (which artifact for which host,
+  loading recipes, the versioning/compatibility policy),
+  `playground/mbel.d.ts` (typed surface for the js-string artifact), and
+  three runnable examples in `tools/bindings/` (Node, Python + wasmtime,
+  Rust + wasmtime).
+
+### Changed
+
+- **The ABI manifest is now single-source and declares host requirements
+  (P1, P5).** `playground/mbel.abi.json` lists both artifacts with their
+  `hostRequirements` (proposal flags, imports, minimum browsers) and is
+  the source from which `tools/gen_abi_mbt.py` generates
+  `playground/web/manifest_generated.mbt` — `describe_abi()` returns it,
+  so a host can verify the artifact it loaded without trusting the file
+  layout. `tools/check_abi.mjs` verifies both artifacts (export sets,
+  manifest deep-equality, `engineVersion` cross-check, smoke calls per
+  signature shape including a session lifecycle).
+
 ## [0.4.1] - 2026-11-03
 
 ### Fixed

@@ -1,8 +1,62 @@
 {
   "abiVersion": 1,
-  "engineVersion": "0.4.1",
+  "engineVersion": "0.5.0",
   "functionsFileVersion": 1,
+  "artifacts": [
+    {
+      "file": "playground/mbel.wasm",
+      "target": "wasm-gc",
+      "callingConvention": "js-string",
+      "hostRequirements": {
+        "needsGcProposal": true,
+        "needsJsStringBuiltins": true,
+        "importedStringConstants": "_",
+        "imports": ["__moonbit_time_unstable.now"],
+        "minNode": 24,
+        "browsers": {
+          "chrome": 130,
+          "edge": 130,
+          "firefox": 134,
+          "safari": "18.4"
+        }
+      }
+    },
+    {
+      "file": "playground/mbel-cabi.wasm",
+      "target": "wasm",
+      "callingConvention": "mbel-cabi",
+      "hostRequirements": {
+        "needsGcProposal": false,
+        "needsJsStringBuiltins": false,
+        "importedStringConstants": null,
+        "imports": [
+          "wasi_snapshot_preview1.fd_write",
+          "__moonbit_time_unstable.now"
+        ],
+        "minNode": 16,
+        "browsers": "any MVP host"
+      }
+    }
+  ],
   "exports": [
+    {
+      "name": "abi_layout",
+      "kind": "function",
+      "params": [],
+      "returns": "json"
+    },
+    {
+      "name": "configure_session",
+      "kind": "function",
+      "params": ["handle", "limits_json"],
+      "returns": "json"
+    },
+    {
+      "name": "create_session",
+      "kind": "function",
+      "params": ["funcs_json", "mode", "engine", "defaults_json"],
+      "returns": "json"
+    },
     {
       "name": "describe_abi",
       "kind": "function",
@@ -13,6 +67,12 @@
       "name": "describe_functions",
       "kind": "function",
       "params": ["funcs_json"],
+      "returns": "json"
+    },
+    {
+      "name": "describe_session",
+      "kind": "function",
+      "params": ["handle"],
       "returns": "json"
     },
     {
@@ -46,9 +106,27 @@
       "returns": "json"
     },
     {
+      "name": "eval_session",
+      "kind": "function",
+      "params": ["handle", "expr", "env"],
+      "returns": "json"
+    },
+    {
       "name": "eval_with_functions",
       "kind": "function",
       "params": ["code", "env", "funcs_json", "mode", "engine"],
+      "returns": "json"
+    },
+    {
+      "name": "eval_with_limits",
+      "kind": "function",
+      "params": ["expr", "env", "engine", "limits_json"],
+      "returns": "json"
+    },
+    {
+      "name": "release_session",
+      "kind": "function",
+      "params": ["handle"],
       "returns": "json"
     },
     {
@@ -59,12 +137,39 @@
   ],
   "errorEnvelope": {
     "message": "$error",
-    "code": "$code"
+    "code": "$code",
+    "position": "$pos"
   },
+  "errorCodes": [
+    "ENV_JSON",
+    "FUNCS_JSON",
+    "FUNCS_VERSION",
+    "FUNCS_INVALID",
+    "MODE_UNKNOWN",
+    "ENGINE_UNKNOWN",
+    "HANDLE_UNKNOWN",
+    "HANDLE_LIMIT",
+    "LIMITS_INVALID",
+    "PARSE_SYNTAX",
+    "PARSE_EMPTY",
+    "PARSE_TOO_LARGE",
+    "PARSE_TOO_DEEP",
+    "CHECK_TYPE",
+    "CHECK_UNKNOWN_NAME",
+    "CHECK_UNKNOWN_FUNCTION",
+    "CHECK_ARITY",
+    "CHECK_FUNC_BODY",
+    "RUNTIME_TYPE",
+    "RUNTIME_UNKNOWN_CALL",
+    "RUNTIME_RECURSION",
+    "RUNTIME_BUDGET",
+    "INTERNAL"
+  ],
   "limits": {
     "maxNodes": 10000,
     "maxDepth": 10000,
     "maxSteps": 1000000,
     "userfnDepth": 256
-  }
+  },
+  "sessionLimit": 16
 }

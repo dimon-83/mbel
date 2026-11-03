@@ -164,15 +164,23 @@ You can browse and install extra skills here:
 
 - `playground/` is a self-contained browser test page: `index.html` plus the
   built `mbel.wasm`. The wasm entry is the `playground/web` package, which
-  exports `eval_expr`, `eval_jexl`, `eval_checked` (each `(expr, env,
-  engine)` where `engine` is `"walk"` or `"vm"`), `eval_with_functions`
-  (`(code, env, funcs_json, mode, engine)` — `mode` is `"eval"`,
-  `"checked"` or `"legacy"`; the env doubles as the custom functions'
-  default bindings), `describe_functions` (`(funcs_json)` → resolved
-  signature list), `disassemble` and
-  `dump_ast` — all taking and returning native JS strings. `web.mbt` mirrors
-  `cmd/main`'s canonical serializer and env parsing (kept in sync by hand;
-  main packages cannot be imported).
+  exports 16 functions (see `playground/mbel.abi.json` for the manifest with
+  every signature): the stateless entries `eval_expr` / `eval_jexl` /
+  `eval_checked` (each `(expr, env, engine)` where `engine` is `"walk"` or
+  `"vm"`), `eval_with_limits` (per-call budgets),
+  `eval_with_functions` (`(code, env, funcs_json, mode, engine)` — `mode`
+  is `"eval"`, `"checked"` or `"legacy"`; the env doubles as the custom
+  functions' default bindings), `describe_functions` (`(funcs_json)` →
+  resolved signature list), the session lifecycle `create_session` /
+  `eval_session` / `describe_session` / `configure_session` /
+  `release_session`, the manifest introspection `describe_abi` /
+  `abi_layout`, and `dump_ast` / `disassemble`. Failures return the
+  `$error` envelope with `$code` (see the manifest's `errorCodes`) and
+  `$pos` where a position exists. `web.mbt` mirrors `cmd/main`'s canonical
+  serializer and env parsing (kept in sync by hand; main packages cannot
+  be imported); the manifest itself is generated from `mbel.abi.json` by
+  `tools/gen_abi_mbt.py` (`playground/web/manifest_generated.mbt` — do not
+  edit by hand).
 
 - Custom functions file (format v1: `{version, functions: [{name,
   params?, body, description?}], env?}`) is loaded by the page's 🧩
@@ -180,15 +188,32 @@ You can browse and install extra skills here:
   is a page-level example environment the engine ignores. Validation is
   authoritative on the wasm side (`parse_user_functions` + engine
   checks, atomic); the page persists the file in localStorage and
-  restores it on load — the wasm is stateless, so embedding hosts must
-  pass the JSON on every call. See docs/{en,zh}/functions.md →
-  "Expression-defined functions" and `playground/functions.example.json`.
+  restores it on load. For repeat calls against one function set prefer a
+  **session** (`create_session` once, then `eval_session` per call) — it
+  amortises registration; with 200 functions the stateless path costs
+  ~0.475 ms per call (~106× a session call). See
+  docs/{en,zh}/functions.md → "Expression-defined functions" and
+  `playground/functions.example.json`.
 
-- Rebuild and deploy the wasm (wasm-gc release):
+- Two artifacts ship, both described by `playground/mbel.abi.json` and
+  verified in CI by `tools/check_abi.mjs` (`--cabi` for the MVP one):
+  `playground/mbel.wasm` (wasm-gc, js-string builtins — JS hosts) and
+  `playground/mbel-cabi.wasm` (wasm MVP target — any host; strings cross
+  as UTF-16LE pointers, u32 char count at `ptr-4`). The C-ABI string
+  convention and the one real trap (the engine owns all linear memory and
+  bump-allocates over host-written scratch, so hosts must re-write input
+  strings before every call) are documented in `playground/mbel-cabi.md`;
+  runnable Python/Rust/Node embedders live in `tools/bindings/`, and
+  `docs/{en,zh}/wasm-embedding.md` is the embedder-facing page.
+
+- Rebuild and deploy both artifacts (release):
 
   ```
   moon build --target wasm-gc --release
   cp _build/wasm-gc/release/build/playground/web/web.wasm playground/mbel.wasm
+  moon build --target wasm --release
+  cp _build/wasm/release/build/playground/web/web.wasm playground/mbel-cabi.wasm
+  node tools/check_abi.mjs && node tools/check_abi.mjs --cabi
   ```
 
 - String interop relies on js-string builtins; keep the three sides in sync:

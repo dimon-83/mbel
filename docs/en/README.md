@@ -18,11 +18,13 @@ Pages: [Getting started](getting-started.md) ·
 [Environment & configuration](environment.md) ·
 [Custom functions](functions.md) · [Regular expressions](regex.md) ·
 [Visitor](visitor.md) · [Patch](patch.md) ·
-[Language definition](language-definition.md).
+[Language definition](language-definition.md) ·
+[Embedding in a host application](wasm-embedding.md).
 
 Related developer documentation:
 
 - [Proposal 0001: first-class expression-defined functions for stateless embedders](../proposals/0001-user-functions-for-embedders.md) (draft).
+- [Proposal 0003: a portable C-ABI wasm artifact and host-ergonomics gaps](../proposals/0003-portable-c-abi-and-host-ergonomics.md) (draft) — why the current artifact only runs on JS hosts, and what a non-JS embedder needs.
 - docs/parity-contract.md — classic-dialect parity contract and JS-semantics pitfalls (English).
 - docs/coverage-vs-expr.md — coverage matrix vs the reference semantics, measurements, roadmap status (Chinese).
 - docs/expr-gap-analysis.md — gap analysis and cut items (Chinese).
