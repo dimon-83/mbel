@@ -33,6 +33,14 @@ You can browse and install extra skills here:
 ## Tooling
 
 - `moon fmt` is used to format your code properly.
+  **Toolchain caveat (2026-11-03):** the repo's formatting baseline predates
+  the moon `0.1.20261012` toolchain. Newer toolchains' `moon fmt` is NOT a
+  pure formatter — it also rewrites `Int` to `Int32`, converts
+  `try { Ok(f()) } catch {}` to `Ok(f()) catch {}`, and adds trailing commas,
+  churning dozens of unrelated files (~9k lines observed). Do NOT run
+  `moon fmt` unless your toolchain matches the repo baseline; a deliberate
+  toolchain upgrade (bump + full reformat + three-target tests + generated
+  files) must land as a single standalone commit.
 
 - `moon ide` provides project navigation helpers like `peek-def`, `outline`, and
   `find-references`. See $moonbit-agent-guide for details.
