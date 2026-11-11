@@ -9,7 +9,7 @@
 /// playground/mbel.abi.json (minified). Generated so the version and
 /// export list have exactly one source.
 fn abi_manifest() -> String {
-  "{\"abiVersion\":1,\"engineVersion\":\"0.5.1\",\"functionsFileVersion\":1,\"artifacts\":[{\"file\":\"playgroun" +
+  "{\"abiVersion\":1,\"engineVersion\":\"0.5.2\",\"functionsFileVersion\":1,\"artifacts\":[{\"file\":\"playgroun" +
   "d/mbel.wasm\",\"target\":\"wasm-gc\",\"callingConvention\":\"js-string\",\"hostRequirements\":{\"needsGcProp" +
   "osal\":true,\"needsJsStringBuiltins\":true,\"importedStringConstants\":\"_\",\"imports\":[\"__moonbit_time" +
   "_unstable.now\"],\"minNode\":24,\"browsers\":{\"chrome\":130,\"edge\":130,\"firefox\":134,\"safari\":\"18.4\"}}" +

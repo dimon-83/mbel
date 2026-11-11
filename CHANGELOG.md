@@ -4,7 +4,7 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
-## [Unreleased]
+## [0.5.2] - 2026-11-11
 
 ### Fixed
 
