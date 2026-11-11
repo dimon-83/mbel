@@ -151,7 +151,7 @@ expr option | mbel status
 `expr.WithContext("ctx")` | Not available (no user-function context injection)
 `expr.ConstExpr("fib")` compile-time evaluation | Partial: the engine constant-folds pure literal subtrees automatically (`evaluator.constant_fold`); no opt-in per-function marking
 `expr.Patch(...)` AST patching | Not available — see [Patch](patch.md)
-`expr.Timezone(...)` / timezone objects | Minimal: `now()`, `duration()`, `date()` (ISO), `timezone()` = UTC. No time.Time objects or tzdata (documented cut)
+`expr.Timezone(...)` / timezone objects | Minimal: `now()`, `duration()`, `date()` (ISO), `timezone()` = UTC + a fixed-offset IANA subset (no-DST +08:00/+09:00 zones). No time.Time objects; the full tzdata (with DST) is a documented cut
 `expr.Optimize` (12 passes) | Constant folding only; further optimizer passes are roadmap items
 `expr.MaxNodes` | `set_limits(max_nodes, ...)` (default 10000)
 Memory budget (1e6 units) | `set_limits(..., max_steps)` charged at allocation points

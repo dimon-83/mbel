@@ -128,7 +128,10 @@ Other syntax:
   date("2024-01-02")`. `date()` takes Go reference layouts (expr's seven
   defaults, or one you pass) and applies a numeric offset when the string
   carries one (`date("2024-01-01T00:00:00+08:00")`); `timezone()` resolves
-  UTC only, because the IANA database is a documented cut.
+  UTC and a fixed-offset IANA subset (the no-DST +08:00/+09:00 zones),
+  where the location's offset is the default the wall-clock fields are
+  read in and a string offset overrides it; the full IANA database
+  (with DST) remains a documented cut.
 - `$env` — the whole context as a value (`len($env)`, `keys($env)`, member
   access all work; cannot be declared).
 

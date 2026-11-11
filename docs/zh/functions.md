@@ -168,7 +168,7 @@ date("01 Jan 24 15:04 UTC")            // 1704121440000000000   (RFC822)
 date("01/02/2024", "02/01/2006")       // 1706745600000000000   (日/月/年)
 ```
 
-expr 的调用形态都支持:location 可在**前**(`date(timezone("UTC"), "2024-01-01")`)或在后,`now(tz)` 表示同一时刻用某时区表达(纳秒计数本身无时区)。仍有两项裁剪,且都**与 Go 一样报错**而非静默偏差:IANA 时区名需要时区数据库,`Local` 需要宿主 FFI。`timezone("+08:00")` 在 Go 里本来就是错误(`time.LoadLocation` 拒绝它),所以偏移属于日期串。相对 Go 的 `time.Parse`,仅时刻的 layout 会被拒绝,而不是复现它的 int64 溢出。
+expr 的调用形态都支持:location 可在**前**(`date(timezone("Asia/Shanghai"), "2024-01-01")`)或在后,`now(tz)` 表示同一时刻用某时区表达(纳秒计数本身无时区)。`timezone()` 解析 UTC 与一个**固定偏移 IANA 子集**(+08:00 的 `Asia/Shanghai`、`Asia/Chongqing`、`Asia/Harbin`、`Asia/Hong_Kong`、`Asia/Macau`、`Asia/Taipei`、`Asia/Singapore`,以及 +09:00 的 `Asia/Tokyo`、`Asia/Seoul`)——这些时区近几十年来无夏令时;location 的偏移是墙钟字段的默认解析偏移(Go 的 `ParseInLocation` 语义),字符串内自带的数字偏移会覆盖它。`timezone("+08:00")` 在 Go 里本来就是错误(`time.LoadLocation` 拒绝它),所以裸偏移仍属于日期串。仍有两项裁剪,且都**与 Go 一样报错**而非静默偏差:带夏令时的 IANA 时区名(如 `America/New_York`)需要完整时区数据库,`Local` 需要宿主 FFI;此外,子集时区在其历史夏令时年代(如上海 1986-1991)的日期与 Go 的 tzdata 结果有界偏差。相对 Go 的 `time.Parse`,仅时刻的 layout 复现它的 int64 溢出(与 Go 的 `UnixNano` 同值),而不是新增范围检查拒绝。
 - 谓词聚合(15):all none any one filter map count sum find findIndex findLast findLastIndex groupBy sortBy reduce
 
 若干内置按 expr 语义返回类型化整数:`len`、`count`、`indexOf`、`lastIndexOf`、`findIndex`、`findLastIndex`、`int()`,以及整数输入保持整数的 `abs`/`min`/`max`/`sum`。

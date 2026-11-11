@@ -276,14 +276,23 @@ date("01/02/2024", "02/01/2006")       // 1706745600000000000   (day/month/year)
 ```
 
 expr's call forms are accepted: a location may come first
-(`date(timezone("UTC"), "2024-01-01")`) or last, and `now(tz)` is the same
-instant in a location (a nanosecond count is location-free). Two cuts
-remain, and both fail the same way Go does rather than differing
-silently: an IANA zone name needs the zone database, and `Local` needs
-host FFI. `timezone("+08:00")` is an error in Go too
-(`time.LoadLocation` rejects it), so offsets belong in the date string.
-Relative to Go's `time.Parse`, a time-only layout is rejected instead of
-reproducing its int64 overflow.
+(`date(timezone("Asia/Shanghai"), "2024-01-01")`) or last, and `now(tz)` is
+the same instant in a location (a nanosecond count is location-free).
+`timezone()` resolves UTC and a **fixed-offset IANA subset** — +08:00 for
+`Asia/Shanghai`, `Asia/Chongqing`, `Asia/Harbin`, `Asia/Hong_Kong`,
+`Asia/Macau`, `Asia/Taipei`, `Asia/Singapore`; +09:00 for `Asia/Tokyo`,
+`Asia/Seoul` — zones with no DST in the modern era. The location's
+offset is the default the wall-clock fields are read in (Go's
+`ParseInLocation`), and a numeric offset carried by the string overrides
+it. `timezone("+08:00")` is an error in Go too (`time.LoadLocation`
+rejects it), so a bare offset still belongs in the date string. Two cuts
+remain, both failing the same way Go does rather than differing
+silently: a DST-bearing IANA zone (e.g. `America/New_York`) needs the
+full zone database, and `Local` needs host FFI; also, dates inside a
+subset zone's historical DST era (e.g. Shanghai 1986-1991) diverge
+boundedly from Go's tzdata result. Relative to Go's `time.Parse`, a
+time-only layout reproduces its int64 overflow (the same value Go's
+`UnixNano` gives) instead of adding a range check.
 - Predicate aggregates (15): all none any one filter map count sum find
   findIndex findLast findLastIndex groupBy sortBy reduce
 

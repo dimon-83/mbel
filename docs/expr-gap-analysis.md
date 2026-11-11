@@ -104,7 +104,7 @@ byte-identical):
   conversions 9 (int/float/string/type/toJSON/fromJSON/toBase64/
   fromBase64/toPairs/fromPairs, with own UTF-8 + base64 codec),
   bitwise 8 (Int64 semantics via the Double value model), time
-  minimal set (now/duration/date ISO/timezone=UTC only).
+  minimal set (now/duration/date ISO/timezone=UTC + fixed-offset IANA subset).
 - **4.2b expr operators**: `??` (nil coalescing, on-demand), `..`
   (range, memory-budgeted at 1e6 elements), `matches` (patterns compiled
   by the MoonBit core regex engine; the earlier literal-substring
@@ -133,7 +133,7 @@ New divergences recorded:
 | `(?-i)` inside an active `(?i)` scope | supported | `invalid regex: …` | core only implements `(?i:…)`, no way to switch it back off |
 | `\uXXXX` / `\u{…}` | **rejected** by RE2 | accepted | core-native escape; mbel superset |
 | `1..2` (Jexl corpus) | n/a | range | mbel superset; moved to tools/divergence.txt |
-| time objects / timezones | Go time.Time | int64 unix-ns numbers (UTC) | stage 4.5 cut item: no time.Time object/methods, no timezone database, ISO-8601 layouts only |
+| time objects / timezones | Go time.Time | int64 unix-ns numbers; `timezone()` = UTC + fixed-offset IANA subset (no-DST +08:00/+09:00 zones) | stage 4.5 cut item: no time.Time object/methods, no full tzdata (DST zones rejected; subset zones diverge for their historical DST-era dates), ISO-8601 layouts only |
 | time/duration unit mixing | one unit throughout | one unit throughout (ns) | both are int64 ns, so `date(…) + duration("24h")` is exact int64 addition; it previously added ms to ns and returned a meaningless number |
 
 ## 5. 已决策与待决策

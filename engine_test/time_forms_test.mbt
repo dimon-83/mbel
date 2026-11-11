@@ -2,11 +2,13 @@
 // expr's time builtin call forms, locked on both engines.
 //
 // expr's date() takes an optional *time.Location first, then the date
-// string, an optional Go layout, and an optional zone name. mbel's only
-// location value is the string timezone() returns, so a known location name
-// in the first position is read as one. A numeric offset is applied where
-// expr applies it — inside the date string (RFC3339) — because
-// timezone("+08:00") is an error in Go as well.
+// string, an optional Go layout, and an optional zone name. mbel's
+// location values are the strings timezone() returns: UTC and a
+// fixed-offset IANA subset (zones with no DST in the modern era). The
+// location's offset is the default the wall-clock fields are read in
+// (Go's ParseInLocation); a numeric offset inside the string overrides
+// it. timezone("+08:00") is an error in Go as well, so a bare offset
+// still belongs inside the date string.
 
 ///|
 fn time_forms_err(src : String, label : String) -> Unit {
@@ -29,10 +31,22 @@ fn time_forms_err(src : String, label : String) -> Unit {
 test "time: timezone() accepts only what mbel can represent" {
   expect_expr_both("timezone(\"UTC\")", @ast.StrVal("UTC"), "UTC")
   expect_expr_both("timezone(\"\")", @ast.StrVal("UTC"), "empty is UTC")
+  // The fixed-offset subset resolves to its canonical name.
+  expect_expr_both(
+    "timezone(\"Asia/Shanghai\")",
+    @ast.StrVal("Asia/Shanghai"),
+    "fixed-offset zone",
+  )
+  expect_expr_both(
+    "timezone(\"Asia/Tokyo\")",
+    @ast.StrVal("Asia/Tokyo"),
+    "fixed-offset +09:00",
+  )
   // Go rejects a numeric offset here too: time.LoadLocation("+08:00") is
   // "unknown time zone +08:00".
   time_forms_err("timezone(\"+08:00\")", "offset rejected like Go")
-  time_forms_err("timezone(\"Asia/Shanghai\")", "IANA needs the zone database")
+  // A DST zone needs the full tzdata database and stays an error.
+  time_forms_err("timezone(\"America/New_York\")", "DST zone needs tzdata")
   time_forms_err("timezone(\"Local\")", "host zone needs FFI")
 }
 
@@ -61,6 +75,27 @@ test "time: date() call forms" {
     "date(\"01/02/2024\", \"02/01/2006\")",
     @ast.IntVal(1706745600000000000L),
     "slash layout (day/month/year)",
+  )
+  // The location's offset is the default the wall-clock fields are read
+  // in: 2024-01-01 00:00 at +08:00 is 1704038400 s.
+  expect_expr_both(
+    "date(timezone(\"Asia/Shanghai\"), \"2024-01-01\")",
+    @ast.IntVal(1704038400000000000L),
+    "tz first applies +08:00",
+  )
+  expect_expr_both(
+    "date(\"2024-01-01\", \"2006-01-02\", \"Asia/Shanghai\")",
+    @ast.IntVal(1704038400000000000L),
+    "tz last applies +08:00",
+  )
+  expect_expr_both(
+    "date(timezone(\"Asia/Tokyo\"), \"2024-01-01\")",
+    @ast.IntVal(1704034800000000000L),
+    "tz first applies +09:00",
+  )
+  // A numeric offset inside the string overrides the location, as in Go.
+  expect_expr_both(
+    "date(timezone(\"Asia/Shanghai\"), \"2024-01-01T00:00:00Z\")", midnight, "string offset wins over location",
   )
   // Offsets: expr applies the numeric zone inside the string.
   expect_expr_both(
@@ -97,7 +132,7 @@ test "time: date() call forms" {
   time_forms_err("date(\"2024-13-01\")", "month out of range")
   time_forms_err("date(\"2024/01/01\")", "not one of expr's layouts")
   time_forms_err(
-    "date(\"2024-01-01\", \"2006-01-02\", \"Asia/Shanghai\")", "unknown zone",
+    "date(\"2024-01-01\", \"2006-01-02\", \"America/New_York\")", "DST zone needs tzdata",
   )
   time_forms_err("date()", "no arguments")
 }
@@ -128,5 +163,5 @@ test "time: now() shares the instant across locations" {
     }
     _ => abort("now() must be an int64 nanosecond count")
   }
-  time_forms_err("now(\"Asia/Shanghai\")", "unknown zone")
+  time_forms_err("now(\"America/New_York\")", "DST zone needs tzdata")
 }

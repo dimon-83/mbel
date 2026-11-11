@@ -105,7 +105,7 @@ expr 选项 | mbel 状态
 `expr.WithContext("ctx")` | 不可用(无用户函数上下文注入)
 `expr.ConstExpr("fib")` 编译期求值 | 部分:引擎自动对纯字面量子树做常量折叠(`evaluator.constant_fold`);无逐函数 opt-in 标记
 `expr.Patch(...)` AST 改写 | 不可用——见 [Patch](patch.md)
-`expr.Timezone(...)` / 时区对象 | 最小集:`now()`、`duration()`、`date()`(ISO)、`timezone()` = UTC;无 time.Time 对象与 tzdata(已文档化裁剪)
+`expr.Timezone(...)` / 时区对象 | 最小集:`now()`、`duration()`、`date()`(ISO)、`timezone()` = UTC + 固定偏移 IANA 子集(无夏令时的 +08:00/+09:00 时区);无 time.Time 对象,完整 tzdata(含夏令时)为已文档化裁剪
 `expr.Optimize`(12 pass) | 仅常量折叠;其余 optimizer pass 在路线图上
 `expr.MaxNodes` | `set_limits(max_nodes, ...)`(默认 10000)
 内存预算(1e6 单位) | `set_limits(..., max_steps)` 在分配点计费

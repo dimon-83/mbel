@@ -15,8 +15,10 @@
 //     int64 nanoseconds; mbel returns the same wrapped value Go's
 //     UnixNano does rather than inventing a range check, so the corpus
 //     covers it;
-//   - an IANA zone name (Asia/Shanghai) still needs the zone database and
-//     is rejected, exactly as `timezone()` rejects it.
+//   - an IANA zone name resolves through mbel's fixed-offset subset
+//     (builtin/time.mbt's fixed_offset_zones): the zone's offset is the
+//     default the wall-clock fields are read in, and a numeric offset
+//     inside the string overrides it, as in Go's ParseInLocation.
 
 ///|
 /// Fields recovered from a layout match, plus which of them were present.
@@ -661,10 +663,14 @@ fn civil_weekday(y : Int32, m : Int32, d : Int32) -> Int32 {
 
 ///|
 /// Parses `s` with a Go reference layout, returning nanoseconds since the
-/// Unix epoch, or None when the input does not match.
+/// Unix epoch, or None when the input does not match. When the string
+/// carries no zone of its own, the wall-clock fields are read in
+/// `default_offset_minutes` (the caller's location, Go's ParseInLocation
+/// semantics); a zone inside the string always wins.
 fn go_parse_layout(
   s : String,
   layout : String,
+  default_offset_minutes : Int32,
 ) -> Int64? raise @evaluator.EvalError {
   let sc = s.to_array()
   let lay = layout.to_array()
@@ -754,8 +760,13 @@ fn go_parse_layout(
     }
   }
   let days = days_from_civil(f.year, f.month, f.day)
+  let offset = if f.has_offset {
+    f.offset_minutes
+  } else {
+    default_offset_minutes
+  }
   let secs = days * 86400L +
     (hour * 3600 + f.minute * 60 + f.second).to_int64() -
-    f.offset_minutes.to_int64() * 60L
+    offset.to_int64() * 60L
   Some(secs * 1000000000L + f.nanosecond.to_int64())
 }

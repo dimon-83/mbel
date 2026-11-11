@@ -12,9 +12,12 @@
 // other half: nanoseconds since the epoch exceed 2^53, so a double
 // representation would make timestamps < ~256 ns apart compare equal.
 //
-// Timezone support is a cut item (docs/expr-gap-analysis.md §E.2):
-// timezone() only accepts "UTC". Dates beyond 2262-04-11 overflow int64
-// nanoseconds, the same limit Go's UnixNano has.
+// Timezone support is a fixed-offset IANA subset: timezone() resolves
+// UTC and the zones in fixed_offset_zones() below; the full tzdata
+// database remains a documented cut (docs/expr-gap-analysis.md §E.2),
+// so dates in a zone's historical DST era diverge from Go. Dates beyond
+// 2262-04-11 overflow int64 nanoseconds, the same limit Go's UnixNano
+// has.
 
 ///|
 /// The layouts expr's `date(string)` tries, in expr's order.
@@ -29,31 +32,73 @@ fn go_date_layouts() -> Array[String] {
 }
 
 ///|
-/// mbel's location values are the strings `timezone()` produces; the IANA
-/// database is a documented cut, so only UTC and "" resolve.
-fn location_name(v : @ast.Value) -> String raise @evaluator.EvalError {
+/// The fixed-offset IANA zone subset mbel resolves without shipping the
+/// tzdata database: zones whose offset has been constant for decades
+/// (no DST in the modern era). Offsets are minutes east of UTC. Dates
+/// before a zone's last DST transition (Asia/Shanghai ran DST in
+/// 1986-1991, Hong Kong and Taipei until 1979) diverge from Go's
+/// tzdata-based result — a bounded, documented divergence.
+fn fixed_offset_zones() -> Array[(String, Int32)] {
+  [
+    ("UTC", 0),
+    ("Etc/UTC", 0),
+    ("Asia/Shanghai", 480),
+    ("Asia/Chongqing", 480),
+    ("Asia/Harbin", 480),
+    ("Asia/Hong_Kong", 480),
+    ("Asia/Macau", 480),
+    ("Asia/Taipei", 480),
+    ("Asia/Singapore", 480),
+    ("Asia/Tokyo", 540),
+    ("Asia/Seoul", 540),
+  ]
+}
+
+///|
+/// mbel's location values are the strings `timezone()` produces: "UTC",
+/// the empty string, and the fixed-offset IANA subset above. Returns
+/// the canonical zone name and its offset in minutes east of UTC; an
+/// unknown name raises Go's `time.LoadLocation` wording.
+fn resolve_location(
+  v : @ast.Value,
+) -> (String, Int32) raise @evaluator.EvalError {
   let name = to_str(v, "timezone")
-  if name == "UTC" || name == "" {
-    "UTC"
-  } else {
-    raise @evaluator.EvalErr("unknown time zone " + name)
+  if name == "" {
+    return ("UTC", 0)
   }
+  for zone in fixed_offset_zones() {
+    if zone.0 == name {
+      return zone
+    }
+  }
+  raise @evaluator.EvalErr("unknown time zone " + name)
 }
 
 ///|
 fn is_location(v : @ast.Value) -> Bool {
   match v {
-    @ast.StrVal(s) => s == "UTC" || s == ""
+    @ast.StrVal(s) => {
+      if s == "" {
+        return true
+      }
+      for zone in fixed_offset_zones() {
+        if zone.0 == s {
+          return true
+        }
+      }
+      false
+    }
     _ => false
   }
 }
 
 ///|
 /// expr's `date`: an optional location first, then the date string, then an
-/// optional layout, then an optional zone name. Only a location mbel can
-/// represent is accepted; a numeric offset inside the string is applied
-/// (that is where expr supports fixed offsets — `timezone("+08:00")` is an
-/// error in Go too).
+/// optional layout, then an optional zone name. The location's offset is
+/// the default the wall-clock fields are read in (Go's ParseInLocation);
+/// a numeric offset inside the string overrides it, as in Go.
+/// `timezone("+08:00")` stays an error, exactly like Go's
+/// `time.LoadLocation("+08:00")`.
 fn date_value(
   args : Array[@ast.Value],
 ) -> @ast.Value raise @evaluator.EvalError {
@@ -64,8 +109,10 @@ fn date_value(
     )
   }
   let mut idx = 0
+  let mut default_offset = 0
   if n >= 2 && is_location(args[0]) {
-    ignore(location_name(args[0]))
+    let (_, off) = resolve_location(args[0])
+    default_offset = off
     idx = 1
   }
   let src = to_str(arg(args, idx, "date"), "date")
@@ -83,17 +130,18 @@ fn date_value(
     None
   }
   if rest >= 3 {
-    ignore(location_name(arg(args, idx + 2, "date")))
+    let (_, off) = resolve_location(arg(args, idx + 2, "date"))
+    default_offset = off
   }
   match layout {
     Some(l) =>
-      match go_parse_layout(src, l) {
+      match go_parse_layout(src, l, default_offset) {
         Some(ns) => @ast.IntVal(ns)
         None => raise @evaluator.EvalErr("invalid date: " + src)
       }
     None => {
       for l in go_date_layouts() {
-        match go_parse_layout(src, l) {
+        match go_parse_layout(src, l, default_offset) {
           Some(ns) => return @ast.IntVal(ns)
           None => ()
         }
@@ -113,7 +161,7 @@ fn time_functions() -> Array[(String, @evaluator.FnA)] {
       // validity matters.
       fn(args) {
         if args.length() == 1 {
-          ignore(location_name(arg(args, 0, "now")))
+          ignore(resolve_location(arg(args, 0, "now")))
         }
         @ast.IntVal(now_ns())
       },
@@ -131,7 +179,10 @@ fn time_functions() -> Array[(String, @evaluator.FnA)] {
     ("date", fn(args) { date_value(args) }),
     (
       "timezone",
-      fn(args) { @ast.StrVal(location_name(arg(args, 0, "timezone"))) },
+      fn(args) {
+        let (name, _) = resolve_location(arg(args, 0, "timezone"))
+        @ast.StrVal(name)
+      },
     ),
   ]
 }

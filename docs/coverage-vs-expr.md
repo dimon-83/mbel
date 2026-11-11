@@ -78,7 +78,7 @@ corpus(3360+ 表达式,byte-identical)。双引擎性能/稳定性实测见 §7�
 | 集合 12 | ✅ 12/12 | get 越界 nil;sort 数字/字符串 |
 | 转换 9 | ✅ 9/9 | type() 对整数返回 "int"(4.4.3);float 在**标准方言报 "float"**(expr 名称)、经典方言报 "number"(JS 名称)——降层按方言改写;toJSON NaN→null(expr 报错);大 int64 JSON 精度损失已记录 |
 | 位运算 8 | ✅ 8/8 | Int64 语义 |
-| 时间 4 | 🟢 布局与偏移对齐 | now(可带 location)/duration/date(**expr 的 7 种 layout** + 调用方 layout + RFC3339 数字偏移)/timezone=UTC;三者统一为 **int64 纳秒**(与 Go `UnixNano`/`Duration` 同单位,故 `date(…)+duration("24h")` 是精确 int64 加法)。`date()` 支持 expr 的全部参数形态(位置参数在前/在后、layout、zone 名)。**Go 对拍 27 例**(tools/time_oracle,含闰年/非法日期/偏移/小数秒/RFC822-850-1123)。仍裁剪:IANA 时区库(需 tzdata)、`Local`(需宿主 FFI)、无 time.Time 对象/方法 |
+| 时间 4 | 🟢 布局与偏移对齐 | now(可带 location)/duration/date(**expr 的 7 种 layout** + 调用方 layout + RFC3339 数字偏移)/timezone=UTC + 固定偏移 IANA 子集(无夏令时的 +08:00/+09:00 时区);三者统一为 **int64 纳秒**(与 Go `UnixNano`/`Duration` 同单位,故 `date(…)+duration("24h")` 是精确 int64 加法)。`date()` 支持 expr 的全部参数形态(位置参数在前/在后、layout、zone 名),location 偏移为墙钟字段默认解析偏移、字符串内数字偏移覆盖它。**Go 对拍 27 例**(tools/time_oracle,含闰年/非法日期/偏移/小数秒/RFC822-850-1123)。仍裁剪:完整 IANA 时区库(含夏令时的时区需 tzdata)、`Local`(需宿主 FFI)、无 time.Time 对象/方法 |
 | 谓词聚合 15 | ✅ 15/15 | 函数式调用形式已交付(2026-09-06,如 `count(list, # > 2)`):# /#index/#acc 指针、省略 # 的相对访问、子 Program+类型化槽位;`{expr}` 花括号谓词形式已随 parser 重写交付(4.4.2,双引擎一致) |
 
 ## 5. 工程能力
