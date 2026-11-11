@@ -15,6 +15,26 @@
 
 set -e
 
+# The ABI manifest carries the crate version: playground/mbel.abi.json is
+# canonical, playground/web/manifest_generated.mbt is generated from it, and
+# the result is baked into both wasm artifacts. A `moon.mod` bump that
+# forgets them still commits cleanly here, then fails CI
+# (tools/check_abi.mjs) and would ship a package whose describe_abi()
+# reports the previous version.
+mod_version=$(sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)".*$/\1/p' moon.mod)
+abi_version=$(sed -n 's/^[[:space:]]*"engineVersion":[[:space:]]*"\([^"]*\)".*$/\1/p' playground/mbel.abi.json)
+if [ "$mod_version" != "$abi_version" ]; then
+  echo "pre-commit: moon.mod version '$mod_version' != abi.json engineVersion '$abi_version'" >&2
+  echo "pre-commit: bump playground/mbel.abi.json, run tools/gen_abi_mbt.py," >&2
+  echo "pre-commit: then rebuild playground/mbel.wasm and playground/mbel-cabi.wasm" >&2
+  exit 1
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+  echo "pre-commit: ABI manifest freshness"
+  python3 tools/gen_abi_mbt.py --check
+fi
+
 if ! command -v moon >/dev/null 2>&1; then
   echo "pre-commit: 'moon' not on PATH; skipping the build/test gate" >&2
   exit 0

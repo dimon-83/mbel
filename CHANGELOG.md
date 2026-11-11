@@ -4,6 +4,17 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [Unreleased]
+
+### Fixed
+
+- **ABI manifest version.** `playground/mbel.abi.json` carries the crate
+  version and is baked into both wasm artifacts through the generated
+  manifest, but the 0.5.1 release bumped only `moon.mod`. `describe_abi()`
+  therefore reported `0.5.0` and `tools/check_abi.mjs` failed in CI. The
+  manifest now tracks `moon.mod`, and the pre-commit hook rejects a commit
+  where the two disagree.
+
 ## [0.5.1] - 2026-11-11
 
 ### Fixed

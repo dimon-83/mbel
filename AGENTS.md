@@ -300,7 +300,10 @@ You can browse and install extra skills here:
 - Release checklist (run on `main`):
   1. `moon test` green on native, wasm-gc and js.
   2. Bump `version` in `moon.mod` and add a `CHANGELOG.md` entry in the same
-     commit.
+     commit. The ABI manifest carries that same version: bump
+     `engineVersion` in `playground/mbel.abi.json`, regenerate with
+     `python3 tools/gen_abi_mbt.py`, rebuild both wasm artifacts, and
+     confirm `node tools/check_abi.mjs` plus `--cabi` still pass.
   3. `moon package` and inspect the publish zip.
   4. Annotated tag `v<version>` on the bump commit.
   5. `moon publish` — before the first registry publish, fill `repository`
