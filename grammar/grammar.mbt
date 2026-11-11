@@ -1,9 +1,13 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2020 Tom Shawver
 // mbel — MoonBit Expression Language
 // grammar package: token types and element definitions
 //
 // Ported from Jexl's lib/grammar.js element type definitions plus the
-// Lexer/Parser-visible parts of the grammar object. The Lexer matches
+// Lexer/Parser-visible parts of the grammar object (TomFrost/Jexl
+// v2.3.0, MIT — see THIRD_PARTY_NOTICES.md at the repository root for
+// the upstream copyright and license text). MoonBit-specific
+// adaptations are original mbel work under Apache-2.0. The Lexer matches
 // element symbols (longest first, word boundaries for identifier-like
 // symbols), the Parser reads operator precedence from them, and the
 // Evaluator carries the eval functions in its op tables.

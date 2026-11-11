@@ -1,7 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2020 Tom Shawver
 // mbel — MoonBit Expression Language
 // jexl_test: blackbox tests for the top-level jexl package.
-// Ported from Jexl's __tests__/lib/Jexl.test.js + Expression.test.js.
+// Ported from Jexl's __tests__/lib/Jexl.test.js + Expression.test.js
+// (TomFrost/Jexl v2.3.0, MIT — see THIRD_PARTY_NOTICES.md at the
+// repository root for the upstream copyright and license text). The
+// MoonBit harness around the cases is original mbel work under
+// Apache-2.0.
 
 ///|
 /// Value builders.

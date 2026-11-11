@@ -1,8 +1,11 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2020 Tom Shawver
 // mbel — MoonBit Expression Language
 // parser_test: blackbox tests for the parser package.
 // Ported from Jexl's __tests__/lib/parser/Parser.test.js — the expected
-// AST shapes mirror the JS `toEqual` expectations verbatim.
+// AST shapes mirror the JS `toEqual` expectations verbatim
+// (TomFrost/Jexl v2.3.0, MIT — see THIRD_PARTY_NOTICES.md at the
+// repository root for the upstream copyright and license text).
 
 ///|
 /// Parses an expression string into an AST, aborting on tokenize/parse

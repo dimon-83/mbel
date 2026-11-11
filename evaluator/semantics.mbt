@@ -1,8 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2020 Tom Shawver
 // mbel — MoonBit Expression Language
 // evaluator package: value semantics compatibility layer.
 //
-// JS semantics ported from Jexl's grammar.js eval functions. These
+// JS semantics ported from Jexl's grammar.js eval functions
+// (TomFrost/Jexl v2.3.0, MIT — see THIRD_PARTY_NOTICES.md at the
+// repository root for the upstream copyright and license text).
+// MoonBit-specific adaptations are original mbel work under Apache-2.0. These
 // helpers approximate JavaScript coercion rules (==, truthiness,
 // ToNumber/ToString) so expression results match Jexl. Divergences
 // (structural object identity, exotic ToPrimitive cases) are documented

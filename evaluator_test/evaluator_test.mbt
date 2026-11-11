@@ -1,7 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2020 Tom Shawver
 // mbel — MoonBit Expression Language
 // evaluator_test: blackbox tests for the evaluator package.
-// Ported from Jexl's __tests__/lib/evaluator/Evaluator.test.js.
+// Ported from Jexl's __tests__/lib/evaluator/Evaluator.test.js
+// (TomFrost/Jexl v2.3.0, MIT — see THIRD_PARTY_NOTICES.md at the
+// repository root for the upstream copyright and license text).
 
 ///|
 /// Value builders for contexts and expected results.

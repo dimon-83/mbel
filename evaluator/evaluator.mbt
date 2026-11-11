@@ -1,8 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2020 Tom Shawver
 // mbel — MoonBit Expression Language
 // evaluator package: tree-walking evaluation of parsed expressions.
 //
-// Ported from Jexl's lib/evaluator/Evaluator.js + handlers.js.
+// Ported from Jexl's lib/evaluator/Evaluator.js + handlers.js
+// (TomFrost/Jexl v2.3.0, MIT — see THIRD_PARTY_NOTICES.md at the
+// repository root for the upstream copyright and license text).
+// MoonBit-specific adaptations are original mbel work under Apache-2.0.
 // MoonBit is synchronous, so the JS Promise machinery (Promise and
 // PromiseSync) collapses into plain direct evaluation. The grammar
 // operator tables carry eval functions, exactly like Jexl's

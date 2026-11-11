@@ -1,8 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2020 Tom Shawver
 // mbel — MoonBit Expression Language
 // parser package: state-machine parser that converts tokens to AST
 //
-// Ported from Jexl's lib/parser/Parser.js + handlers.js + states.js.
+// Ported from Jexl's lib/parser/Parser.js + handlers.js + states.js
+// (TomFrost/Jexl v2.3.0, MIT — see THIRD_PARTY_NOTICES.md at the
+// repository root for the upstream copyright and license text).
+// MoonBit-specific adaptations are original mbel work under Apache-2.0.
 // The parser is a finite state machine that processes tokens one at a
 // time and builds an AST with cursor-based tree construction.
 

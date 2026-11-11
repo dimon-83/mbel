@@ -1,8 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2020 Tom Shawver
 // mbel — MoonBit Expression Language
 // lexer package: tokenization of Jexl expression strings
 //
-// Ported from Jexl's lib/Lexer.js.  The original splits the input with
+// Ported from Jexl's lib/Lexer.js (TomFrost/Jexl v2.3.0, MIT — see
+// THIRD_PARTY_NOTICES.md at the repository root for the upstream
+// copyright and license text). MoonBit-specific adaptations are
+// original mbel work under Apache-2.0.  The original splits the input with
 // a regex built from the grammar's element symbols (longest first,
 // word-boundary-wrapped when identifier-like); MoonBit has no regex
 // split, so this is a hand-written character scanner that matches
