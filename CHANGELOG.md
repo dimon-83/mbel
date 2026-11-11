@@ -4,6 +4,29 @@ All notable changes to mbel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer
 (see AGENTS.md "Version management and releases").
 
+## [0.5.1] - 2026-11-11
+
+### Fixed
+
+- **Timezone resolution.** `timezone()` now resolves a fixed-offset IANA
+  subset (UTC plus the no-DST +08:00/+09:00 zones such as
+  `Asia/Shanghai`, `Asia/Hong_Kong`, `Asia/Tokyo`) instead of rejecting
+  every non-UTC name. The location's offset is the default the
+  wall-clock fields are read in (Go's `ParseInLocation`); a numeric
+  offset inside the date string still overrides it. DST-bearing zones
+  remain an error, and subset-zone dates inside their historical DST era
+  (e.g. Shanghai 1986-1991) diverge boundedly from tzdata.
+- **Third-party notices.** Added the missing TomFrost/Jexl (MIT) entry
+  and marked the nine ported source/test files
+  `SPDX-License-Identifier: Apache-2.0 AND MIT` with the upstream
+  copyright (`2020 Tom Shawver`).
+- **WASM `now()` import contract.** The `__moonbit_time_unstable.now`
+  stub is `() -> i64` Unix **milliseconds**; JS hosts must return a
+  BigInt (a Number throws, and nanoseconds overflow int64). Corrected
+  `playground/index.html`, `playground/mbel.d.ts`, both
+  `wasm-embedding.md`, `mbel-cabi.md`, `tools/bindings/node-cabi.mjs`,
+  `tools/check_abi.mjs`, and the AGENTS.md note.
+
 ## [0.5.0] - 2026-11-04
 
 Proposal 0003 (`docs/proposals/0003-portable-c-abi-and-host-ergonomics.md`)
