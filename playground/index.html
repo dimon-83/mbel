@@ -581,14 +581,18 @@ if ok {
   const engineSelect = document.getElementById('engineSelect');
 
   // ---------- 高分辨率时钟 ----------
-  // 引擎内置 now() 的 ABI 是 UInt64 纳秒。以 Date.now() 的 epoch 为基数、
-  // 叠加 performance.now() 的亚毫秒分数:now() 内置仍返回正确的 Unix
-  // 毫秒,而求值计时能测到微秒级差异并以纳秒为单位显示。
+  // 求值计时用纳秒钟:以 Date.now() 的 epoch 为基数、叠加
+  // performance.now() 的亚毫秒分数,能测到微秒级差异并以纳秒显示。
   const nsClock = (() => {
     const fracNs = () => BigInt(Math.round(performance.now() * 1e6));
     const base = BigInt(Date.now()) * 1000000n - fracNs();
     return { now: () => base + fracNs() };
   })();
+  // 引擎内置 now() 的时间桩是另一份:导入 ABI 是 i64(UInt64)Unix
+  // **毫秒**,JS 侧必须返回 BigInt;引擎内部自行 ×1e6 换算成纳秒。
+  // 传 Number 会在实例化后的首次 now() 调用抛 TypeError,传纳秒会被
+  // 再乘 1e6 直接 int64 溢出。
+  const msClock = { now: () => BigInt(Date.now()) };
 
   // ---------- WASM ----------
   let wasmInstance = null;
@@ -605,9 +609,9 @@ if ok {
         builtins: ['js-string'],
         importedStringConstants: '_',
       });
-      // 引擎内置 now() 使用的时间桩(纳秒)
+      // 引擎内置 now() 使用的时间桩(BigInt 毫秒)
       const imports = {
-        __moonbit_time_unstable: { now: nsClock.now },
+        __moonbit_time_unstable: { now: msClock.now },
       };
       wasmInstance = await WebAssembly.instantiate(module, imports);
       wasmReady = true;

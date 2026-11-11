@@ -20,8 +20,11 @@ representation.
 - **Imports (both required).**
   - `wasi_snapshot_preview1.fd_write` — stub is fine (`() => 0`) unless
     you want engine panics on stderr.
-  - `__moonbit_time_unstable.now` — `() -> i64`, Unix milliseconds. A
-    constant is acceptable; nothing in mbel depends on it advancing.
+  - `__moonbit_time_unstable.now` — `() -> i64`, Unix **milliseconds**. A
+    constant is acceptable; nothing in mbel depends on it advancing. In
+    JS hosts an `i64` result must be a BigInt (`() => 0n`); the engine
+    converts ms to its internal nanosecond unit itself, so a nanosecond
+    stub overflows int64.
 
 ## String convention (both directions)
 

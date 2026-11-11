@@ -4,10 +4,15 @@
 //
 //   const { instance } = await WebAssembly.instantiateStreaming(
 //     fetch("mbel.wasm"),
-//     { __moonbit_time_unstable: { now: () => Date.now() } },
+//     { __moonbit_time_unstable: { now: () => BigInt(Date.now()) } },
 //     { builtins: ["js-string"], importedStringConstants: "_" },
 //   );
 //   const mbel = instance.exports as Mbel;
+//
+// The now import is `() -> i64` Unix **milliseconds**: JS must return a
+// BigInt (a Number throws TypeError on the first now() call), and the
+// engine converts ms to its internal nanosecond unit itself — passing
+// nanoseconds here overflows int64.
 //
 // Requires Node >= 24 or a browser with the js-string builtins proposal
 // (see the manifest's hostRequirements; verify with describe_abi()).

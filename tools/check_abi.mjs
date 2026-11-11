@@ -121,7 +121,7 @@ console.log(
 
 async function smokeJsString(manifest, module) {
   const instance = await WebAssembly.instantiate(module, {
-    __moonbit_time_unstable: { now: () => 0 },
+    __moonbit_time_unstable: { now: () => 0n },
   });
   const exported = instance.exports;
 
@@ -218,7 +218,7 @@ async function smokeCabi(manifest, module, path) {
   try {
     instance = await WebAssembly.instantiate(module, {
       wasi_snapshot_preview1: { fd_write: () => 0 },
-      __moonbit_time_unstable: { now: () => 0 },
+      __moonbit_time_unstable: { now: () => 0n },
     });
   } catch (error) {
     fail(`cannot instantiate ${path}: ${error.message}`);

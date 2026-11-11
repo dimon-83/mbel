@@ -39,11 +39,15 @@ describe_functions(funcs)  dump_ast(source)  disassemble(source, env)
 ```js
 const { instance } = await WebAssembly.instantiateStreaming(
   fetch("mbel.wasm"),
-  { __moonbit_time_unstable: { now: () => Date.now() } },
+  { __moonbit_time_unstable: { now: () => BigInt(Date.now()) } },
   { builtins: ["js-string"], importedStringConstants: "_" },
 );
 const out = JSON.parse(instance.exports.eval_expr("1 + 2", "{}", "walk"));
 ```
+
+`now` 导入的 ABI 是 `() -> i64` Unix **毫秒**:JS 侧必须返回 BigInt
+(Number 会在首次调用 `now()` 时抛 TypeError),引擎内部再换算成纳秒
+——传纳秒会被重复换算,int64 溢出。
 
 完整导出面见 `playground/mbel.d.ts`。对你实际发布的产物执行
 `node tools/check_abi.mjs`：它会核对导出集合、交叉校验 `engineVersion`
@@ -54,8 +58,9 @@ const out = JSON.parse(instance.exports.eval_expr("1 + 2", "{}", "walk"));
 
 完整布局契约见 `playground/mbel-cabi.md`。要点：
 
-- **导入。** `wasi_snapshot_preview1.fd_write`（桩即可）与
-  `__moonbit_time_unstable.now`（`() -> i64`，Unix 毫秒，常量即可）。
+- **导入。** `wasi_snapshot_preview1.fd_write`(桩即可)与
+  `__moonbit_time_unstable.now`(`() -> i64`,Unix 毫秒,常量即可;
+  JS 宿主注意 i64 对应 BigInt,例如 `() => 0n`)。
   `_start` 位于 start section，实例化时自动执行。
 - **字符串。** 每个 `String` 参数/返回值都是单个 `i32` 指针：
   `ptr - 4` 处是 `u32` 字符数，`ptr` 起是 UTF-16LE 数据，数据后跟两个

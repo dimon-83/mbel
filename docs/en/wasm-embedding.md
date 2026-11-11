@@ -40,11 +40,16 @@ and checked-mode errors. Switch on `$code`, never on message text.
 ```js
 const { instance } = await WebAssembly.instantiateStreaming(
   fetch("mbel.wasm"),
-  { __moonbit_time_unstable: { now: () => Date.now() } },
+  { __moonbit_time_unstable: { now: () => BigInt(Date.now()) } },
   { builtins: ["js-string"], importedStringConstants: "_" },
 );
 const out = JSON.parse(instance.exports.eval_expr("1 + 2", "{}", "walk"));
 ```
+
+The `now` import is `() -> i64` Unix **milliseconds**: JS must return a
+BigInt (a Number throws TypeError on the first `now()` call), and the
+engine converts to its internal nanosecond unit itself — passing
+nanoseconds here overflows int64.
 
 `playground/mbel.d.ts` types the full export surface. Run
 `node tools/check_abi.mjs` against the artifact you ship: it verifies the
@@ -57,7 +62,8 @@ shape, including a session lifecycle.
 Full layout contract: `playground/mbel-cabi.md`. The essentials:
 
 - **Imports.** `wasi_snapshot_preview1.fd_write` (stub ok) and
-  `__moonbit_time_unstable.now` (`() -> i64` Unix ms, constant ok).
+  `__moonbit_time_unstable.now` (`() -> i64` Unix ms, constant ok; for JS
+  hosts i64 means BigInt, e.g. `() => 0n`).
   `_start` is in the start section; it runs at instantiation.
 - **Strings.** Each `String` parameter/result is one `i32` pointer:
   `u32` character count at `ptr - 4`, UTF-16LE data at `ptr`, two NUL

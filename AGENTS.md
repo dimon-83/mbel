@@ -220,7 +220,10 @@ You can browse and install extra skills here:
   `use-js-builtin-string: true` and the explicit `exports` list in
   `playground/web/moon.pkg`; the JS compile options
   `builtins: ["js-string"]` with `importedStringConstants: "_"` in the page
-  script; and the `__moonbit_time_unstable.now` stub (UInt64 nanoseconds)
+  script; and the `__moonbit_time_unstable.now` stub (UInt64 **Unix
+  milliseconds** — JS hosts must return a BigInt; the engine converts ms
+  to its internal nanosecond unit itself, so passing nanoseconds
+  overflows int64)
   the page provides because linking the builtin package pulls in moonrun's
   time FFI. A plain CLI build (`cmd/main`) is not browser-instantiable — it
   only exports `_start` and imports `__moonbit_fs_unstable.*`.

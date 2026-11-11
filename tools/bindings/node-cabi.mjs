@@ -18,7 +18,7 @@ const bytes = readFileSync(wasmPath);
 const module = await WebAssembly.compile(bytes);
 const instance = await WebAssembly.instantiate(module, {
   wasi_snapshot_preview1: { fd_write: () => 0 },
-  __moonbit_time_unstable: { now: () => Date.now() },
+  __moonbit_time_unstable: { now: () => BigInt(Date.now()) },
 });
 const ex = instance.exports;
 const mem = ex.memory;
